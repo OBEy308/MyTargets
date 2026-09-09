@@ -53,6 +53,29 @@ class Conic(val matrix: Mat3) {
     /** The pole of [line]: C^-1 l. Null for a degenerate conic. */
     fun pole(line: Vec3): Vec3? = matrix.inverse()?.times(line)
 
+    /**
+     * The centre of the conic. Mathematically this is the pole of the line at
+     * infinity, but taking that route through Mat3.inverse() is numerically
+     * poor at pixel scale: a circle far from the image origin has a huge
+     * constant entry, so its determinant falls many orders of magnitude below
+     * the cube of its largest entry while the conic stays well conditioned.
+     * Solving the 2x2 block instead keeps every entry on one scale.
+     *
+     * Null when the conic has no unique centre, as for a parabola or a
+     * degenerate conic.
+     */
+    fun centre(): Vec2? {
+        val a = matrix[0, 0]
+        val b = matrix[0, 1]
+        val c = matrix[1, 1]
+        val d = matrix[0, 2]
+        val e = matrix[1, 2]
+        val blockDet = a * c - b * b
+        val scale = maxOf(abs(a), abs(b), abs(c))
+        if (scale == 0.0 || abs(blockDet) < 1e-15 * scale * scale) return null
+        return Vec2((b * e - c * d) / blockDet, (b * d - a * e) / blockDet)
+    }
+
     /** Scaled so the Frobenius norm is one, which makes residuals comparable. */
     fun normalized(): Conic {
         var sum = 0.0

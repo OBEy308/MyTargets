@@ -69,9 +69,14 @@ class Mat3(private val m: DoubleArray) {
     fun inverse(): Mat3? {
         val d = det()
         // Scale-relative threshold: a matrix of small entries has a small
-        // determinant without being singular.
+        // determinant without being singular. This guard only detects exact
+        // singularity, not poor conditioning -- a well-conditioned matrix
+        // whose entries span many scales (e.g. a conic far from the image
+        // origin) can still have abs(det) far below scale^3 without being
+        // singular. Callers that need a numerically stable result for such
+        // matrices must not route through this method; see Conic.centre().
         val scale = m.maxOf { abs(it) }
-        if (scale == 0.0 || abs(d) < 1e-12 * scale * scale * scale) return null
+        if (scale == 0.0 || abs(d) < 1e-15 * scale * scale * scale) return null
         val r = DoubleArray(9)
         r[0] = (this[1, 1] * this[2, 2] - this[1, 2] * this[2, 1]) / d
         r[1] = (this[0, 2] * this[2, 1] - this[0, 1] * this[2, 2]) / d

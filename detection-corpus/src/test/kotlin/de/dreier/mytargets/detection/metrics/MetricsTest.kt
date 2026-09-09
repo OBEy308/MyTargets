@@ -426,26 +426,35 @@ class MetricsTest {
 
     @Test
     fun ringAccuracyCountsOnlyComparableTruth() {
-        // An inherited entry carries printed values; a detector that reports only
-        // zone indices cannot be scored against it, so it must not drag the ring
-        // accuracy down.
-        val inherited = CorpusEntry(
+        // Both truth shots carry a position, so ShotMatching pairs them by
+        // distance regardless of what kind of score either side reports --
+        // having a matched pair is not by itself enough for the pair to be
+        // score-comparable. Shot A carries a zone index and is matched by a
+        // detection that reports one too: comparable, and correct. Shot B
+        // carries only a printed value and is matched by a detection that
+        // reports only a zone index: matched, but NOT comparable, so it must
+        // neither drag the ring accuracy down nor be counted as comparable --
+        // an isScoreComparable that always returned true would get exactly
+        // that wrong, inflating scoreComparableShots to 2 and scoreAccuracy
+        // down to 0.5.
+        val entry = CorpusEntry(
             imageName = "i.jpg", image = null, camera = null, capture = null,
             target = null, shotsPerEnd = 2,
             shots = listOf(
-                TruthShot(printedScore = PrintedScore.of("9")),
-                TruthShot(printedScore = PrintedScore.of("8"))
+                TruthShot(scoringRing = 9, position = SpotPosition(0, 0.0, 0.0)),
+                TruthShot(printedScore = PrintedScore.of("8"), position = SpotPosition(0, 0.5, 0.0))
             ),
             unresolvedArrows = 0, registration = null
         )
         val detected = listOf(
-            DetectedShotRecord(2, null, SpotPosition(0, 0.1, 0.0), 0.9),
-            DetectedShotRecord(3, null, SpotPosition(0, 0.3, 0.0), 0.9)
+            DetectedShotRecord(9, null, SpotPosition(0, 0.0, 0.0), 0.9),
+            DetectedShotRecord(3, null, SpotPosition(0, 0.5, 0.0), 0.9)
         )
-        val m = Metrics.over(listOf(outcome(inherited, detected)))
+        val m = Metrics.over(listOf(outcome(entry, detected)))
 
-        assertThat(m.scoreComparableShots).isEqualTo(0)
-        assertThat(m.scoreAccuracy).isNull()
+        assertThat(m.matchedShots).isEqualTo(2)
+        assertThat(m.scoreComparableShots).isEqualTo(1)
+        assertThat(m.scoreAccuracy!!).isWithin(1e-9).of(1.0)
     }
 
     @Test

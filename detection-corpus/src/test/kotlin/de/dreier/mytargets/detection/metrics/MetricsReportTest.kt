@@ -181,9 +181,16 @@ class MetricsReportTest {
         // Six entries against a cap of five: the single good one must be the
         // one left out. A two entry corpus cannot tell a correct sort from a
         // reversed one, because both entries fit under the cap either way.
+        //
+        // The "bad" entries are matched -- positions align -- but scored
+        // wrong, so scoreAccuracy is a real, measured 0.0, not null. Nothing
+        // was detected here would instead give a null scoreAccuracy (no
+        // comparable pair at all), which is a different case entirely --
+        // see aRegistrationOnlyEntryDoesNotDisplaceABadlyMeasuredEntry.
         val badShots = arrayOf(truth(9, 0.0, 0.0), truth(8, 0.1, 0.0))
+        val wrongScores = listOf(found(2, 0.0, 0.0), found(3, 0.1, 0.0))
         val outcomes = (0 until 5).map { i ->
-            outcome(entry("bad$i.jpg", shots = badShots), emptyList())
+            outcome(entry("bad$i.jpg", shots = badShots), wrongScores)
         } + outcome(
             entry("perfect.jpg", shots = badShots),
             listOf(found(9, 0.0, 0.0), found(8, 0.1, 0.0))
@@ -194,6 +201,44 @@ class MetricsReportTest {
         assertThat(report).contains("bad0.jpg")
         assertThat(report).contains("bad4.jpg")
         assertThat(report).doesNotContain("perfect.jpg")
+    }
+
+    @Test
+    fun aRegistrationOnlyEntryDoesNotDisplaceABadlyMeasuredEntry() {
+        // Five registration-only entries -- scoreAccuracy null, because they
+        // have no comparable matched pair at all -- plus one entry that got
+        // none of its six rings right (scoreAccuracy 0.0, a real measured
+        // result) plus one perfect entry, against a cap of five. Sorting
+        // nulls first (the old behaviour) fills the whole table with the
+        // five registration-only entries and pushes the badly measured one
+        // off entirely, even though it is exactly the kind of entry this
+        // table exists to surface. Sorting nulls last keeps it visible.
+        val registrationOnly = (0 until 5).map { i ->
+            outcome(
+                CorpusEntry(
+                    imageName = "reg$i.jpg", image = null, camera = null, capture = null,
+                    target = null, shotsPerEnd = 6, shots = emptyList(),
+                    unresolvedArrows = 0, registration = null
+                ),
+                emptyList()
+            )
+        }
+        val badShots = (0 until 6).map { i -> truth(1, 0.1 * i, 0.0) }.toTypedArray()
+        val bad = outcome(
+            entry("bad.jpg", shots = badShots),
+            (0 until 6).map { i -> found(2, 0.1 * i, 0.0) }
+        )
+        val perfect = outcome(
+            entry("perfect.jpg", shots = arrayOf(truth(9, 0.0, 0.0))),
+            listOf(found(9, 0.0, 0.0))
+        )
+
+        val report = MetricsReport.render(
+            registrationOnly + listOf(bad, perfect),
+            title = "Worst"
+        )
+
+        assertThat(report).contains("bad.jpg")
     }
 
     @Test

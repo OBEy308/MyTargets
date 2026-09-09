@@ -90,9 +90,20 @@ object MetricsReport {
             }
         }
 
+        // scoreAccuracy is null for every entry with no comparable matched
+        // pair -- every registration-only entry, and every entry measured
+        // against a detector it cannot be scored against. compareBy would
+        // put those first (null sorts before any Double), filling the table
+        // with entries that measured nothing and pushing out the ones that
+        // measured badly, which is the opposite of this table's purpose.
+        // Sort entries that measured nothing last instead.
         val worst = outcomes
             .sortedWith(
-                compareBy({ Metrics.over(listOf(it)).scoreAccuracy }, { it.entry.imageName })
+                compareBy(
+                    { scoreAccuracyOf(it) == null },
+                    { scoreAccuracyOf(it) ?: Double.MAX_VALUE },
+                    { it.entry.imageName }
+                )
             )
             .take(WORST_ENTRIES)
         if (worst.isNotEmpty()) {
@@ -112,6 +123,9 @@ object MetricsReport {
 
         return sb.toString()
     }
+
+    private fun scoreAccuracyOf(outcome: EntryOutcome): Double? =
+        Metrics.over(listOf(outcome)).scoreAccuracy
 
     private fun plural(count: Int, one: String, many: String) = if (count == 1) one else many
 

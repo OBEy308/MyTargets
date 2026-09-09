@@ -16,113 +16,163 @@
 package de.dreier.mytargets.detection.corpus
 
 import com.google.gson.Gson
-import com.google.gson.JsonParseException
 
 /**
- * Ground truth read from a JSON sidecar next to the image.
+ * Reads the ground truth of a photograph from its JSON sidecar.
  *
- * The format is deliberately flat, because it is written by hand while
- * annotating photographs:
- *
- *     {
- *       "targetModel": "WAFull",
- *       "tags": ["oblique"],
- *       "shots": [
- *         { "score": "X", "faceIndex": 0, "x": 0.031, "y": -0.017 },
- *         { "score": "M" }
- *       ]
- *     }
- *
- * Coordinates are spot local, so the spot centre is the origin and its
- * outermost ring has radius one. `faceIndex`, `x` and `y` belong together:
- * either all three or none, with `faceIndex` defaulting to 0 for a single spot
- * face.
+ * The schema is the corpus's own, documented in its README, which is the
+ * binding authority for it. Unknown fields are ignored on purpose — the corpus
+ * grows, and a field added next year must not break a measurement today — while
+ * a missing required field is an error, because silently measuring against half
+ * a truth is worse than stopping.
  */
 object SidecarTruth {
 
     private val gson = Gson()
 
     private class ShotJson {
-        var score: String? = null
         var faceIndex: Int? = null
         var x: Double? = null
         var y: Double? = null
+        var scoringRing: Int? = null
+        var positionTolerance: Double? = null
+        var nearRingBoundary: Boolean? = null
+        var uncertain: Boolean? = null
     }
 
-    private class EntryJson {
-        var targetModel: String? = null
-        var tags: List<String>? = null
+    private class ImageJson {
+        var width: Int? = null
+        var height: Int? = null
+        var exifOrientation: Int? = null
+    }
+
+    private class CameraJson {
+        var model: String? = null
+        var focalLength35mm: Double? = null
+    }
+
+    private class CaptureJson {
+        var lighting: String? = null
+        var angle: String? = null
+        var angleDegrees: Double? = null
+    }
+
+    private class TargetJson {
+        var model: String? = null
+        var diameterCm: Double? = null
+        var faceCount: Int? = null
+    }
+
+    private class EndJson {
+        var shotsPerEnd: Int? = null
+    }
+
+    private class AnnotationJson {
+        var unresolvedArrows: Int? = null
+    }
+
+    private class RegistrationJson {
+        var imageToTarget: List<List<Double>>? = null
+        var imagedCentre: List<Double>? = null
+    }
+
+    private class SidecarJson {
+        var image: ImageJson? = null
+        var camera: CameraJson? = null
+        var capture: CaptureJson? = null
+        var target: TargetJson? = null
+        var end: EndJson? = null
         var shots: List<ShotJson>? = null
-    }
-
-    private class DefaultsJson {
-        var targetModel: String? = null
+        var annotation: AnnotationJson? = null
+        var registration: RegistrationJson? = null
     }
 
     /**
-     * @throws IllegalArgumentException with the image name in the message, so a
+     * @throws IllegalArgumentException with [imageName] in every message, so a
      *         corpus of a hundred photographs still says which one is broken.
      */
     fun parse(imageName: String, json: String): CorpusEntry {
         val parsed = try {
-            gson.fromJson(json, EntryJson::class.java)
+            gson.fromJson(json, SidecarJson::class.java)
         } catch (e: RuntimeException) {
-            // Not just JsonSyntaxException: a hand typed decimal comma such as
-            // "0,031" parses as valid JSON but fails inside gson's number
-            // conversion with a bare NumberFormatException. Either way, a
-            // corpus of a hundred photographs still needs to know which one
-            // is broken.
+            // Covers gson's JsonSyntaxException and the bare NumberFormatException
+            // it throws for a hand typed decimal comma.
             throw IllegalArgumentException("$imageName: cannot read JSON sidecar", e)
         } ?: throw IllegalArgumentException("$imageName: empty JSON sidecar")
 
         val shotsJson = parsed.shots
-            ?: throw IllegalArgumentException("$imageName: sidecar has no shots")
-        require(shotsJson.isNotEmpty()) { "$imageName: sidecar has an empty shot list" }
+            ?: throw IllegalArgumentException("$imageName: sidecar has no shots array")
 
-        val shots = shotsJson.mapIndexed { index, shot ->
-            val scoreText = shot.score
-                ?: throw IllegalArgumentException("$imageName: shot $index has no score")
-            require(scoreText.isNotBlank()) {
-                "$imageName: shot $index has a blank score"
-            }
-
-            val hasX = shot.x != null
-            val hasY = shot.y != null
-            require(hasX == hasY) {
-                "$imageName: shot $index gives only one of x and y; " +
-                    "a position needs both"
-            }
-
-            val position = if (hasX) {
-                SpotPosition(shot.faceIndex ?: 0, shot.x!!, shot.y!!)
-            } else {
-                require(shot.faceIndex == null) {
-                    "$imageName: shot $index gives faceIndex without x and y"
-                }
-                null
-            }
-
-            TruthShot(Score.of(scoreText), position)
-        }
+        val shots = shotsJson.mapIndexed { index, shot -> readShot(imageName, index, shot) }
 
         return CorpusEntry(
             imageName = imageName,
-            targetModel = parsed.targetModel,
+            image = parsed.image?.let { readImage(imageName, it) },
+            camera = parsed.camera?.let { CameraInfo(it.model, it.focalLength35mm) },
+            capture = parsed.capture?.let { CaptureInfo(it.lighting, it.angle, it.angleDegrees) },
+            target = parsed.target?.let { readTarget(imageName, it) },
+            shotsPerEnd = parsed.end?.shotsPerEnd,
             shots = shots,
-            tags = parsed.tags?.toSet() ?: emptySet()
+            unresolvedArrows = parsed.annotation?.unresolvedArrows ?: 0,
+            registration = parsed.registration?.let { readRegistration(imageName, it) }
         )
     }
 
-    /**
-     * The `targetModel` from a directory level defaults file, or null.
-     *
-     * @throws IllegalArgumentException with the directory name in the
-     *         message, so a corpus loader that recurses over arbitrarily
-     *         many directories still says which one is broken.
-     */
-    fun defaultsTargetModel(directoryName: String, json: String): String? = try {
-        gson.fromJson(json, DefaultsJson::class.java)?.targetModel
-    } catch (e: JsonParseException) {
-        throw IllegalArgumentException("$directoryName: malformed defaults.json", e)
+    private fun readShot(imageName: String, index: Int, shot: ShotJson): TruthShot {
+        val hasX = shot.x != null
+        val hasY = shot.y != null
+        require(hasX == hasY) {
+            "$imageName: shot $index gives only one of x and y; a position needs both"
+        }
+        require(shot.scoringRing != null) {
+            "$imageName: shot $index has no scoringRing"
+        }
+
+        val position = if (hasX) SpotPosition(shot.faceIndex ?: 0, shot.x!!, shot.y!!) else null
+        require(position != null || shot.faceIndex == null) {
+            "$imageName: shot $index gives faceIndex without x and y"
+        }
+
+        return TruthShot(
+            scoringRing = shot.scoringRing,
+            printedScore = null,
+            position = position,
+            positionTolerance = shot.positionTolerance,
+            nearRingBoundary = shot.nearRingBoundary ?: false,
+            uncertain = shot.uncertain ?: false
+        )
+    }
+
+    private fun readImage(imageName: String, image: ImageJson): ImageInfo {
+        val width = image.width
+            ?: throw IllegalArgumentException("$imageName: image block has no width")
+        val height = image.height
+            ?: throw IllegalArgumentException("$imageName: image block has no height")
+        return ImageInfo(imageName, width, height, image.exifOrientation)
+    }
+
+    private fun readTarget(imageName: String, target: TargetJson): TargetInfo {
+        val model = target.model
+            ?: throw IllegalArgumentException("$imageName: target block has no model")
+        return TargetInfo(model, target.diameterCm, target.faceCount ?: 1)
+    }
+
+    private fun readRegistration(
+        imageName: String,
+        registration: RegistrationJson
+    ): Registration? {
+        val rows = registration.imageToTarget ?: return null
+        require(rows.size == 3 && rows.all { it.size == 3 }) {
+            "$imageName: imageToTarget must be three rows of three, got " +
+                "${rows.size} rows of ${rows.map { it.size }}"
+        }
+        val centre = registration.imagedCentre
+        require(centre == null || centre.size == 2) {
+            "$imageName: imagedCentre must be two values, got ${centre?.size}"
+        }
+        return Registration(
+            imageToTarget = rows.flatten(),
+            imagedCentre = centre?.let { SpotPosition(0, it[0], it[1]) }
+        )
     }
 }

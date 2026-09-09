@@ -20,136 +20,176 @@ import org.junit.Test
 
 class SidecarTruthTest {
 
+    private val full = """
+        {
+          "image": { "file": "a.jpg", "width": 4000, "height": 2252, "exifOrientation": 6 },
+          "camera": { "model": "Galaxy S25", "focalLengthMm": 5.4, "focalLength35mm": 23 },
+          "capture": { "lighting": "sonne", "angle": "leicht-schraeg", "angleDegrees": null },
+          "target": { "model": "WAFull", "diameterCm": 80, "faceCount": 1 },
+          "end": { "shotsPerEnd": 6 },
+          "shots": [
+            { "faceIndex": 0, "x": -0.195, "y": -0.201, "scoringRing": 3, "points": 8,
+              "positionTolerance": 0.015 },
+            { "faceIndex": 0, "x": 0.028, "y": 0.039, "scoringRing": 0, "points": 10,
+              "positionTolerance": 0.01, "nearRingBoundary": true }
+          ],
+          "annotation": { "unresolvedArrows": 2 },
+          "registration": {
+            "imageToTarget": [[0.0009, 0.0, -1.03], [0.0, 0.00087, -1.5], [0.00012, -7.1e-05, 1.0]],
+            "imagedCentre": [1145.77, 1775.66]
+          }
+        }
+    """.trimIndent()
+
     @Test
-    fun parsesAFullyAnnotatedEntry() {
+    fun readsEveryPartOfARealSidecar() {
+        val e = SidecarTruth.parse("a.jpg", full)
+
+        assertThat(e.imageName).isEqualTo("a.jpg")
+        assertThat(e.image!!.width).isEqualTo(4000)
+        assertThat(e.image!!.longEdge).isEqualTo(4000)
+        assertThat(e.camera!!.focalLength35mm!!).isWithin(1e-9).of(23.0)
+        assertThat(e.target!!.model).isEqualTo("WAFull")
+        assertThat(e.target!!.faceCount).isEqualTo(1)
+        assertThat(e.shotsPerEnd).isEqualTo(6)
+        assertThat(e.unresolvedArrows).isEqualTo(2)
+        assertThat(e.tags).containsExactly("sonne", "leicht-schraeg")
+    }
+
+    @Test
+    fun readsTheShotsWithRingToleranceAndFlags() {
+        val e = SidecarTruth.parse("a.jpg", full)
+
+        assertThat(e.expectedShots).isEqualTo(2)
+        assertThat(e.hasPositions).isTrue()
+
+        val first = e.shots[0]
+        assertThat(first.scoringRing).isEqualTo(3)
+        assertThat(first.position!!.x).isWithin(1e-9).of(-0.195)
+        assertThat(first.positionTolerance!!).isWithin(1e-9).of(0.015)
+        assertThat(first.nearRingBoundary).isFalse()
+
+        assertThat(e.shots[1].scoringRing).isEqualTo(0)
+        assertThat(e.shots[1].nearRingBoundary).isTrue()
+    }
+
+    @Test
+    fun readsTheRegistrationAsNineValuesRowByRow() {
+        val r = SidecarTruth.parse("a.jpg", full).registration!!
+
+        assertThat(r.imageToTarget).hasSize(9)
+        assertThat(r.imageToTarget[0]).isWithin(1e-12).of(0.0009)
+        assertThat(r.imageToTarget[3]).isWithin(1e-12).of(0.0)
+        assertThat(r.imageToTarget[8]).isWithin(1e-12).of(1.0)
+        assertThat(r.imagedCentre!!.x).isWithin(1e-6).of(1145.77)
+    }
+
+    @Test
+    fun anEmptyShotListIsARegistrationOnlyEntry() {
         val json = """
             {
-              "targetModel": "WAFull",
-              "tags": ["oblique", "sun"],
-              "shots": [
-                { "score": "X", "faceIndex": 0, "x": 0.031, "y": -0.017 },
-                { "score": "9", "faceIndex": 0, "x": -0.142, "y": 0.088 }
-              ]
+              "image": { "file": "r.jpg", "width": 100, "height": 100 },
+              "target": { "model": "WAFull", "faceCount": 1 },
+              "shots": []
             }
         """.trimIndent()
 
-        val entry = SidecarTruth.parse("shot.jpg", json)
+        val e = SidecarTruth.parse("r.jpg", json)
 
-        assertThat(entry.imageName).isEqualTo("shot.jpg")
-        assertThat(entry.targetModel).isEqualTo("WAFull")
-        assertThat(entry.tags).containsExactly("oblique", "sun")
-        assertThat(entry.hasPositions).isTrue()
-        assertThat(entry.shots[0].score.text).isEqualTo("X")
-        assertThat(entry.shots[0].position!!.x).isWithin(1e-9).of(0.031)
-        assertThat(entry.shots[1].position!!.y).isWithin(1e-9).of(0.088)
+        assertThat(e.isAnnotated).isFalse()
+        assertThat(e.expectedShots).isEqualTo(0)
+        assertThat(e.unresolvedArrows).isEqualTo(0)
     }
 
     @Test
-    fun parsesAnEntryWithScoresOnly() {
-        val json = """{ "shots": [ { "score": "9" }, { "score": "M" } ] }"""
-        val entry = SidecarTruth.parse("rings.jpg", json)
+    fun unknownFieldsAreIgnoredSoTheCorpusCanGrow() {
+        val json = """
+            {
+              "image": { "file": "u.jpg", "width": 100, "height": 100, "somethingNew": 7 },
+              "target": { "model": "WAFull", "faceCount": 1 },
+              "shots": [ { "faceIndex": 0, "x": 0.0, "y": 0.0, "scoringRing": 0 } ],
+              "aFieldFromNextYear": { "nested": true }
+            }
+        """.trimIndent()
 
-        assertThat(entry.hasPositions).isFalse()
-        assertThat(entry.targetModel).isNull()
-        assertThat(entry.tags).isEmpty()
-        assertThat(entry.shots[1].score.isMiss).isTrue()
+        val e = SidecarTruth.parse("u.jpg", json)
+        assertThat(e.expectedShots).isEqualTo(1)
     }
 
     @Test
-    fun defaultsFaceIndexToZeroWhenOnlyCoordinatesAreGiven() {
-        val json = """{ "shots": [ { "score": "9", "x": 0.2, "y": 0.1 } ] }"""
-        val entry = SidecarTruth.parse("single.jpg", json)
-        assertThat(entry.shots[0].position!!.faceIndex).isEqualTo(0)
-    }
+    fun aShotWithoutAScoringRingIsRejected() {
+        val json = """
+            {
+              "image": { "file": "n.jpg", "width": 100, "height": 100 },
+              "target": { "model": "WAFull", "faceCount": 1 },
+              "shots": [ { "faceIndex": 0, "x": 0.0, "y": 0.0 } ]
+            }
+        """.trimIndent()
 
-    @Test
-    fun rejectsAHalfGivenPosition() {
-        val json = """{ "shots": [ { "score": "9", "x": 0.2 } ] }"""
-        val error = runCatching { SidecarTruth.parse("bad.jpg", json) }.exceptionOrNull()
+        val error = runCatching { SidecarTruth.parse("n.jpg", json) }.exceptionOrNull()
         assertThat(error).isInstanceOf(IllegalArgumentException::class.java)
-        assertThat(error!!).hasMessageThat().contains("bad.jpg")
-        assertThat(error!!).hasMessageThat().contains("x")
-    }
-
-    @Test
-    fun rejectsAnEmptyShotList() {
-        val error = runCatching {
-            SidecarTruth.parse("empty.jpg", """{ "shots": [] }""")
-        }.exceptionOrNull()
-        assertThat(error).isInstanceOf(IllegalArgumentException::class.java)
-        assertThat(error!!).hasMessageThat().contains("empty.jpg")
-    }
-
-    @Test
-    fun rejectsAMissingScore() {
-        val error = runCatching {
-            SidecarTruth.parse("noscore.jpg", """{ "shots": [ { "x": 0.1, "y": 0.1 } ] }""")
-        }.exceptionOrNull()
-        assertThat(error).isInstanceOf(IllegalArgumentException::class.java)
-        assertThat(error!!).hasMessageThat().contains("score")
-    }
-
-    @Test
-    fun rejectsMalformedJson() {
-        val error = runCatching { SidecarTruth.parse("broken.jpg", "{ not json") }
-            .exceptionOrNull()
-        assertThat(error).isInstanceOf(IllegalArgumentException::class.java)
-        assertThat(error!!).hasMessageThat().contains("broken.jpg")
-    }
-
-    @Test
-    fun readsTheDirectoryDefault() {
-        assertThat(
-            SidecarTruth.defaultsTargetModel("dir", """{ "targetModel": "WA6Ring" }""")
-        ).isEqualTo("WA6Ring")
-        assertThat(SidecarTruth.defaultsTargetModel("dir", "{}")).isNull()
-    }
-
-    @Test
-    fun aMalformedDefaultsFileNamesItsDirectory() {
-        val error = runCatching {
-            SidecarTruth.defaultsTargetModel("inherited-249", "{ not json")
-        }.exceptionOrNull()
-        assertThat(error).isInstanceOf(IllegalArgumentException::class.java)
-        assertThat(error!!).hasMessageThat().contains("inherited-249")
-    }
-
-    @Test
-    fun aDecimalCommaInAPositionNamesTheImageRatherThanThrowingBare() {
-        // A hand typed decimal comma -- likely on a German-default machine --
-        // parses as valid JSON syntax but fails inside gson's number
-        // conversion with a bare NumberFormatException. That must still be
-        // rewrapped with the image name, the same as any other parse failure.
-        val json = """{ "shots": [ { "score": "9", "x": "0,031", "y": 0.1 } ] }"""
-        val error = runCatching { SidecarTruth.parse("comma.jpg", json) }.exceptionOrNull()
-        assertThat(error).isInstanceOf(IllegalArgumentException::class.java)
-        assertThat(error!!).hasMessageThat().contains("comma.jpg")
-    }
-
-    @Test
-    fun rejectsABlankScore() {
-        val json = """{ "shots": [ { "score": "", "x": 0.1, "y": 0.1 } ] }"""
-        val error = runCatching { SidecarTruth.parse("blank.jpg", json) }.exceptionOrNull()
-        assertThat(error).isInstanceOf(IllegalArgumentException::class.java)
-        assertThat(error!!).hasMessageThat().contains("blank.jpg")
+        assertThat(error!!).hasMessageThat().contains("n.jpg")
         assertThat(error!!).hasMessageThat().contains("shot 0")
     }
 
     @Test
-    fun rejectsAPositionGivenAsYWithoutX() {
-        val json = """{ "shots": [ { "score": "9", "y": 0.2 } ] }"""
-        val error = runCatching { SidecarTruth.parse("bad.jpg", json) }.exceptionOrNull()
+    fun aHalfGivenPositionIsRejected() {
+        val json = """
+            {
+              "image": { "file": "h.jpg", "width": 100, "height": 100 },
+              "target": { "model": "WAFull", "faceCount": 1 },
+              "shots": [ { "faceIndex": 0, "x": 0.1, "scoringRing": 0 } ]
+            }
+        """.trimIndent()
+
+        val error = runCatching { SidecarTruth.parse("h.jpg", json) }.exceptionOrNull()
         assertThat(error).isInstanceOf(IllegalArgumentException::class.java)
-        assertThat(error!!).hasMessageThat().contains("bad.jpg")
+        assertThat(error!!).hasMessageThat().contains("h.jpg")
     }
 
     @Test
-    fun rejectsAFaceIndexWithoutCoordinates() {
-        // A face index alone says which spot but not where on it, which would
-        // otherwise become a silent position at the spot centre.
-        val json = """{ "shots": [ { "score": "9", "faceIndex": 1 } ] }"""
-        val error = runCatching { SidecarTruth.parse("bad.jpg", json) }.exceptionOrNull()
+    fun aDecimalCommaNamesTheImageRatherThanThrowingBare() {
+        val json = """
+            {
+              "image": { "file": "c.jpg", "width": 100, "height": 100 },
+              "target": { "model": "WAFull", "faceCount": 1 },
+              "shots": [ { "faceIndex": 0, "x": "0,031", "y": 0.1, "scoringRing": 0 } ]
+            }
+        """.trimIndent()
+
+        val error = runCatching { SidecarTruth.parse("c.jpg", json) }.exceptionOrNull()
         assertThat(error).isInstanceOf(IllegalArgumentException::class.java)
-        assertThat(error!!).hasMessageThat().contains("bad.jpg")
+        assertThat(error!!).hasMessageThat().contains("c.jpg")
+    }
+
+    @Test
+    fun malformedJsonNamesTheImage() {
+        val error = runCatching { SidecarTruth.parse("b.jpg", "{ not json") }.exceptionOrNull()
+        assertThat(error).isInstanceOf(IllegalArgumentException::class.java)
+        assertThat(error!!).hasMessageThat().contains("b.jpg")
+    }
+
+    @Test
+    fun aMissingShotsArrayIsRejected() {
+        val json = """{ "target": { "model": "WAFull", "faceCount": 1 } }"""
+        val error = runCatching { SidecarTruth.parse("m.jpg", json) }.exceptionOrNull()
+        assertThat(error).isInstanceOf(IllegalArgumentException::class.java)
+        assertThat(error!!).hasMessageThat().contains("m.jpg")
+    }
+
+    @Test
+    fun aRegistrationMatrixOfTheWrongShapeNamesTheImage() {
+        val json = """
+            {
+              "image": { "file": "w.jpg", "width": 100, "height": 100 },
+              "target": { "model": "WAFull", "faceCount": 1 },
+              "shots": [],
+              "registration": { "imageToTarget": [[1.0, 2.0], [3.0, 4.0]] }
+            }
+        """.trimIndent()
+
+        val error = runCatching { SidecarTruth.parse("w.jpg", json) }.exceptionOrNull()
+        assertThat(error).isInstanceOf(IllegalArgumentException::class.java)
+        assertThat(error!!).hasMessageThat().contains("w.jpg")
     }
 }

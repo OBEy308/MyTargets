@@ -18,6 +18,7 @@ package de.dreier.mytargets.detection.metrics
 import com.google.common.truth.Truth.assertThat
 import de.dreier.mytargets.detection.corpus.CaptureInfo
 import de.dreier.mytargets.detection.corpus.CorpusEntry
+import de.dreier.mytargets.detection.corpus.PrintedScore
 import de.dreier.mytargets.detection.corpus.SpotPosition
 import de.dreier.mytargets.detection.corpus.TruthShot
 import org.junit.Test
@@ -256,5 +257,47 @@ class MetricsReportTest {
                 "are not counted as false positives."
         )
         assertThat(report).contains("False positives | 0.0 % | of 1 listed hits")
+    }
+
+    @Test
+    fun detectionRateAndRingAccuracyAreNotInterchangeableDenominators() {
+        // Three listed truth shots: one matched and score-comparable, one
+        // matched but NOT score-comparable (the detection reports a printed
+        // score where the truth carries a zone index, so the two cannot be
+        // compared), and one missed entirely. That makes expectedShots = 3
+        // and scoreComparableShots = 1 genuinely different -- in every other
+        // test in this file the two happen to coincide (2 and 2, 1 and 1, 0
+        // and 0), so a report that swapped the two denominators between the
+        // "Detection rate" and "Ring accuracy" rows would still pass every
+        // other assertion in this class. This one catches exactly that swap.
+        val entry = CorpusEntry(
+            imageName = "mixed.jpg", image = null, camera = null, capture = null,
+            target = null, shotsPerEnd = 3,
+            shots = listOf(
+                TruthShot(scoringRing = 9, position = SpotPosition(0, 0.0, 0.0)),
+                TruthShot(scoringRing = 8, position = SpotPosition(0, 0.2, 0.0)),
+                TruthShot(scoringRing = 7, position = SpotPosition(0, 0.4, 0.0))
+            ),
+            unresolvedArrows = 0, registration = null
+        )
+        val detected = listOf(
+            // Matches shot 0 by position, and is score-comparable (both carry
+            // a zone index) and correct.
+            DetectedShotRecord(9, null, SpotPosition(0, 0.0, 0.0), 0.9),
+            // Matches shot 1 by position, but reports a printed score where
+            // the truth carries a zone index -- matched, not comparable.
+            DetectedShotRecord(null, PrintedScore.of("8"), SpotPosition(0, 0.2, 0.0), 0.9)
+            // Nothing detected near shot 2: it is missed entirely.
+        )
+        val report = MetricsReport.render(
+            listOf(EntryOutcome(entry, ShotMatching.match(entry, detected), detected)),
+            title = "Mixed"
+        )
+
+        // 2 of 3 listed hits matched: detectionRate = 2/3 = 66.7 %.
+        assertThat(report).contains("Detection rate | 66.7 % | of 3 listed hits")
+        // Only 1 of those 2 matches is score-comparable, and it is correct:
+        // scoreAccuracy = 1/1 = 100.0 %.
+        assertThat(report).contains("Ring accuracy | 100.0 % | of 1 comparable hits")
     }
 }

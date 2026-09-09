@@ -438,8 +438,8 @@ lokalisieren, nur erraten.
 
 ## Reihenfolge der Umsetzung
 
-1. **Build-Umgebung herstellen.** Auf der Entwicklungsmaschine fehlen derzeit
-   JDK und Android SDK. Ohne sie läuft weder Gradle noch ein Test.
+1. ~~**Build-Umgebung herstellen.**~~ Erledigt: Android Studio mit JBR und SDK.
+   Die drei lokal beizusteuernden Dateien sind in `BUILDING.md` beschrieben.
 2. **Fotos sammeln.** Bevor genug Korpusbilder da sind, ist jede Zeile
    Pipeline-Code unüberprüfbar. Originalauflösung behalten.
 3. **APK-Zuwachs durch OpenCV messen** (siehe *Offene Risiken*), bevor die
@@ -478,8 +478,18 @@ in `EditRoundFragment.onSaveRound`, wenn `selectedItem` null ist, weil
 Funktion und wird als eigenes Ticket geführt. Nicht alle 163 geänderten Dateien
 wurden gelesen.
 
-**Die drei Korrekturen sind nicht kompiliert.** Sie entstanden ohne verfügbares
-JDK und sind bislang nur sorgfältig gelesen, nicht gebaut und nicht getestet.
+**Die drei Korrekturen sind kompiliert, aber nicht zur Laufzeit geprüft.**
+`:app:assembleDevDebug` läuft durch und erzeugt ein APK. Das belegt, dass sie
+übersetzen — nicht, dass sie sich richtig verhalten. `Migration27` an einer
+echten Altdatenbank und die Positionswiederherstellung nach Prozesstod sind noch
+auf dem Gerät nachzustellen.
+
+**Die Kameramatrix fehlt in Stufe 6.** Aus der Homographie folgt die Fluchtlinie,
+nicht der Fluchtpunkt der Normalen; dafür gilt `v = (K·Kᵀ)·l′` und damit braucht
+es `K`. Der Plan führt `K` als expliziten Parameter mit dokumentierter Näherung
+(quadratische Pixel, Hauptpunkt in Bildmitte, Brennweite aus EXIF mit Rückfall
+auf einen Bilddiagonalen-Schätzwert). Wie stark die Näherung trägt, muss der
+Korpus zeigen.
 
 ## Upgrade-Pfad zu Ansatz C
 

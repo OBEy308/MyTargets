@@ -16,6 +16,7 @@
 package de.dreier.mytargets.detection.metrics
 
 import de.dreier.mytargets.detection.corpus.CorpusEntry
+import de.dreier.mytargets.detection.corpus.TruthShot
 
 /** What a detector produced for one photograph, and how it lined up. */
 class EntryOutcome(
@@ -25,37 +26,49 @@ class EntryOutcome(
 )
 
 /**
- * The four numbers the design spec measures the pipeline by.
+ * The numbers the design spec measures the pipeline by.
  *
- * All rates are relative to the EXPECTED shots, never to the matched ones. A
- * detector that misses five of six arrows and scores the sixth correctly must
- * not come out at a hundred percent ring accuracy.
+ * The corpus is only partly annotated: a registration only entry has no
+ * hits at all, some entries carry hits with no position, and ring accuracy
+ * can only be judged where the truth and the detection carry a comparable
+ * kind of score. Mixing all of that into one shared denominator would hide
+ * exactly what was measured, so every rate here gets its own count of what
+ * it is a share of.
+ *
+ * All rates are relative to the EXPECTED shots (or the comparable subset of
+ * them), never to the matched ones. A detector that misses five of six
+ * arrows and scores the sixth correctly must not come out at a hundred
+ * percent ring accuracy.
  */
 class Metrics(
     val expectedShots: Int,
     val matchedShots: Int,
     val falsePositives: Int,
     val correctScores: Int,
+    val scoreComparableShots: Int,
     val positionErrors: List<Double>,
-    val entriesWithPositions: Int
+    val entriesWithPositions: Int,
+    val annotatedEntries: Int,
+    val forgivenEntries: Int
 ) {
 
-    /** Share of true arrows that were found at all. Null when the corpus has
-     *  no expected arrows to measure against -- an empty corpus must not read
-     *  as a perfect run. */
+    /** Null when nothing was measured, never zero -- a zero reads as a result. */
     val detectionRate: Double?
-        get() = ratio(matchedShots)
+        get() = ratio(matchedShots, expectedShots)
 
     /** Invented arrows per expected arrow. Can exceed one. Null when the
      *  corpus has no expected arrows to measure against. */
     val falsePositiveRate: Double?
-        get() = ratio(falsePositives)
+        get() = ratio(falsePositives, expectedShots)
 
-    /** Share of true arrows found AND given the right score. The number that
-     *  matters to the archer. Null when the corpus has no expected arrows to
-     *  measure against. */
+    /**
+     * Measured against the shots whose truth is comparable with what the
+     * detector reports, not against every expected shot. An inherited entry
+     * carries printed values and no target model; scoring a zone index
+     * against it is not possible, and counting it as wrong would be a lie.
+     */
     val scoreAccuracy: Double?
-        get() = ratio(correctScores)
+        get() = ratio(correctScores, scoreComparableShots)
 
     /** Null when no entry in the corpus carried positions. */
     val medianPositionError: Double?
@@ -65,8 +78,8 @@ class Metrics(
     val p95PositionError: Double?
         get() = percentile(0.95)
 
-    private fun ratio(count: Int): Double? =
-        if (expectedShots == 0) null else count.toDouble() / expectedShots
+    private fun ratio(count: Int, total: Int): Double? =
+        if (total == 0) null else count.toDouble() / total
 
     /** Linear interpolation between order statistics, the common definition. */
     private fun percentile(fraction: Double): Double? {
@@ -86,28 +99,83 @@ class Metrics(
             var matched = 0
             var falsePositives = 0
             var correct = 0
+            var comparable = 0
             var withPositions = 0
+            var annotated = 0
+            var forgiven = 0
             val errors = mutableListOf<Double>()
 
             for (outcome in outcomes) {
-                expected += outcome.entry.expectedShots
+                val entry = outcome.entry
+                if (!entry.isAnnotated) {
+                    // A registration only entry has no hits to be right or
+                    // wrong about. Counting it would dilute every rate.
+                    continue
+                }
+                annotated++
+                expected += entry.expectedShots
                 matched += outcome.match.pairs.size
-                falsePositives += outcome.match.unmatchedDetected.size
-                if (outcome.entry.hasPositions) {
+
+                if (entry.unresolvedArrows > 0) {
+                    // The corpus README, verbatim: a detection matching no
+                    // listed hit counts as a false positive only when
+                    // unresolvedArrows is zero. The arrows are actually in
+                    // the photograph; finding them is not an invention. This
+                    // is the literal, generous reading -- a single
+                    // unresolved arrow forgives any number of surplus
+                    // detections for that entry, not just as many as are
+                    // unresolved.
+                    //
+                    // The tighter alternative -- forgive only min(surplus,
+                    // unresolvedArrows) detections and charge the rest as
+                    // false positives -- was considered and rejected here.
+                    // It is not what the README states, and the README is
+                    // the authority for its own corpus format; inventing a
+                    // stricter rule than the format documents would make
+                    // this code second-guess the corpus rather than measure
+                    // against it.
+                    forgiven++
+                } else {
+                    falsePositives += outcome.match.unmatchedDetected.size
+                }
+
+                if (entry.hasPositions) {
                     withPositions++
                 }
+
                 for (pair in outcome.match.pairs) {
-                    val truthShot = outcome.entry.shots[pair.truthIndex]
+                    val truthShot = entry.shots[pair.truthIndex]
                     val detectedShot = outcome.detected[pair.detectedIndex]
-                    if (truthShot.score == detectedShot.score) {
-                        correct++
+                    if (isScoreComparable(truthShot, detectedShot)) {
+                        comparable++
+                        if (ShotMatching.scoresAgree(truthShot, detectedShot)) {
+                            correct++
+                        }
                     }
                     pair.distance?.let { errors.add(it) }
                 }
             }
 
-            return Metrics(expected, matched, falsePositives, correct, errors, withPositions)
+            return Metrics(
+                expectedShots = expected,
+                matchedShots = matched,
+                falsePositives = falsePositives,
+                correctScores = correct,
+                scoreComparableShots = comparable,
+                positionErrors = errors,
+                entriesWithPositions = withPositions,
+                annotatedEntries = annotated,
+                forgivenEntries = forgiven
+            )
         }
+
+        /** Whether the two carry the same KIND of score and can be compared. */
+        private fun isScoreComparable(
+            truth: TruthShot,
+            detected: DetectedShotRecord
+        ): Boolean =
+            (truth.scoringRing != null && detected.scoringRing != null) ||
+                (truth.printedScore != null && detected.printedScore != null)
 
         /**
          * The same numbers per tag, so "dark" and "overlap" can be compared

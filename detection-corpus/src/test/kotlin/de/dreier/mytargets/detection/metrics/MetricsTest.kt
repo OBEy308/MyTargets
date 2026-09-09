@@ -70,12 +70,52 @@ class MetricsTest {
     }
 
     @Test
+    fun theFalsePositiveRateIsMeasuredAgainstExpectedNotAgainstFound() {
+        // Two expected arrows, one found, two invented. Against expected that
+        // is 2/2 = 1.0; against matched it would be 2/1 = 2.0.
+        val e = entry("fp.jpg", shots = arrayOf(truth("9", 0.0, 0.0), truth("8", 0.5, 0.0)))
+        val detected = listOf(
+            found("9", 0.0, 0.0),
+            found("5", 0.2, 0.0),
+            found("5", 0.3, 0.0)
+        )
+        val m = Metrics.over(listOf(outcome(e, detected)))
+
+        assertThat(m.matchedShots).isEqualTo(1)
+        assertThat(m.falsePositives).isEqualTo(2)
+        assertThat(m.falsePositiveRate).isWithin(1e-9).of(1.0)
+    }
+
+    @Test
     fun aMatchedArrowWithTheWrongScoreCountsAsFoundButNotAsCorrect() {
         val e = entry("w.jpg", shots = arrayOf(truth("X", 0.0, 0.0)))
         val m = Metrics.over(listOf(outcome(e, listOf(found("9", 0.01, 0.0)))))
 
         assertThat(m.detectionRate).isWithin(1e-9).of(1.0)
         assertThat(m.scoreAccuracy).isWithin(1e-9).of(0.0)
+    }
+
+    @Test
+    fun ringAccuracyComparesEachTruthWithItsOwnDetection() {
+        // Every other test in this file happens to pair index i with index i,
+        // which cannot tell a correct comparison from one that swaps the two
+        // indices. These pairings form a three-cycle, which can: the right
+        // answer is 2/3 and the swapped one is 0.
+        val shots = arrayOf(
+            truth("9", 0.0, 0.0),
+            truth("8", 0.3, 0.0),
+            truth("7", 0.6, 0.0)
+        )
+        val e = entry("cycle.jpg", shots = shots)
+        val detected = listOf(
+            found("6", 0.6, 0.0),   // pairs with truth 2, and is wrong
+            found("9", 0.0, 0.0),   // pairs with truth 0, correct
+            found("8", 0.3, 0.0)    // pairs with truth 1, correct
+        )
+        val m = Metrics.over(listOf(outcome(e, detected)))
+
+        assertThat(m.detectionRate).isWithin(1e-9).of(1.0)
+        assertThat(m.scoreAccuracy).isWithin(1e-9).of(2.0 / 3.0)
     }
 
     @Test

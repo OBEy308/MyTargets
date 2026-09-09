@@ -245,20 +245,18 @@ class InputActivity : ChildActivityBase(), TargetViewBase.OnEndFinishedListener,
 
     private fun drainPendingSaves() {
         while (true) {
-            val save = saveQueue.poll()
-            if (save == null) {
-                synchronized(saveLock) {
-                    // Double-check: another enqueue may have raced between poll and lock
-                    val lateSave = saveQueue.poll()
-                    if (lateSave == null) {
-                        saveWorkerRunning = false
-                        return
-                    }
-                    // Process the late arrival
-                    persistSave(lateSave)
+            // If the queue looks empty, re-check under the lock so an enqueue that
+            // raced with the poll above cannot be left unprocessed. Only the
+            // bookkeeping happens inside the lock -- persisting is deliberately kept
+            // outside, because enqueueEndSave takes the same lock on the UI thread
+            // and must never wait for a database write.
+            val save = saveQueue.poll() ?: synchronized(saveLock) {
+                val next = saveQueue.poll()
+                if (next == null) {
+                    saveWorkerRunning = false
                 }
-                continue
-            }
+                next
+            } ?: return
             persistSave(save)
         }
     }

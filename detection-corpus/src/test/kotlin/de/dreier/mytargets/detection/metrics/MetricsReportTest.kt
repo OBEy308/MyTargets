@@ -100,6 +100,42 @@ class MetricsReportTest {
         )
 
         assertThat(report).contains("not measured")
-        assertThat(report).doesNotContain("Position error | 0.000")
+        assertThat(report).doesNotContain("0.0000 spot radii")
+    }
+
+    @Test
+    fun theWorstEntriesTableShowsTheWorstAndNotTheBest() {
+        // Six entries against a cap of five: the single good one must be the
+        // one left out. A two entry corpus cannot tell a correct sort from a
+        // reversed one, because both entries fit under the cap either way.
+        val outcomes = (0 until 5).map { i ->
+            outcome("bad$i.jpg", emptySet(), listOf("9", "8"), emptyList())
+        } + outcome("perfect.jpg", emptySet(), listOf("9", "8"), listOf("9", "8"))
+
+        val report = MetricsReport.render(outcomes, title = "Worst")
+
+        assertThat(report).contains("bad0.jpg")
+        assertThat(report).contains("bad4.jpg")
+        assertThat(report).doesNotContain("perfect.jpg")
+    }
+
+    @Test
+    fun numbersAreFormattedIndependentlyOfTheDefaultLocale() {
+        // A report that says "50,0 %" on one machine and "50.0 %" on another
+        // cannot be diffed between runs, which is most of why it is written to
+        // a file at all. Forcing a comma decimal locale here makes this test
+        // discriminate on every machine, not only on a German one.
+        val original = java.util.Locale.getDefault()
+        try {
+            java.util.Locale.setDefault(java.util.Locale.GERMANY)
+            val report = MetricsReport.render(
+                listOf(outcome("a.jpg", emptySet(), listOf("9", "8"), listOf("9"))),
+                title = "Locale"
+            )
+            assertThat(report).contains("50.0 %")
+            assertThat(report).doesNotContain("50,0 %")
+        } finally {
+            java.util.Locale.setDefault(original)
+        }
     }
 }

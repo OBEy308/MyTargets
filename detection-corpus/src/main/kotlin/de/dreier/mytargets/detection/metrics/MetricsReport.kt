@@ -59,7 +59,7 @@ object MetricsReport {
         )
         sb.appendLine(
             "| False positives | ${percent(overall.falsePositiveRate)} | " +
-                "of ${overall.expectedShots} listed hits |"
+                "of ${overall.falsePositiveDenominator} listed hits |"
         )
         sb.appendLine(
             "| Ring accuracy | ${percent(overall.scoreAccuracy)} | " +

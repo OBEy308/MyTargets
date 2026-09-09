@@ -232,31 +232,52 @@ class MetricsReportTest {
 
     @Test
     fun forgivenEntriesAreCalledOutSoTheFalsePositiveRateIsReadable() {
-        val e = CorpusEntry(
+        // A forgiven entry (f.jpg) sits alongside a strict one (s.jpg) with a
+        // genuine fabrication. The forgiven entry's listed hit must not sit
+        // in the false positive rate's denominator -- only s.jpg's two listed
+        // hits do -- so the rate here is 1 / 2, not 1 / 3.
+        val forgiven = CorpusEntry(
             imageName = "f.jpg", image = null, camera = null, capture = null,
             target = null, shotsPerEnd = 6,
             shots = listOf(TruthShot(scoringRing = 0, position = SpotPosition(0, 0.0, 0.0))),
             unresolvedArrows = 2, registration = null
         )
-        val detected = listOf(
+        val forgivenDetected = listOf(
             DetectedShotRecord(0, null, SpotPosition(0, 0.0, 0.0), 0.9),
             DetectedShotRecord(2, null, SpotPosition(0, 0.5, 0.0), 0.9)
         )
+        val strict = CorpusEntry(
+            imageName = "s.jpg", image = null, camera = null, capture = null,
+            target = null, shotsPerEnd = 2,
+            shots = listOf(
+                TruthShot(scoringRing = 1, position = SpotPosition(0, 0.0, 0.0)),
+                TruthShot(scoringRing = 2, position = SpotPosition(0, 0.3, 0.0))
+            ),
+            unresolvedArrows = 0, registration = null
+        )
+        val strictDetected = listOf(
+            DetectedShotRecord(1, null, SpotPosition(0, 0.0, 0.0), 0.9),
+            DetectedShotRecord(2, null, SpotPosition(0, 0.3, 0.0), 0.9),
+            DetectedShotRecord(3, null, SpotPosition(0, 0.9, 0.0), 0.9)
+        )
         val report = MetricsReport.render(
-            listOf(EntryOutcome(e, ShotMatching.match(e, detected), detected)),
+            listOf(
+                EntryOutcome(forgiven, ShotMatching.match(forgiven, forgivenDetected), forgivenDetected),
+                EntryOutcome(strict, ShotMatching.match(strict, strictDetected), strictDetected)
+            ),
             title = "Forgiven"
         )
 
         assertThat(report).contains("unresolved arrows")
         // "unresolved arrows" alone would pass even if the callout sentence
         // named the wrong count of entries, or if the false positive rate it
-        // is explaining still read as a real (non-forgiven) zero without its
-        // denominator. Pin both down.
+        // is explaining still read as though the forgiven entry's listed hit
+        // were part of its denominator. Pin both down.
         assertThat(report).contains(
             "1 entry declare unresolved arrows, so surplus detections there " +
                 "are not counted as false positives."
         )
-        assertThat(report).contains("False positives | 0.0 % | of 1 listed hits")
+        assertThat(report).contains("False positives | 50.0 % | of 2 listed hits")
     }
 
     @Test

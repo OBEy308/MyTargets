@@ -53,6 +53,15 @@ class Metrics(
     val expectedShots: Int,
     val matchedShots: Int,
     val falsePositives: Int,
+    /**
+     * The expected shots of the entries that were NOT forgiven -- the only
+     * ones whose surplus detections could ever become a false positive. A
+     * forgiven entry's listed hits are excluded here even though they are
+     * counted in [expectedShots], because they can never move
+     * [falsePositives]; leaving them in would dilute [falsePositiveRate]
+     * with a denominator that the numerator can never grow into.
+     */
+    val falsePositiveDenominator: Int,
     val correctScores: Int,
     val scoreComparableShots: Int,
     val positionErrors: List<Double>,
@@ -65,10 +74,18 @@ class Metrics(
     val detectionRate: Double?
         get() = ratio(matchedShots, expectedShots)
 
-    /** Invented arrows per expected arrow. Can exceed one. Null when the
-     *  corpus has no expected arrows to measure against. */
+    /**
+     * Invented arrows per expected arrow. Can exceed one. Null when
+     * [falsePositiveDenominator] is zero.
+     *
+     * Measured against [falsePositiveDenominator], not [expectedShots]: a
+     * forgiven entry's surplus detections can never become a false positive,
+     * so its listed hits must not sit in this rate's denominator either --
+     * doing so would only dilute it with shots that can never move the
+     * numerator.
+     */
     val falsePositiveRate: Double?
-        get() = ratio(falsePositives, expectedShots)
+        get() = ratio(falsePositives, falsePositiveDenominator)
 
     /**
      * Measured against the shots whose truth is comparable with what the
@@ -107,6 +124,7 @@ class Metrics(
             var expected = 0
             var matched = 0
             var falsePositives = 0
+            var falsePositiveDenominator = 0
             var correct = 0
             var comparable = 0
             var withPositions = 0
@@ -146,6 +164,7 @@ class Metrics(
                     forgiven++
                 } else {
                     falsePositives += outcome.match.unmatchedDetected.size
+                    falsePositiveDenominator += entry.expectedShots
                 }
 
                 if (entry.hasPositions) {
@@ -169,6 +188,7 @@ class Metrics(
                 expectedShots = expected,
                 matchedShots = matched,
                 falsePositives = falsePositives,
+                falsePositiveDenominator = falsePositiveDenominator,
                 correctScores = correct,
                 scoreComparableShots = comparable,
                 positionErrors = errors,

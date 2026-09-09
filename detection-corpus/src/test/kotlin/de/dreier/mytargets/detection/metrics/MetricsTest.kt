@@ -310,7 +310,12 @@ class MetricsTest {
 
         assertThat(m.matchedShots).isEqualTo(4)
         assertThat(m.falsePositives).isEqualTo(0)
-        assertThat(m.falsePositiveRate!!).isWithin(1e-9).of(0.0)
+        // The only entry here is forgiven, so falsePositiveDenominator is
+        // zero -- there is nothing left in the corpus that could ever be
+        // charged a false positive -- and the rate must read as unmeasured,
+        // not as a real zero.
+        assertThat(m.falsePositiveDenominator).isEqualTo(0)
+        assertThat(m.falsePositiveRate).isNull()
         assertThat(m.forgivenEntries).isEqualTo(1)
     }
 
@@ -350,6 +355,55 @@ class MetricsTest {
         assertThat(m.matchedShots).isEqualTo(4)
         assertThat(m.falsePositives).isEqualTo(0)
         assertThat(m.forgivenEntries).isEqualTo(1)
+    }
+
+    @Test
+    fun theFalsePositiveDenominatorExcludesForgivenEntries() {
+        // A forgiven entry's surplus detections can never become a false
+        // positive, so its listed hits must not sit in the rate's
+        // denominator either. A forgiven five-hit entry takes 50 fabricated
+        // detections at no cost; a strict one-hit entry takes one
+        // fabrication and is charged for it. Against the entries that were
+        // actually judged (the strict one, one listed hit) that is 100%; if
+        // the denominator reverted to expectedShots (5 + 1 = 6) it would
+        // read as 1/6 = 16.7% instead.
+        val forgiven = CorpusEntry(
+            imageName = "forgiven.jpg", image = null, camera = null, capture = null,
+            target = null, shotsPerEnd = 6,
+            shots = (0 until 5).map { i -> truth(2, 0.1 * i, 0.0) },
+            unresolvedArrows = 1, registration = null
+        )
+        val forgivenDetected = (0 until 5).map { i -> found(2, 0.1 * i, 0.0) } +
+            (0 until 50).map { i -> found(2, 5.0 + i, 0.0) }
+        val strict = entry("strict.jpg", shots = arrayOf(truth(2, 0.0, 0.0)))
+        val strictDetected = listOf(found(2, 0.0, 0.0), found(2, 9.0, 0.0))
+
+        val m = Metrics.over(
+            listOf(outcome(forgiven, forgivenDetected), outcome(strict, strictDetected))
+        )
+
+        assertThat(m.falsePositives).isEqualTo(1)
+        assertThat(m.falsePositiveDenominator).isEqualTo(1)
+        assertThat(m.falsePositiveRate!!).isWithin(1e-9).of(1.0)
+    }
+
+    @Test
+    fun falsePositiveRateIsNullWhenEveryEntryIsForgiven() {
+        // If every entry in the corpus is forgiven, the false positive
+        // denominator is zero -- not because nothing was found, but because
+        // nothing here could ever be charged. That must read as "not
+        // measured", never as a rate of zero.
+        val forgiven = CorpusEntry(
+            imageName = "forgiven.jpg", image = null, camera = null, capture = null,
+            target = null, shotsPerEnd = 6,
+            shots = listOf(truth(2, 0.0, 0.0)),
+            unresolvedArrows = 1, registration = null
+        )
+        val detected = listOf(found(2, 0.0, 0.0), found(2, 9.0, 0.0))
+        val m = Metrics.over(listOf(outcome(forgiven, detected)))
+
+        assertThat(m.falsePositiveDenominator).isEqualTo(0)
+        assertThat(m.falsePositiveRate).isNull()
     }
 
     @Test

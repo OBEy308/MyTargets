@@ -158,6 +158,53 @@ class RectificationTest {
     }
 
     @Test
+    fun worksForASmallRingFarFromTheImageOrigin() {
+        // A 40 cm face at 3 m: a small ring, nowhere near the image origin.
+        // The conic arithmetic has to be done in a normalised frame or the
+        // guards see noise that is not there.
+        val centre = Vec2(2000.0, 1500.0)
+        val outer = Conic.circle(centre, 200.0)
+        val inner = Conic.circle(centre, 80.0)
+
+        val result = Rectification.fromConcentricCircles(outer, 1.0, inner, 0.4)!!
+
+        val recovered = result.imageToTarget.mapPoint(Vec2(centre.x + 200.0, centre.y))!!
+        assertThat(hypot(recovered.x, recovered.y)).isWithin(1e-4).of(1.0)
+        assertThat(result.imagedCentre.x).isWithin(1e-3).of(centre.x)
+        assertThat(result.imagedCentre.y).isWithin(1e-3).of(centre.y)
+    }
+
+    @Test
+    fun worksForANoisySmallRingFarFromTheImageOrigin() {
+        // The same 40 cm face at 3 m, with the jitter of the noise test above.
+        // Before the normalised frame this returned null for the great majority
+        // of seeds.
+        val centre = Vec2(2000.0, 1500.0)
+        val random = Random(42)
+        fun noisyRing(radius: Double): Conic = Conic.fit(
+            circlePoints(radius, 60).map { p ->
+                Vec2(
+                    centre.x + p.x + random.nextDouble() - 0.5,
+                    centre.y + p.y + random.nextDouble() - 0.5
+                )
+            }
+        )!!
+
+        val result = Rectification.fromConcentricCircles(
+            noisyRing(200.0), 1.0, noisyRing(80.0), 0.4
+        )!!
+
+        for ((pixelRadius, targetRadius) in listOf(200.0 to 1.0, 80.0 to 0.4)) {
+            for (p in circlePoints(pixelRadius, 37)) {
+                val recovered = result.imageToTarget
+                    .mapPoint(Vec2(centre.x + p.x, centre.y + p.y))!!
+                assertThat(hypot(recovered.x, recovered.y))
+                    .isWithin(0.02).of(targetRadius)
+            }
+        }
+    }
+
+    @Test
     fun toleratesHalfPixelNoiseOnFittedRings() {
         val random = Random(42)
         fun noisyRing(radius: Double): Conic = Conic.fit(

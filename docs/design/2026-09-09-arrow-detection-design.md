@@ -246,13 +246,25 @@ Scheibenebene und der Kameramatrix `K` folgt der Fluchtpunkt der
 Scheibennormalen, `v = (K·Kᵀ)·l`. `K` wird genähert: quadratische Pixel,
 Hauptpunkt in der Bildmitte, Brennweite aus `FocalLengthIn35mmFilm` in EXIF
 (`f_px = f35 / 36 · lange Kante`), ohne EXIF `0.75 · lange Kante`, was 27 mm
-entspricht. Ein Punkt über der Ebene wird stets *zu diesem Fluchtpunkt hin*
-verschoben abgebildet. Also gilt:
+entspricht.
 
-> **Der Einschusspunkt ist das vom Fluchtpunkt weiter entfernte Ende des Streifens.**
+Ein Punkt `X + t·d` bildet sich ab als `K·X + t·K·d`. Wächst die Tiefe, wandert
+das Bild **zum** Fluchtpunkt; bewegt sich der Punkt zur Kamera hin, wandert es
+**vom Fluchtpunkt weg** und geht gegen unendlich, sobald die Tiefe null erreicht.
+Der Nock steht zur Kamera hin aus der Scheibe, liegt also näher an der Kamera als
+das Einschussloch. Also gilt:
 
-Das erklärt auch, warum Pfeile auf Scheibenfotos nach außen zu spreizen scheinen,
-und macht die Zuordnung berechenbar statt heuristisch.
+> **Der Einschusspunkt ist das dem Fluchtpunkt nähere Ende des Streifens.**
+
+Das deckt sich damit, dass Pfeile auf Scheibenfotos nach außen zu spreizen
+scheinen: Was nach außen zeigt, sind die Nocks — sie liegen vom Fluchtpunkt
+weiter entfernt. Damit ist die Zuordnung berechenbar statt heuristisch.
+
+*Korrektur vom 2026-09-09.* Bis zur Gesamtprüfung des Geometrieplans stand hier
+die umgekehrte Regel, und der Absatz über das Spreizen widerlegte sie bereits.
+Der Plan hat die falsche Regel übernommen, und ihr Test hat sie wiederholt statt
+sie zu prüfen — er wäre unter beiden Vorzeichen grün gewesen. Gefunden wurde es
+erst durch eine Simulation mit echter Lochkamera-Projektion.
 
 Zwei Einschränkungen, die der Spec ausdrücklich behandelt:
 

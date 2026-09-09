@@ -87,9 +87,16 @@ data class Streak(val endA: Vec2, val endB: Vec2)
 /**
  * The vanishing point of the target plane's normal, and what it is for.
  *
- * An arrow sticks out of the face towards the camera. Any point raised above
- * the plane is imaged displaced *towards* the vanishing point of the normal, so
- * along a shaft the nock sits nearer that point than the entry hole does.
+ * An arrow sticks out of the face towards the camera. A point X + t d images as
+ * K X + t K d, so walking along the normal away from the camera -- into the
+ * face, with increasing depth -- moves the image *towards* the vanishing point
+ * of that normal, reaching it at infinite depth. Walking the other way, out of
+ * the face towards the camera, moves the image *away* from the vanishing point,
+ * off to infinity at the principal plane.
+ *
+ * The nock is the end raised out of the face towards the camera, so along an
+ * imaged shaft the nock is the end FARTHER from the vanishing point and the
+ * entry hole is the end NEARER it.
  *
  * Note that the homography alone does not give this point. It gives the
  * vanishing line l of the plane; the vanishing point of the normal is
@@ -109,12 +116,14 @@ object NormalVanishingPoint {
         (intrinsics.dualAbsoluteConic() * vanishingLine).toVec2()
 
     /**
-     * For each streak the end further from [vanishingPoint], which is the entry
-     * point of the arrow.
+     * For each streak the end nearer [vanishingPoint], which is the entry point
+     * of the arrow. The other end is the nock, which stands out of the face
+     * towards the camera and is therefore imaged farther from the vanishing
+     * point.
      */
     fun entryPoints(streaks: List<Streak>, vanishingPoint: Vec2): List<Vec2> =
         streaks.map { streak ->
-            if (streak.endA.distanceTo(vanishingPoint) >
+            if (streak.endA.distanceTo(vanishingPoint) <
                 streak.endB.distanceTo(vanishingPoint)
             ) {
                 streak.endA

@@ -55,19 +55,32 @@ object Rectification {
     ): Result? {
         require(outerRadius > innerRadius) { "outer radius must be the larger one" }
 
-        val pencil = VanishingLine.fromConcentricCircles(outer, inner) ?: return null
-        val line = pencil.line
+        // Every step below is conic arithmetic, and at pixel scale that mixes a
+        // constant term of order 10^7 with quadratic ones of order one: the
+        // guards in metricFromEllipse, centreOf and radiusOf then see rounding
+        // noise rather than the conic. Work in a frame where the outer ring is
+        // roughly the unit circle about the origin -- the same treatment
+        // VanishingLine already gives itself -- and convert back at the end.
+        val frame = outer.normalisingFrame() ?: return null
+        val outerInFrame = outer.transformedBy(frame)
+        val innerInFrame = inner.transformedBy(frame)
+
+        val pencil = VanishingLine.fromConcentricCircles(outerInFrame, innerInFrame)
+            ?: return null
+        // Both of these are in frame coordinates, not image coordinates.
+        val lineInFrame = pencil.line
+        val centreInFrame = pencil.imagedCentre
 
         // Affine rectification: send the vanishing line to (0, 0, 1).
         val affine = Mat3.of(
             1.0, 0.0, 0.0,
             0.0, 1.0, 0.0,
-            line.x, line.y, line.z
+            lineInFrame.x, lineInFrame.y, lineInFrame.z
         )
         if (affine.inverse() == null) return null
 
-        val affineOuter = outer.transformedBy(affine)
-        val affineInner = inner.transformedBy(affine)
+        val affineOuter = outerInFrame.transformedBy(affine)
+        val affineInner = innerInFrame.transformedBy(affine)
 
         // After affine rectification the conics are ellipses that differ from
         // circles by one common linear map. Recover it from the outer one.
@@ -78,11 +91,10 @@ object Rectification {
 
         val centre = centreOf(metricOuter) ?: return null
         val centreInner = centreOf(metricInner) ?: return null
-        if (centre.distanceTo(centreInner) > CONCENTRIC_TOLERANCE * radiusOf(metricOuter, centre)) {
+        val radius = radiusOf(metricOuter, centre)
+        if (centre.distanceTo(centreInner) > CONCENTRIC_TOLERANCE * radius) {
             return null
         }
-
-        val radius = radiusOf(metricOuter, centre)
         if (radius < 1e-9) return null
 
         // Check the radius ratio; if it is wrong these were not the rings we
@@ -99,9 +111,10 @@ object Rectification {
             0.0, 0.0, 1.0
         )
 
+        // This chain starts in frame coordinates, so it must be probed there.
         val withoutRotation = scaling * toOrigin * metric * affine
 
-        val orientationFixed = if (isMirrored(withoutRotation, pencil.imagedCentre)) {
+        val orientationFixed = if (isMirrored(withoutRotation, centreInFrame)) {
             MIRROR_Y * withoutRotation
         } else {
             withoutRotation
@@ -109,13 +122,21 @@ object Rectification {
 
         // Fix the remaining rotation so that imageUp, taken at the imaged
         // centre, points along -y in target coordinates: upwards on the face.
-        val rotation = rotationAligning(orientationFixed, pencil.imagedCentre, imageUp)
+        // [imageUp] is a direction and [frame] is a similarity, so it passes
+        // through unchanged up to a positive scale factor, which leaves the
+        // angle -- and hence the rotation -- the same. Only the point the
+        // direction is attached to has to be moved into the frame.
+        val rotation = rotationAligning(orientationFixed, centreInFrame, imageUp)
             ?: return null
+        val frameToTarget = rotation * orientationFixed
 
+        // Out of the frame again: image points pass through the frame first,
+        // lines transform contragrediently, and the centre needs the inverse.
+        val imagedCentre = frame.inverse()?.mapPoint(centreInFrame) ?: return null
         return Result(
-            imageToTarget = rotation * orientationFixed,
-            vanishingLine = line,
-            imagedCentre = pencil.imagedCentre
+            imageToTarget = frameToTarget * frame,
+            vanishingLine = (frame.transpose() * lineInFrame).normalized(),
+            imagedCentre = imagedCentre
         )
     }
 

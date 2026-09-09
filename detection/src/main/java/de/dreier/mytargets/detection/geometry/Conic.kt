@@ -47,12 +47,6 @@ class Conic(val matrix: Mat3) {
         return Conic(inv.transpose() * matrix * inv)
     }
 
-    /** The polar line of [point] with respect to this conic: C p. */
-    fun polarLine(point: Vec3): Vec3 = matrix * point
-
-    /** The pole of [line]: C^-1 l. Null for a degenerate conic. */
-    fun pole(line: Vec3): Vec3? = matrix.inverse()?.times(line)
-
     /**
      * The centre of the conic. Mathematically this is the pole of the line at
      * infinity, but taking that route through Mat3.inverse() is numerically
@@ -74,6 +68,54 @@ class Conic(val matrix: Mat3) {
         val scale = maxOf(abs(a), abs(b), abs(c))
         if (scale == 0.0 || abs(blockDet) < 1e-15 * scale * scale) return null
         return Vec2((b * e - c * d) / blockDet, (b * d - a * e) / blockDet)
+    }
+
+    /**
+     * A similarity taking this conic's centre to the origin and its
+     * geometric mean radius to one. Conic arithmetic at pixel scale mixes
+     * a huge constant term with small quadratic ones; working in this frame
+     * keeps every entry on one scale. Null for a conic with no unique
+     * centre.
+     */
+    fun normalisingFrame(): Mat3? {
+        val normalisedConic = normalized()
+        val m = normalisedConic.matrix
+        val centre = normalisedConic.centre() ?: return null
+        // Constant term after moving the centre to the origin.
+        val ch = centre.homogeneous()
+        val f = ch.dot(m * ch)
+        val blockDet = m[0, 0] * m[1, 1] - m[0, 1] * m[1, 0]
+
+        // Both guards are scale relative, in the style of [centre]: each
+        // quantity is a difference of terms much larger than itself once the
+        // conic sits far from the image origin -- blockDet shrinks with the
+        // square of that distance and f with the fourth power -- so an absolute
+        // floor would read plain rounding noise as degeneracy.
+        val blockScale = maxOf(
+            abs(m[0, 0]), abs(m[0, 1]), abs(m[1, 0]), abs(m[1, 1])
+        )
+        if (blockScale == 0.0) return null
+        if (abs(blockDet) < 1e-15 * blockScale * blockScale) return null
+
+        // Magnitudes of the six monomials whose signed sum is f.
+        val fScale = abs(m[0, 0] * centre.x * centre.x) +
+            abs(2.0 * m[0, 1] * centre.x * centre.y) +
+            abs(m[1, 1] * centre.y * centre.y) +
+            abs(2.0 * m[0, 2] * centre.x) +
+            abs(2.0 * m[1, 2] * centre.y) +
+            abs(m[2, 2])
+        if (fScale == 0.0 || abs(f) < 1e-15 * fScale) return null
+
+        // Semi-axes squared are -f / eigenvalue, so the geometric mean radius is
+        // sqrt(|f| / sqrt(|det block|)).
+        val size = sqrt(abs(f) / sqrt(abs(blockDet)))
+        if (size < 1e-12) return null
+        val s = 1.0 / size
+        return Mat3.of(
+            s, 0.0, -s * centre.x,
+            0.0, s, -s * centre.y,
+            0.0, 0.0, 1.0
+        )
     }
 
     /** Scaled so the Frobenius norm is one, which makes residuals comparable. */
@@ -143,6 +185,10 @@ class Conic(val matrix: Mat3) {
             // guards every division, so finite input produces finite output. Instead use
             // a scale-relative threshold like Mat3.inverse() does.
             val d = normalisedConic.det()
+            // The scale comes from the unit eigenvector deliberately: its
+            // entries are bounded by one, so in the Hartley frame -- where the
+            // points sit at distance sqrt(2) -- the conic's entries are of order
+            // one too, and scale^3 is the right order for a determinant.
             val scale = maxOf(
                 abs(v[0]), abs(v[1]), abs(v[2]), abs(v[3]), abs(v[4]), abs(v[5])
             )

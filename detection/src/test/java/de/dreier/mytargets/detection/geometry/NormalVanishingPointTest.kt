@@ -60,7 +60,7 @@ class NormalVanishingPointTest {
     }
 
     @Test
-    fun entryPointIsTheEndFurtherFromTheVanishingPoint() {
+    fun entryPointIsTheEndNearerTheVanishingPoint() {
         val vanishing = Vec2(0.0, 0.0)
         val streaks = listOf(
             Streak(endA = Vec2(10.0, 0.0), endB = Vec2(30.0, 0.0)),
@@ -68,7 +68,32 @@ class NormalVanishingPointTest {
         )
         val entries = NormalVanishingPoint.entryPoints(streaks, vanishing)
 
-        assertThat(entries[0].x).isWithin(1e-9).of(30.0)
-        assertThat(entries[1].x).isWithin(1e-9).of(-40.0)
+        assertThat(entries[0].x).isWithin(1e-9).of(10.0)
+        assertThat(entries[1].x).isWithin(1e-9).of(-15.0)
+    }
+
+    @Test
+    fun aShaftStandingTowardsTheCameraHasItsNockFurtherFromTheVanishingPoint() {
+        // The physics the rule rests on, rather than a restatement of the rule.
+        // Pinhole camera at the origin looking along +z, frontal target plane at
+        // z = 5. An arrow enters at (1, 0.5, 5); its nock stands 0.3 out of the
+        // face towards the camera, at z = 4.7. The plane's vanishing line is the
+        // image line at infinity, so the normal's vanishing point is the
+        // principal point.
+        val k = CameraIntrinsics(3000.0, Vec2(2000.0, 1500.0))
+        val v = NormalVanishingPoint.compute(Vec3(0.0, 0.0, 1.0), k)!!
+
+        fun project(x: Double, y: Double, z: Double) =
+            Vec2(3000.0 * x / z + 2000.0, 3000.0 * y / z + 1500.0)
+
+        val entry = project(1.0, 0.5, 5.0)
+        val nock = project(1.0, 0.5, 4.7)
+
+        // Moving towards the camera walks the image away from v.
+        assertThat(entry.distanceTo(v)).isLessThan(nock.distanceTo(v))
+
+        val picked = NormalVanishingPoint.entryPoints(listOf(Streak(nock, entry)), v)
+        assertThat(picked[0].x).isWithin(1e-9).of(entry.x)
+        assertThat(picked[0].y).isWithin(1e-9).of(entry.y)
     }
 }

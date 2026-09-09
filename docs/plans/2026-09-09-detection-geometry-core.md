@@ -1803,7 +1803,16 @@ Der Fluchtpunkt ist bei gegebener Fluchtlinie **eindeutig**: `v = (K·Kᵀ)·l`.
   - `CameraIntrinsics(val focalLengthPx: Double, val principalPoint: Vec2)` mit `CameraIntrinsics.approximate(imageWidth: Int, imageHeight: Int, focalLengthPx: Double? = null)` und `CameraIntrinsics.from35mmEquivalent(imageWidth: Int, imageHeight: Int, focalLength35mm: Double)`
   - `Streak(val endA: Vec2, val endB: Vec2)` — die beiden Enden eines Schaftstreifens, Reihenfolge unbekannt
   - `NormalVanishingPoint.compute(vanishingLine: Vec3, intrinsics: CameraIntrinsics): Vec2?`
-  - `NormalVanishingPoint.entryPoints(streaks: List<Streak>, vanishingPoint: Vec2): List<Vec2>` — für jeden Streifen das vom Fluchtpunkt weiter entfernte Ende
+  - `NormalVanishingPoint.entryPoints(streaks: List<Streak>, vanishingPoint: Vec2): List<Vec2>` — für jeden Streifen das dem Fluchtpunkt **nähere** Ende
+
+> **Korrektur bei der Gesamtprüfung am 2026-09-09.** Der Codeblock und der Test
+> unten wählen das vom Fluchtpunkt **weiter entfernte** Ende. Das ist falsch und
+> war aus der Spec übernommen. Ein Punkt `X + t·d` bildet sich als `K·X + t·K·d`
+> ab: Wachsende Tiefe führt zum Fluchtpunkt hin, Bewegung zur Kamera davon weg.
+> Der Nock steht zur Kamera hin, ist also das **entferntere** Ende. Der Test
+> `entryPointIsTheEndFurtherFromTheVanishingPoint` hat die Regel nur wiederholt
+> und wäre unter beiden Vorzeichen grün gewesen; er ist durch einen Test mit
+> echter Lochkamera-Projektion ersetzt.
 
 Zur Brennweite: Handy-Hauptkameras liegen bei 24 bis 28 mm Kleinbild-Äquivalent. Die Bilddiagonale als Rückfall entspräche etwa 45 mm und läge um Faktor 1.7 daneben. Plan 3 liest deshalb `FocalLengthIn35mmFilm` aus EXIF und rechnet `f_px = f35 / 36 · lange Kante`; der Rückfall ohne EXIF ist `0.75 · lange Kante`, das entspricht 27 mm.
 
@@ -2185,6 +2194,22 @@ git commit -m "Assign detected points to spots and convert to spot local coordin
 ## Task 9: Kandidatenauswahl mit Abstandsregel
 
 Setzt den Leitsatz der Spec um: Bei Unsicherheit lieber nichts eintragen als etwas Falsches.
+
+> **Korrektur bei der Ausführung am 2026-09-09.** Der Codeblock unten wendet die
+> Spot-Obergrenze **vor** der Konfidenzauswahl an. Das besteht zwei der sieben
+> Tests dieses Tasks nicht: Kappen entfernt den dritten Kandidaten eines Spots,
+> bevor die Abstandsregel prüfen kann, ob er einen Platz streitig macht. Damit
+> liefert `surplusWithoutAClearGapLeavesTheContestedPlaceOpen` zwei akzeptierte
+> Treffer statt einem, und `surplusIsDroppedWhenTheConfidenceGapIsClear` meldet
+> `SPOT_OVERFLOW` statt `COMPLETE`.
+>
+> Umgesetzt ist deshalb die **umgekehrte** Reihenfolge: erst Konfidenzauswahl,
+> dann Spot-Obergrenze. Sie besteht alle sieben Tests, hat aber einen eigenen
+> Preis — Kandidaten auf einem überbelegten Spot können einen berechtigten Pfeil
+> auf einem anderen Spot aus der globalen Rangfolge verdrängen. Beide Grenzen
+> sind im Code dokumentiert und durch einen Test festgehalten. Welche Regel
+> richtig ist, entscheidet Plan 2 an gemessenen Konfidenzen; sie vorher zu
+> erfinden wäre genau das Raten, das die Spec ausschließt.
 
 Zwei Regeln, beide aus dem Review:
 

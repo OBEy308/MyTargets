@@ -17,7 +17,6 @@ package de.dreier.mytargets.detection.geometry
 
 import kotlin.math.abs
 import kotlin.math.min
-import kotlin.math.sqrt
 
 /**
  * Recovers the imaged centre and the vanishing line of the target plane from
@@ -64,7 +63,7 @@ object VanishingLine {
      *         circles.
      */
     fun fromConcentricCircles(c1: Conic, c2: Conic): Result? {
-        val frame = normalisingFrame(c1) ?: return null
+        val frame = c1.normalisingFrame() ?: return null
         val a = c1.transformedBy(frame).normalized().matrix
         val b = c2.transformedBy(frame).normalized().matrix
         if (areTheSameConic(a, b)) return null
@@ -93,7 +92,11 @@ object VanishingLine {
             )
             if (!isInside(candidate, a) || !isInside(candidate, b)) continue
 
-            // Among admissible members prefer the one closest to rank two.
+            // Among admissible members prefer the one closest to rank two. A
+            // zero middle eigenvalue cannot occur for a true rank two member --
+            // that would make it rank one -- and the NaN it would produce
+            // compares false against bestResidual, so it would drop the
+            // candidate rather than select it.
             val residual = abs(eigen.values[2]) / abs(eigen.values[1])
             if (residual < bestResidual) {
                 bestResidual = residual
@@ -109,31 +112,6 @@ object VanishingLine {
         val imagedCentre = frame.inverse()?.times(centre)?.toVec2() ?: return null
         val line = (frame.transpose() * lineInFrame).normalized()
         return Result(line, imagedCentre)
-    }
-
-    /**
-     * Similarity that moves the centre of [conic] to the origin and scales its
-     * geometric mean radius to one. Null for a degenerate conic.
-     */
-    private fun normalisingFrame(conic: Conic): Mat3? {
-        val normalisedConic = conic.normalized()
-        val m = normalisedConic.matrix
-        val centre = normalisedConic.centre() ?: return null
-        // Constant term after moving the centre to the origin.
-        val ch = centre.homogeneous()
-        val f = ch.dot(m * ch)
-        val blockDet = m[0, 0] * m[1, 1] - m[0, 1] * m[1, 0]
-        if (abs(blockDet) < 1e-18 || abs(f) < 1e-18) return null
-        // Semi-axes squared are -f / eigenvalue, so the geometric mean radius is
-        // sqrt(|f| / sqrt(|det block|)).
-        val size = sqrt(abs(f) / sqrt(abs(blockDet)))
-        if (size < 1e-12) return null
-        val s = 1.0 / size
-        return Mat3.of(
-            s, 0.0, -s * centre.x,
-            0.0, s, -s * centre.y,
-            0.0, 0.0, 1.0
-        )
     }
 
     /** Both inputs are normalised to unit Frobenius norm, up to sign. */

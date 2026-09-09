@@ -97,11 +97,13 @@ class ConicTest {
     }
 
     @Test
-    fun poleOfPolarLineIsTheOriginalPoint() {
-        val c = Conic.circle(Vec2(2.0, 3.0), 7.0)
-        val point = Vec3(11.0, -4.0, 1.0)
-        val recovered = c.pole(c.polarLine(point))!!.toVec2()!!
-        assertThat(recovered.x).isWithin(1e-7).of(11.0)
-        assertThat(recovered.y).isWithin(1e-7).of(-4.0)
+    fun centreIsRecoveredAtPixelScale() {
+        // The 3x3-inverse route fails here: for a circle this far from the
+        // origin the normalised determinant falls below Mat3.inverse()'s
+        // singularity guard even though the conic is well conditioned.
+        val c = Conic.circle(Vec2(2000.0, 1500.0), 400.0)
+        val centre = c.centre()!!
+        assertThat(centre.x).isWithin(1e-6).of(2000.0)
+        assertThat(centre.y).isWithin(1e-6).of(1500.0)
     }
 }

@@ -36,17 +36,43 @@ object MetricsReport {
         sb.appendLine()
         sb.appendLine(
             "$photographs ${plural(photographs, "photograph", "photographs")}, " +
-                "${overall.expectedShots} ${plural(overall.expectedShots, "arrow", "arrows")}, " +
-                "${overall.entriesWithPositions} with annotated positions."
+                "${overall.annotatedEntries} annotated, " +
+                "${overall.expectedShots} listed " +
+                "${plural(overall.expectedShots, "hit", "hits")}, " +
+                "${overall.entriesWithPositions} with positions."
         )
+        if (overall.forgivenEntries > 0) {
+            sb.appendLine()
+            sb.appendLine(
+                "${overall.forgivenEntries} " +
+                    "${plural(overall.forgivenEntries, "entry", "entries")} " +
+                    "declare unresolved arrows, so surplus detections there are not " +
+                    "counted as false positives."
+            )
+        }
         sb.appendLine()
-        sb.appendLine("| Metric | Value |")
-        sb.appendLine("|---|---|")
-        sb.appendLine("| Detection rate | ${percent(overall.detectionRate)} |")
-        sb.appendLine("| False positives | ${percent(overall.falsePositiveRate)} |")
-        sb.appendLine("| Ring accuracy | ${percent(overall.scoreAccuracy)} |")
-        sb.appendLine("| Position error, median | ${spotRadii(overall.medianPositionError)} |")
-        sb.appendLine("| Position error, 95th pct | ${spotRadii(overall.p95PositionError)} |")
+        sb.appendLine("| Metric | Value | Measured over |")
+        sb.appendLine("|---|---|---|")
+        sb.appendLine(
+            "| Detection rate | ${percent(overall.detectionRate)} | " +
+                "of ${overall.expectedShots} listed hits |"
+        )
+        sb.appendLine(
+            "| False positives | ${percent(overall.falsePositiveRate)} | " +
+                "of ${overall.expectedShots} listed hits |"
+        )
+        sb.appendLine(
+            "| Ring accuracy | ${percent(overall.scoreAccuracy)} | " +
+                "of ${overall.scoreComparableShots} comparable hits |"
+        )
+        sb.appendLine(
+            "| Position error, median | ${spotRadii(overall.medianPositionError)} | " +
+                "of ${overall.positionErrors.size} placed hits |"
+        )
+        sb.appendLine(
+            "| Position error, 95th pct | ${spotRadii(overall.p95PositionError)} | " +
+                "of ${overall.positionErrors.size} placed hits |"
+        )
 
         val byTag = Metrics.byTag(outcomes)
         if (byTag.isNotEmpty()) {

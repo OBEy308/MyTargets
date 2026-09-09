@@ -16,37 +16,67 @@
 package de.dreier.mytargets.detection.metrics
 
 import com.google.common.truth.Truth.assertThat
+import de.dreier.mytargets.detection.corpus.CaptureInfo
 import de.dreier.mytargets.detection.corpus.CorpusEntry
-import de.dreier.mytargets.detection.corpus.Score
 import de.dreier.mytargets.detection.corpus.SpotPosition
 import de.dreier.mytargets.detection.corpus.TruthShot
 import org.junit.Test
 
 class MetricsReportTest {
 
-    private fun outcome(
+    // Only ever exercised with a single-element tag set, so taking the first
+    // element as the entry's lighting condition is enough to reproduce a tag.
+    private fun entry(
         name: String,
-        tags: Set<String>,
-        truthScores: List<String>,
-        detectedScores: List<String>
+        tags: Set<String> = emptySet(),
+        vararg shots: TruthShot
+    ) = CorpusEntry(
+        imageName = name,
+        image = null,
+        camera = null,
+        capture = tags.firstOrNull()?.let {
+            CaptureInfo(lighting = it, angle = null, angleDegrees = null)
+        },
+        target = null,
+        shotsPerEnd = shots.size,
+        shots = shots.toList(),
+        unresolvedArrows = 0,
+        registration = null
+    )
+
+    private fun truth(ring: Int, x: Double, y: Double) =
+        TruthShot(scoringRing = ring, position = SpotPosition(0, x, y))
+
+    private fun found(ring: Int, x: Double, y: Double) =
+        DetectedShotRecord(ring, null, SpotPosition(0, x, y), 0.9)
+
+    private fun outcome(e: CorpusEntry, detected: List<DetectedShotRecord>) =
+        EntryOutcome(e, ShotMatching.match(e, detected), detected)
+
+    private fun outcomeWithRings(
+        name: String,
+        truthRings: List<Int>,
+        detectedRings: List<Int>
     ): EntryOutcome {
         val entry = CorpusEntry(
-            name, "WAFull",
-            truthScores.mapIndexed { i, s ->
-                TruthShot(Score.of(s), SpotPosition(0, 0.1 * i, 0.0))
+            imageName = name, image = null, camera = null, capture = null,
+            target = null, shotsPerEnd = truthRings.size,
+            shots = truthRings.mapIndexed { i, r ->
+                TruthShot(scoringRing = r, position = SpotPosition(0, 0.1 * i, 0.0))
             },
-            tags
+            unresolvedArrows = 0, registration = null
         )
-        val detected = detectedScores.mapIndexed { i, s ->
-            DetectedShotRecord(Score.of(s), SpotPosition(0, 0.1 * i, 0.0), 0.9)
+        val detected = detectedRings.mapIndexed { i, r ->
+            DetectedShotRecord(r, null, SpotPosition(0, 0.1 * i, 0.0), 0.9)
         }
         return EntryOutcome(entry, ShotMatching.match(entry, detected), detected)
     }
 
     @Test
     fun theReportNamesTheFourMetricsAndTheCorpusSize() {
+        val e = entry("a.jpg", shots = arrayOf(truth(9, 0.0, 0.0), truth(8, 0.1, 0.0)))
         val report = MetricsReport.render(
-            listOf(outcome("a.jpg", emptySet(), listOf("9", "8"), listOf("9", "8"))),
+            listOf(outcome(e, listOf(found(9, 0.0, 0.0), found(8, 0.1, 0.0)))),
             title = "Baseline"
         )
 
@@ -56,51 +86,77 @@ class MetricsReportTest {
         assertThat(report).contains("Ring accuracy")
         assertThat(report).contains("Position error")
         assertThat(report).contains("1 photograph")
-        assertThat(report).contains("2 arrows")
+        assertThat(report).contains("2 listed hits")
+        // A perfect run over two comparable hits: the rate and its denominator
+        // must appear together, not just as two substrings that could belong
+        // to different rows or a different run.
+        assertThat(report).contains("Detection rate | 100.0 % | of 2 listed hits")
+        assertThat(report).contains("Ring accuracy | 100.0 % | of 2 comparable hits")
     }
 
     @Test
     fun aTagBreakdownAppearsWhenThereAreTags() {
+        val dark = entry("d.jpg", tags = setOf("dark"), shots = arrayOf(truth(9, 0.0, 0.0)))
+        val plain = entry("p.jpg", shots = arrayOf(truth(9, 0.0, 0.0)))
         val report = MetricsReport.render(
             listOf(
-                outcome("d.jpg", setOf("dark"), listOf("9"), emptyList()),
-                outcome("p.jpg", emptySet(), listOf("9"), listOf("9"))
+                outcome(dark, emptyList()),
+                outcome(plain, listOf(found(9, 0.0, 0.0)))
             ),
             title = "Baseline"
         )
 
         assertThat(report).contains("dark")
         assertThat(report).contains("untagged")
+        // The two groups must not be interchangeable: "dark" found nothing of
+        // its one hit, "untagged" found all of its one hit. A test that only
+        // checked the tag names would pass even if the rows were swapped.
+        assertThat(report).contains("| dark | 1 | 0.0 % | not measured |")
+        assertThat(report).contains("| untagged | 1 | 100.0 % | 100.0 % |")
     }
 
     @Test
     fun theWorstEntriesAreListedSoTheyCanBeLookedAt() {
+        val good = entry("good.jpg", shots = arrayOf(truth(9, 0.0, 0.0)))
+        val bad = entry(
+            "bad.jpg",
+            shots = arrayOf(truth(9, 0.0, 0.0), truth(8, 0.1, 0.0), truth(7, 0.2, 0.0))
+        )
         val report = MetricsReport.render(
             listOf(
-                outcome("good.jpg", emptySet(), listOf("9"), listOf("9")),
-                outcome("bad.jpg", emptySet(), listOf("9", "8", "7"), emptyList())
+                outcome(good, listOf(found(9, 0.0, 0.0))),
+                outcome(bad, emptyList())
             ),
             title = "Baseline"
         )
 
         assertThat(report).contains("bad.jpg")
+        // "bad.jpg" appearing anywhere is not enough -- its row must show
+        // that all three of its hits were missed, not some other count that
+        // would still make it sort as the worst entry.
+        assertThat(report).contains("| bad.jpg | 3 | 0 | 0 | 0 |")
     }
 
     @Test
     fun anAbsentPositionErrorIsSaidPlainlyRatherThanShownAsZero() {
-        val entry = CorpusEntry(
-            "r.jpg", "WAFull", listOf(TruthShot(Score.of("9"))), emptySet()
+        val e = CorpusEntry(
+            imageName = "r.jpg", image = null, camera = null, capture = null,
+            target = null, shotsPerEnd = 1,
+            shots = listOf(TruthShot(scoringRing = 9)),
+            unresolvedArrows = 0, registration = null
         )
-        val detected = listOf(
-            DetectedShotRecord(Score.of("9"), SpotPosition(0, 0.0, 0.0), 0.9)
-        )
+        val detected = listOf(DetectedShotRecord(9, null, SpotPosition(0, 0.0, 0.0), 0.9))
         val report = MetricsReport.render(
-            listOf(EntryOutcome(entry, ShotMatching.match(entry, detected), detected)),
+            listOf(outcome(e, detected)),
             title = "Rings only"
         )
 
         assertThat(report).contains("not measured")
         assertThat(report).doesNotContain("0.0000 spot radii")
+        // The denominator for the position error rows is zero placed hits --
+        // that must be stated next to "not measured", not left implicit.
+        assertThat(report).contains("Position error, median | not measured | of 0 placed hits")
+        assertThat(report).contains("Position error, 95th pct | not measured | of 0 placed hits")
     }
 
     @Test
@@ -112,6 +168,11 @@ class MetricsReportTest {
 
         assertThat(report).contains("not measured")
         assertThat(report).doesNotContain("0.0 %")
+        // Every rate's row must pair "not measured" with its own zero
+        // denominator, not with some other metric's count.
+        assertThat(report).contains("Detection rate | not measured | of 0 listed hits")
+        assertThat(report).contains("False positives | not measured | of 0 listed hits")
+        assertThat(report).contains("Ring accuracy | not measured | of 0 comparable hits")
     }
 
     @Test
@@ -119,9 +180,13 @@ class MetricsReportTest {
         // Six entries against a cap of five: the single good one must be the
         // one left out. A two entry corpus cannot tell a correct sort from a
         // reversed one, because both entries fit under the cap either way.
+        val badShots = arrayOf(truth(9, 0.0, 0.0), truth(8, 0.1, 0.0))
         val outcomes = (0 until 5).map { i ->
-            outcome("bad$i.jpg", emptySet(), listOf("9", "8"), emptyList())
-        } + outcome("perfect.jpg", emptySet(), listOf("9", "8"), listOf("9", "8"))
+            outcome(entry("bad$i.jpg", shots = badShots), emptyList())
+        } + outcome(
+            entry("perfect.jpg", shots = badShots),
+            listOf(found(9, 0.0, 0.0), found(8, 0.1, 0.0))
+        )
 
         val report = MetricsReport.render(outcomes, title = "Worst")
 
@@ -139,8 +204,9 @@ class MetricsReportTest {
         val original = java.util.Locale.getDefault()
         try {
             java.util.Locale.setDefault(java.util.Locale.GERMANY)
+            val e = entry("a.jpg", shots = arrayOf(truth(9, 0.0, 0.0), truth(8, 0.1, 0.0)))
             val report = MetricsReport.render(
-                listOf(outcome("a.jpg", emptySet(), listOf("9", "8"), listOf("9"))),
+                listOf(outcome(e, listOf(found(9, 0.0, 0.0)))),
                 title = "Locale"
             )
             assertThat(report).contains("50.0 %")
@@ -148,5 +214,47 @@ class MetricsReportTest {
         } finally {
             java.util.Locale.setDefault(original)
         }
+    }
+
+    @Test
+    fun eachMetricStatesWhatItRestsOn() {
+        val report = MetricsReport.render(
+            listOf(outcomeWithRings("a.jpg", listOf(0, 2), listOf(0, 2))),
+            title = "Denominators"
+        )
+
+        assertThat(report).contains("Detection rate")
+        assertThat(report).contains("of 2 listed hits")
+        assertThat(report).contains("Ring accuracy")
+        assertThat(report).contains("of 2 comparable hits")
+    }
+
+    @Test
+    fun forgivenEntriesAreCalledOutSoTheFalsePositiveRateIsReadable() {
+        val e = CorpusEntry(
+            imageName = "f.jpg", image = null, camera = null, capture = null,
+            target = null, shotsPerEnd = 6,
+            shots = listOf(TruthShot(scoringRing = 0, position = SpotPosition(0, 0.0, 0.0))),
+            unresolvedArrows = 2, registration = null
+        )
+        val detected = listOf(
+            DetectedShotRecord(0, null, SpotPosition(0, 0.0, 0.0), 0.9),
+            DetectedShotRecord(2, null, SpotPosition(0, 0.5, 0.0), 0.9)
+        )
+        val report = MetricsReport.render(
+            listOf(EntryOutcome(e, ShotMatching.match(e, detected), detected)),
+            title = "Forgiven"
+        )
+
+        assertThat(report).contains("unresolved arrows")
+        // "unresolved arrows" alone would pass even if the callout sentence
+        // named the wrong count of entries, or if the false positive rate it
+        // is explaining still read as a real (non-forgiven) zero without its
+        // denominator. Pin both down.
+        assertThat(report).contains(
+            "1 entry declare unresolved arrows, so surplus detections there " +
+                "are not counted as false positives."
+        )
+        assertThat(report).contains("False positives | 0.0 % | of 1 listed hits")
     }
 }

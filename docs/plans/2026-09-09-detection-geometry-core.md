@@ -4,7 +4,9 @@
 
 **Goal:** Ein neues Modul `:detection` enthält die vollständige, testgetriebene Geometrie, die aus den Bildern konzentrischer Zielscheibenringe die Homographie der Scheibenebene, den Fluchtpunkt der Scheibennormalen und daraus spot-lokale Trefferkoordinaten berechnet.
 
-**Architecture:** Reine Kotlin-Geometrie ohne Android- und ohne Fremdabhängigkeiten. Kegelschnitte werden als symmetrische 3×3-Matrizen geführt. Die Fluchtlinie folgt in geschlossener Form aus dem Büschel zweier konzentrischer Kreisbilder, die metrische Rektifizierung aus den Kreispunkten. Alle Tests sind JVM-Unit-Tests mit synthetischen Eingaben: bekannte Homographie auf bekannte Kreise anwenden, Rückrechnung prüfen.
+**Architecture:** Reine Kotlin-Geometrie ohne Android- und ohne Fremdabhängigkeiten. Kegelschnitte werden als symmetrische 3×3-Matrizen geführt. Aus dem Büschel zweier konzentrischer Kreisbilder folgt in geschlossener Form das Bild des Scheibenzentrums; seine Polare ist die Fluchtlinie, daraus folgt die metrische Rektifizierung. Alle Tests sind JVM-Unit-Tests mit synthetischen Eingaben: bekannte Homographie auf bekannte Kreise anwenden, Rückrechnung prüfen — exakt und mit Pixelrauschen.
+
+**Stand:** Überarbeitet nach Review am 2026-09-09. Die Änderungen sind am Ende unter *Änderungen nach Review* zusammengefasst.
 
 **Tech Stack:** Kotlin, Android-Library-Modul (`com.android.library`), JUnit 4, Truth. Keine neue Abhängigkeit — weder OpenCV noch eine Lineare-Algebra-Bibliothek.
 
@@ -29,10 +31,11 @@ Die Pläne 2 bis 4 werden geschrieben, wenn ihre Voraussetzungen vorliegen. Insb
 - **Keine neue Abhängigkeit.** Wer eine Bibliothek für lineare Algebra hinzufügen will, hat den Plan verlassen.
 - **Gleitkomma:** durchgehend `Double`, nicht `Float`. Kegelschnittfits sind schlecht konditioniert; `Float` reicht nicht.
 - **Java/Kotlin-Ziel:** 17, wie `:shared`.
-- **`minSdk`/`compileSdk`:** aus `gradle/libs.versions.toml`, nicht hart schreiben.
+- **`minSdk`/`compileSdk`/`targetSdk`:** aus `gradle/libs.versions.toml`, nicht hart schreiben. Für `targetSdk` gibt es dort keinen eigenen Eintrag; `compileSdk` wird verwendet, wie `:app` es faktisch auch tut.
 - **Flavors:** `:detection` muss die Dimension `mode` mit `dev`, `regular`, `screengrab` deklarieren, weil `:shared` sie hat. Ohne das schlägt die Auflösung der Modulabhängigkeit fehl.
 - **Testbefehl:** `./gradlew :detection:testDevDebugUnitTest`
 - **Toleranz in Tests:** Vergleiche von Gleitkommawerten immer mit expliziter Toleranz. Für Homographie-Rückrechnungen `1e-6`, für Kegelschnittkoeffizienten nach Normierung `1e-8`.
+- **Rauschen in Tests:** Jede Stufe, die gefittete Kegelschnitte verarbeitet (Task 5 und 6), hat neben den exakten Tests mindestens einen Test mit verrauschten Punkten: gleichverteilt ±0.5 px, 60 Punkte pro Ring, fester Seed `Random(42)`. Die Toleranzen dieser Tests wurden mit einem Prototyp über 500 Durchläufe ermittelt und liegen mindestens Faktor fünf über dem beobachteten Maximum.
 
 ---
 
@@ -50,9 +53,9 @@ Alle Pfade unterhalb von `detection/`.
 | `src/main/java/de/dreier/mytargets/detection/geometry/SymmetricEigen.kt` | Jacobi-Eigenzerlegung |
 | `src/main/java/de/dreier/mytargets/detection/geometry/Cubic.kt` | reelle Nullstellen einer kubischen Gleichung |
 | `src/main/java/de/dreier/mytargets/detection/geometry/Conic.kt` | Kegelschnitt, Fit, Transformation |
-| `src/main/java/de/dreier/mytargets/detection/geometry/VanishingLine.kt` | Fluchtlinie aus dem Büschel |
+| `src/main/java/de/dreier/mytargets/detection/geometry/VanishingLine.kt` | Zentrum und Fluchtlinie aus dem Büschel |
 | `src/main/java/de/dreier/mytargets/detection/geometry/Rectification.kt` | metrische Rektifizierung, volle Homographie |
-| `src/main/java/de/dreier/mytargets/detection/geometry/NormalVanishingPoint.kt` | Fluchtpunkt der Normalen, Vorzeichenwahl |
+| `src/main/java/de/dreier/mytargets/detection/geometry/NormalVanishingPoint.kt` | Fluchtpunkt der Normalen, Einschussende |
 | `src/main/java/de/dreier/mytargets/detection/FaceLayout.kt` | Spot-Anordnung, entkoppelt von `:shared` |
 | `src/main/java/de/dreier/mytargets/detection/SpotMapping.kt` | Spot-Zuordnung, spot-lokale Umrechnung |
 | `src/main/java/de/dreier/mytargets/detection/CandidateSelection.kt` | Auswahl nach `shotsPerEnd` mit Abstandsregel |
@@ -81,7 +84,7 @@ Die Aufteilung folgt der Rechenkette, nicht technischen Schichten: Jede Datei is
 - Produces:
   - `Vec2(val x: Double, val y: Double)` mit `plus`, `minus`, `times(Double)`, `length: Double`, `distanceTo(Vec2): Double`
   - `Vec3(val x: Double, val y: Double, val z: Double)` mit `dot(Vec3): Double`, `cross(Vec3): Vec3`, `normalized(): Vec3`, `toVec2(): Vec2?` (null wenn `z` ≈ 0)
-  - `Mat3` mit `get(row, col): Double`, `times(Mat3): Mat3`, `times(Vec3): Vec3`, `transpose(): Mat3`, `inverse(): Mat3?`, `det(): Double`, `mapPoint(Vec2): Vec2?`, `scaled(Double): Mat3`
+  - `Mat3` mit `get(row, col): Double`, `times(Mat3): Mat3`, `times(Vec3): Vec3`, `transpose(): Mat3`, `inverse(): Mat3?`, `det(): Double`, `mapPoint(Vec2): Vec2?`, `mapDirection(at: Vec2, direction: Vec2): Vec2?`, `scaled(Double): Mat3`
   - `Mat3.identity()`, `Mat3.of(vararg Double)` (9 Werte, zeilenweise), `Mat3.translation(Vec2)`, `Mat3.rotation(Double)`
 
 - [ ] **Step 1: Modul in `settings.gradle` eintragen**
@@ -127,7 +130,6 @@ android {
     defaultConfig {
         minSdkVersion libs.versions.minSdk.get().toInteger()
         compileSdk libs.versions.compileSdk.get().toInteger()
-        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
 
     // Must mirror the flavors of :shared, otherwise the dependency cannot be resolved.
@@ -138,11 +140,12 @@ android {
         screengrab { dimension "mode" }
     }
 
+    // The catalog has no separate targetSdk entry; :app effectively uses compileSdk too.
     lint {
-        targetSdk 36
+        targetSdk libs.versions.compileSdk.get().toInteger()
     }
     testOptions {
-        targetSdk 36
+        targetSdk libs.versions.compileSdk.get().toInteger()
     }
 }
 
@@ -229,6 +232,25 @@ class Mat3Test {
             -1.0, 0.0, 1.0
         )
         assertThat(h.mapPoint(Vec2(1.0, 0.0))).isNull()
+    }
+
+    @Test
+    fun directionFollowsTheJacobianOfThePointMapping() {
+        // A projective map does not preserve directions globally, so a
+        // direction only makes sense together with the point it is taken at.
+        val h = Mat3.of(
+            1.4, 0.3, 12.0,
+            -0.2, 1.1, -4.0,
+            0.0007, 0.0011, 1.0
+        )
+        val at = Vec2(37.0, -12.5)
+        val direction = Vec2(0.0, -1.0)
+        val eps = 1e-5
+        val finiteDifference =
+            (h.mapPoint(at + direction * eps)!! - h.mapPoint(at)!!) * (1.0 / eps)
+        val analytic = h.mapDirection(at, direction)!!
+        assertThat(analytic.x).isWithin(1e-6).of(finiteDifference.x)
+        assertThat(analytic.y).isWithin(1e-6).of(finiteDifference.y)
     }
 }
 ```
@@ -377,6 +399,23 @@ class Mat3(private val m: DoubleArray) {
     /** Null when the point maps onto the vanishing line. */
     fun mapPoint(p: Vec2): Vec2? = (this * p.homogeneous()).toVec2()
 
+    /**
+     * The image of [direction] attached at the point [at]: the Jacobian of the
+     * point mapping applied to the direction. For p' = (H p) / w the derivative
+     * along d is (H d * w - (H p) * (H d).z) / w^2, with d taken homogeneous
+     * with z = 0. Null when [at] maps to infinity.
+     */
+    fun mapDirection(at: Vec2, direction: Vec2): Vec2? {
+        val u = this * at.homogeneous()
+        if (abs(u.z) < 1e-12) return null
+        val du = this * Vec3(direction.x, direction.y, 0.0)
+        val w2 = u.z * u.z
+        return Vec2(
+            (du.x * u.z - u.x * du.z) / w2,
+            (du.y * u.z - u.y * du.z) / w2
+        )
+    }
+
     companion object {
         fun of(vararg values: Double) = Mat3(values.copyOf())
 
@@ -408,7 +447,7 @@ class Mat3(private val m: DoubleArray) {
 - [ ] **Step 10: Test laufen lassen und Erfolg bestätigen**
 
 Run: `./gradlew :detection:testDevDebugUnitTest`
-Expected: PASS, 5 Tests.
+Expected: PASS, 6 Tests.
 
 - [ ] **Step 11: Committen**
 
@@ -421,7 +460,7 @@ git commit -m "Add :detection module with plane geometry primitives"
 
 ## Task 2: Symmetrische Eigenzerlegung nach Jacobi
 
-Wird zweimal gebraucht: für den Kegelschnittfit (6×6) und für das Ablesen einer Geraden aus einer Rang-1-Matrix (3×3).
+Wird dreimal gebraucht: für den Kegelschnittfit (6×6), für den Nullvektor eines Rang-2-Büschelmitglieds (3×3) und für die Wurzel des Ellipsenblocks bei der metrischen Rektifizierung (2×2).
 
 **Files:**
 - Create: `detection/src/main/java/de/dreier/mytargets/detection/geometry/SymmetricEigen.kt`
@@ -531,9 +570,9 @@ import kotlin.math.sqrt
  * method.
  *
  * Jacobi is chosen over faster algorithms because the matrices here are tiny
- * (3x3 and 6x6), it needs no external library, and it is accurate for the
+ * (2x2 to 6x6), it needs no external library, and it is accurate for the
  * near-degenerate cases that matter: a conic pencil member that has dropped to
- * rank one, and a scatter matrix whose smallest eigenvalue carries the fit.
+ * rank two, and a scatter matrix whose smallest eigenvalue carries the fit.
  */
 object SymmetricEigen {
 
@@ -554,14 +593,14 @@ object SymmetricEigen {
         // v holds eigenvectors as columns while sweeping.
         val v = Array(n) { r -> DoubleArray(n) { c -> if (r == c) 1.0 else 0.0 } }
 
-        repeat(maxSweeps) {
+        for (sweep in 0 until maxSweeps) {
             var off = 0.0
             for (p in 0 until n) {
                 for (q in p + 1 until n) {
                     off += work[p][q] * work[p][q]
                 }
             }
-            if (off < 1e-30) return@repeat
+            if (off < 1e-30) break
 
             for (p in 0 until n) {
                 for (q in p + 1 until n) {
@@ -697,7 +736,7 @@ class ConicTest {
     }
 
     @Test
-    fun transformedConicMatchesFitOfTransformedPoints() {
+    fun transformedConicVanishesOnTransformedPoints() {
         val h = Mat3.of(
             1.3, 0.2, 40.0,
             -0.15, 0.95, -25.0,
@@ -1039,17 +1078,21 @@ git commit -m "Add closed form real root solver for cubics"
 
 ---
 
-## Task 5: Fluchtlinie aus dem Büschel zweier Kreisbilder
+## Task 5: Zentrum und Fluchtlinie aus dem Büschel zweier Kreisbilder
 
 Das ist der Kern der Registrierung und der Punkt, an dem dieser Plan von der Spec abweicht. Begründung im Code-Kommentar.
+
+Warum nicht das Rang-1-Mitglied: Für zwei konzentrische Kreise ist `det(A − λB) ∝ (1−λ)²·(λ·r2² − r1²)`. Das Rang-1-Mitglied `l·lᵀ` sitzt bei der **doppelten** Nullstelle. Unter Rauschen spaltet die sich zufällig in zwei reelle oder zwei komplexe Wurzeln; im komplexen Fall ist sie für einen reellen Wurzelfinder unsichtbar. Die **einfache** Nullstelle `λ₁ = r1²/r2²` ist davon klar getrennt. Ihr Büschelmitglied hat Rang 2, und sein Nullvektor ist das Bild des gemeinsamen Zentrums. Die Polare dieses Punkts bezüglich eines der Kegelschnitte ist die Fluchtlinie. Ein Prototyp mit 500 verrauschten Durchläufen hat für diesen Weg keinen Ausfall gezeigt; der Weg über die Doppelnullstelle fiel bereits bei exakten Eingaben aus.
 
 **Files:**
 - Create: `detection/src/main/java/de/dreier/mytargets/detection/geometry/VanishingLine.kt`
 - Test: `detection/src/test/java/de/dreier/mytargets/detection/geometry/VanishingLineTest.kt`
 
 **Interfaces:**
-- Consumes: `Conic` (Task 3), `Cubic` (Task 4), `SymmetricEigen` (Task 2), `Mat3`/`Vec3` (Task 1)
-- Produces: `VanishingLine.fromConcentricCircles(c1: Conic, c2: Conic): Vec3?` — die Fluchtlinie der Scheibenebene, normiert; null wenn kein Rang-1-Mitglied gefunden wird
+- Consumes: `Conic` (Task 3), `Cubic` (Task 4), `SymmetricEigen` (Task 2), `Mat3`/`Vec2`/`Vec3` (Task 1)
+- Produces:
+  - `VanishingLine.Result(val line: Vec3, val imagedCentre: Vec2)` — Fluchtlinie der Scheibenebene, normiert, und das Bild des gemeinsamen Zentrums in Bildkoordinaten
+  - `VanishingLine.fromConcentricCircles(c1: Conic, c2: Conic): Result?` — null, wenn kein Büschelmitglied einen Nullvektor im Inneren beider Kegelschnitte hat, also wenn die Eingaben keine Bilder zweier verschiedener konzentrischer Kreise sind
 
 - [ ] **Step 1: Den fehlschlagenden Test schreiben**
 
@@ -1058,7 +1101,11 @@ package de.dreier.mytargets.detection.geometry
 
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
+import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.random.Random
 
 class VanishingLineTest {
 
@@ -1069,23 +1116,47 @@ class VanishingLineTest {
         0.00035, 0.00062, 1.0
     )
 
-    /** The image of the line at infinity under [h] is H^-T * (0, 0, 1). */
-    private fun expectedLine(): Vec3 =
-        (h.inverse()!!.transpose() * Vec3(0.0, 0.0, 1.0)).normalized()
+    /** The same view at pixel scale: a unit circle becomes a ring of ~480 px. */
+    private val hPixels = h * Mat3.of(
+        400.0, 0.0, 0.0,
+        0.0, 400.0, 0.0,
+        0.0, 0.0, 1.0
+    )
 
-    private fun assertParallel(a: Vec3, b: Vec3) {
+    /** The image of the line at infinity under [m] is M^-T * (0, 0, 1). */
+    private fun expectedLine(m: Mat3): Vec3 =
+        (m.inverse()!!.transpose() * Vec3(0.0, 0.0, 1.0)).normalized()
+
+    private fun assertParallel(a: Vec3, b: Vec3, tolerance: Double = 1e-6) {
         // Lines are defined up to scale and sign.
         val cross = a.normalized().cross(b.normalized())
-        assertThat(cross.norm).isLessThan(1e-6)
+        assertThat(cross.norm).isLessThan(tolerance)
     }
+
+    private fun circlePoints(radius: Double, count: Int): List<Vec2> =
+        (0 until count).map { i ->
+            val a = 2.0 * PI * i / count
+            Vec2(radius * cos(a), radius * sin(a))
+        }
 
     @Test
     fun recoversTheVanishingLineFromTwoCircles() {
         val c1 = Conic.circle(Vec2(0.0, 0.0), 40.0).transformedBy(h)
         val c2 = Conic.circle(Vec2(0.0, 0.0), 80.0).transformedBy(h)
 
-        val line = VanishingLine.fromConcentricCircles(c1, c2)!!
-        assertParallel(line, expectedLine())
+        val result = VanishingLine.fromConcentricCircles(c1, c2)!!
+        assertParallel(result.line, expectedLine(h))
+    }
+
+    @Test
+    fun recoversTheImagedCentre() {
+        val c1 = Conic.circle(Vec2(0.0, 0.0), 40.0).transformedBy(h)
+        val c2 = Conic.circle(Vec2(0.0, 0.0), 80.0).transformedBy(h)
+
+        val result = VanishingLine.fromConcentricCircles(c1, c2)!!
+        // The common centre is the origin, whose image is the last column of h.
+        assertThat(result.imagedCentre.x).isWithin(1e-6).of(300.0)
+        assertThat(result.imagedCentre.y).isWithin(1e-6).of(220.0)
     }
 
     @Test
@@ -1094,8 +1165,10 @@ class VanishingLineTest {
         val c1 = Conic(Conic.circle(Vec2(0.0, 0.0), 40.0).transformedBy(h).matrix.scaled(7.3))
         val c2 = Conic(Conic.circle(Vec2(0.0, 0.0), 80.0).transformedBy(h).matrix.scaled(-0.4))
 
-        val line = VanishingLine.fromConcentricCircles(c1, c2)!!
-        assertParallel(line, expectedLine())
+        val result = VanishingLine.fromConcentricCircles(c1, c2)!!
+        assertParallel(result.line, expectedLine(h))
+        assertThat(result.imagedCentre.x).isWithin(1e-6).of(300.0)
+        assertThat(result.imagedCentre.y).isWithin(1e-6).of(220.0)
     }
 
     @Test
@@ -1103,10 +1176,12 @@ class VanishingLineTest {
         val c1 = Conic.circle(Vec2(500.0, 400.0), 100.0)
         val c2 = Conic.circle(Vec2(500.0, 400.0), 200.0)
 
-        val line = VanishingLine.fromConcentricCircles(c1, c2)!!
-        assertThat(abs(line.x)).isLessThan(1e-6)
-        assertThat(abs(line.y)).isLessThan(1e-6)
-        assertThat(abs(line.z)).isGreaterThan(0.9)
+        val result = VanishingLine.fromConcentricCircles(c1, c2)!!
+        assertThat(abs(result.line.x)).isLessThan(1e-6)
+        assertThat(abs(result.line.y)).isLessThan(1e-6)
+        assertThat(abs(result.line.z)).isGreaterThan(0.9)
+        assertThat(result.imagedCentre.x).isWithin(1e-6).of(500.0)
+        assertThat(result.imagedCentre.y).isWithin(1e-6).of(400.0)
     }
 
     @Test
@@ -1114,8 +1189,30 @@ class VanishingLineTest {
         val c = Conic.circle(Vec2(0.0, 0.0), 40.0).transformedBy(h)
         assertThat(VanishingLine.fromConcentricCircles(c, c)).isNull()
     }
+
+    @Test
+    fun survivesHalfPixelNoiseOnFittedRings() {
+        // The exact tests above cannot tell a numerically fragile method from a
+        // robust one. This one can: fitted conics from jittered points.
+        val random = Random(42)
+        fun noisyRing(radius: Double): Conic = Conic.fit(
+            circlePoints(radius, 60).map { p ->
+                val q = hPixels.mapPoint(p)!!
+                Vec2(q.x + random.nextDouble() - 0.5, q.y + random.nextDouble() - 0.5)
+            }
+        )!!
+
+        val result = VanishingLine.fromConcentricCircles(noisyRing(1.0), noisyRing(0.4))!!
+
+        // Prototype over 500 seeds: centre error below 0.3 px, line cross norm
+        // below 2e-6. Tolerances leave a wide margin.
+        assertThat(result.imagedCentre.x).isWithin(2.0).of(300.0)
+        assertThat(result.imagedCentre.y).isWithin(2.0).of(220.0)
+        assertParallel(result.line, expectedLine(hPixels), tolerance = 1e-4)
+    }
 }
 ```
+
 
 - [ ] **Step 2: Test laufen lassen und Fehlschlag bestätigen**
 
@@ -1128,45 +1225,62 @@ Expected: FAIL — `Unresolved reference: VanishingLine`.
 package de.dreier.mytargets.detection.geometry
 
 import kotlin.math.abs
+import kotlin.math.min
+import kotlin.math.sqrt
 
 /**
- * Recovers the vanishing line of the target plane from the images of two
- * concentric circles.
+ * Recovers the imaged centre and the vanishing line of the target plane from
+ * the images of two concentric circles.
  *
  * Why this works. In the plane of the target two concentric circles are
  *
  *     C1 = diag(1, 1, -r1^2)      C2 = diag(1, 1, -r2^2)
  *
- * so their difference is diag(0, 0, r2^2 - r1^2), which is the line at infinity
- * counted twice -- a rank one matrix. A homography preserves that:
+ * and the pencil C1 - lambda C2 has two degenerate members:
  *
- *     C1' - C2' = H^-T (C1 - C2) H^-1 = (r2^2 - r1^2) * l l^T,  l = H^-T (0,0,1)
+ *     lambda = 1            -> diag(0, 0, r2^2 - r1^2), rank one, the line at
+ *                              infinity counted twice; a DOUBLE root of the
+ *                              determinant
+ *     lambda = r1^2 / r2^2  -> diag(1 - lambda, 1 - lambda, 0), rank two, whose
+ *                              null vector (0, 0, 1) is the common centre; a
+ *                              SIMPLE root
  *
- * and l is exactly the vanishing line. Fitted conics carry an arbitrary scale,
- * so in practice we look for the lambda that makes C1' - lambda C2' drop to
- * rank one. Rank one implies a vanishing determinant, and det(C1' - lambda C2')
- * is a cubic in lambda.
+ * A homography preserves all of that. We use the simple root: under noise a
+ * double root splits into either two real or two complex roots, and in the
+ * complex case a real root finder does not see it at all. The simple root is
+ * well separated and its null vector is the imaged centre c. The vanishing line
+ * is then the polar of c with respect to either conic, l = C1' c, because in
+ * the target plane C1 (0,0,1)^T is proportional to (0,0,1), the line at
+ * infinity, and pole/polar relations survive homographies.
  *
- * This replaces intersecting the two conics directly. Intersection needs the
- * complex circular points and is far more delicate numerically; the pencil
- * gives the same information in closed form from a cubic and one symmetric
- * 3x3 eigen decomposition.
+ * The right root is recognised by where its null vector lies: the imaged centre
+ * is inside both ellipses. The null vectors of the (near) rank one members lie
+ * on the vanishing line, far outside. That test is scale free and needs no
+ * tuned tolerance.
+ *
+ * Everything is computed in a normalised frame in which the first conic is
+ * roughly the unit circle about the origin. At pixel scale the determinant
+ * cubic has coefficients spanning many orders of magnitude and the eigenvalue
+ * ratios lose their meaning.
  */
 object VanishingLine {
 
+    class Result(val line: Vec3, val imagedCentre: Vec2)
+
     /**
-     * @return the vanishing line as a unit vector, or null when no pencil
-     *         member is close enough to rank one -- which means the inputs were
-     *         not the images of two distinct concentric circles.
+     * @return the vanishing line as a unit vector and the imaged centre, or null
+     *         when the inputs were not the images of two distinct concentric
+     *         circles.
      */
-    fun fromConcentricCircles(c1: Conic, c2: Conic): Vec3? {
-        val a = c1.normalized().matrix
-        val b = c2.normalized().matrix
+    fun fromConcentricCircles(c1: Conic, c2: Conic): Result? {
+        val frame = normalisingFrame(c1) ?: return null
+        val a = c1.transformedBy(frame).normalized().matrix
+        val b = c2.transformedBy(frame).normalized().matrix
+        if (areTheSameConic(a, b)) return null
 
         val roots = Cubic.realRoots(
             cubicA(b), cubicB(a, b), cubicC(a, b), a.det()
         )
-        if (roots.isEmpty()) return null
 
         var best: Vec3? = null
         var bestResidual = Double.MAX_VALUE
@@ -1178,28 +1292,84 @@ object VanishingLine {
                 doubleArrayOf(a[2, 0] - lambda * b[2, 0], a[2, 1] - lambda * b[2, 1], a[2, 2] - lambda * b[2, 2])
             )
             val eigen = SymmetricEigen.decompose(m)
-            val dominant = abs(eigen.values[0])
-            if (dominant < 1e-12) continue
+            if (abs(eigen.values[0]) < 1e-12) continue
 
-            // Rank one means the two smaller eigenvalues vanish. Measure that
-            // relative to the dominant one so the test is scale free.
-            val residual =
-                (abs(eigen.values[1]) + abs(eigen.values[2])) / dominant
+            // Null vector: eigenvector of the eigenvalue smallest in magnitude.
+            val candidate = Vec3(
+                eigen.vectors[2][0],
+                eigen.vectors[2][1],
+                eigen.vectors[2][2]
+            )
+            if (!isInside(candidate, a) || !isInside(candidate, b)) continue
+
+            // Among admissible members prefer the one closest to rank two.
+            val residual = abs(eigen.values[2]) / abs(eigen.values[1])
             if (residual < bestResidual) {
                 bestResidual = residual
-                best = Vec3(
-                    eigen.vectors[0][0],
-                    eigen.vectors[0][1],
-                    eigen.vectors[0][2]
-                ).normalized()
+                best = candidate
             }
         }
 
-        return if (bestResidual < RANK_ONE_TOLERANCE) best else null
+        val centre = best ?: return null
+        val lineInFrame = a * centre
+
+        // Back to image coordinates: points go through the inverse frame,
+        // lines through the transpose.
+        val imagedCentre = frame.inverse()?.times(centre)?.toVec2() ?: return null
+        val line = (frame.transpose() * lineInFrame).normalized()
+        return Result(line, imagedCentre)
     }
 
-    /** Tuned on synthetic data; revisit once the corpus exists. */
-    private const val RANK_ONE_TOLERANCE = 1e-4
+    /**
+     * Similarity that moves the centre of [conic] to the origin and scales its
+     * geometric mean radius to one. Null for a degenerate conic.
+     */
+    private fun normalisingFrame(conic: Conic): Mat3? {
+        val m = conic.normalized().matrix
+        val centre = m.inverse()?.times(Vec3(0.0, 0.0, 1.0))?.toVec2() ?: return null
+        // Constant term after moving the centre to the origin.
+        val ch = centre.homogeneous()
+        val f = ch.dot(m * ch)
+        val blockDet = m[0, 0] * m[1, 1] - m[0, 1] * m[1, 0]
+        if (abs(blockDet) < 1e-18 || abs(f) < 1e-18) return null
+        // Semi-axes squared are -f / eigenvalue, so the geometric mean radius is
+        // sqrt(|f| / sqrt(|det block|)).
+        val size = sqrt(abs(f) / sqrt(abs(blockDet)))
+        if (size < 1e-12) return null
+        val s = 1.0 / size
+        return Mat3.of(
+            s, 0.0, -s * centre.x,
+            0.0, s, -s * centre.y,
+            0.0, 0.0, 1.0
+        )
+    }
+
+    /** Both inputs are normalised to unit Frobenius norm, up to sign. */
+    private fun areTheSameConic(a: Mat3, b: Mat3): Boolean {
+        var minus = 0.0
+        var plus = 0.0
+        for (i in 0..2) {
+            for (j in 0..2) {
+                val d = a[i, j] - b[i, j]
+                val s = a[i, j] + b[i, j]
+                minus += d * d
+                plus += s * s
+            }
+        }
+        return min(minus, plus) < 1e-18
+    }
+
+    /**
+     * Whether [p] lies inside the ellipse [conic]: its quadratic form there has
+     * the same sign as at the ellipse's own centre. Scale of [p] and of the
+     * conic do not matter.
+     */
+    private fun isInside(p: Vec3, conic: Mat3): Boolean {
+        val centre = conic.inverse()?.times(Vec3(0.0, 0.0, 1.0)) ?: return false
+        val interior = centre.dot(conic * centre)
+        val value = p.dot(conic * p)
+        return interior != 0.0 && value * interior > 0.0
+    }
 
     /*
      * Coefficients of det(A - lambda B), expanded by multilinearity in the
@@ -1249,16 +1419,16 @@ object VanishingLine {
 - [ ] **Step 4: Test laufen lassen und Erfolg bestätigen**
 
 Run: `./gradlew :detection:testDevDebugUnitTest --tests "*VanishingLineTest*"`
-Expected: PASS, 4 Tests.
+Expected: PASS, 6 Tests.
 
-Wenn `isIndependentOfTheScaleOfTheFittedConics` fehlschlägt, ist das Vorzeichen von `cubicB` oder `cubicC` vertauscht. Prüfe die Expansion, indem du `det(A - lambda B)` für drei feste λ numerisch auswertest und mit der kubischen Form vergleichst.
+Wenn `recoversTheImagedCentre` mit einem Punkt weit außerhalb fehlschlägt, wurde der falsche Eigenvektor genommen: Der Nullvektor gehört zum betragsmäßig **kleinsten** Eigenwert, also `vectors[2]`. Wenn `isIndependentOfTheScaleOfTheFittedConics` fehlschlägt, ist das Vorzeichen von `cubicB` oder `cubicC` vertauscht. Prüfe die Expansion, indem du `det(A - lambda B)` für drei feste λ numerisch auswertest und mit der kubischen Form vergleichst. Wenn nur `survivesHalfPixelNoiseOnFittedRings` fehlschlägt, fehlt vermutlich die Normierung über `normalisingFrame`.
 
 - [ ] **Step 5: Committen**
 
 ```bash
 git add detection/src/main/java/de/dreier/mytargets/detection/geometry/VanishingLine.kt \
         detection/src/test/java/de/dreier/mytargets/detection/geometry/VanishingLineTest.kt
-git commit -m "Recover the target plane vanishing line from a conic pencil"
+git commit -m "Recover the imaged centre and vanishing line from a conic pencil"
 ```
 
 ---
@@ -1272,10 +1442,12 @@ git commit -m "Recover the target plane vanishing line from a conic pencil"
 **Interfaces:**
 - Consumes: `Conic`, `VanishingLine`, `Mat3`, `Vec2`, `Vec3`, `SymmetricEigen`
 - Produces:
-  - `Rectification.Result(val imageToTarget: Mat3, val vanishingLine: Vec3)`
+  - `Rectification.Result(val imageToTarget: Mat3, val vanishingLine: Vec3, val imagedCentre: Vec2)`
   - `Rectification.fromConcentricCircles(outer: Conic, outerRadius: Double, inner: Conic, innerRadius: Double, imageUp: Vec2 = Vec2(0.0, -1.0)): Result?`
 
 `imageToTarget` bildet Bildpunkte auf Auflagenkoordinaten ab, in denen die Ringe konzentrische Kreise um `(0,0)` mit ihren nominellen Radien sind.
+
+Zur Drehung: "Kamera aufrecht" heißt, dass die Bildvertikale **am Scheibenzentrum** der Scheibenoben-Richtung entspricht. Die Abbildung ist projektiv, ihre lokale Richtung hängt vom Ort ab. Die Aufrechte wird deshalb mit `Mat3.mapDirection` am abgebildeten Zentrum gemessen, nicht an der Bildecke. Ein eigener Test (`alignsImageUpAtTheFaceCentreWithTargetUp`) sichert das, weil die Radien- und Winkeltests eine falsche Drehung nicht bemerken.
 
 - [ ] **Step 1: Den fehlschlagenden Test schreiben**
 
@@ -1289,6 +1461,7 @@ import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
+import kotlin.random.Random
 
 class RectificationTest {
 
@@ -1296,6 +1469,13 @@ class RectificationTest {
         1.20, 0.18, 300.0,
         -0.10, 0.94, 220.0,
         0.00035, 0.00062, 1.0
+    )
+
+    /** The same view at pixel scale: a unit circle becomes a ring of ~480 px. */
+    private val hPixels = h * Mat3.of(
+        400.0, 0.0, 0.0,
+        0.0, 400.0, 0.0,
+        0.0, 0.0, 1.0
     )
 
     private fun circlePoints(radius: Double, count: Int): List<Vec2> =
@@ -1371,8 +1551,49 @@ class RectificationTest {
             Rectification.fromConcentricCircles(notACircle, 1.0, other, 0.4)
         ).isNull()
     }
+
+    @Test
+    fun alignsImageUpAtTheFaceCentreWithTargetUp() {
+        // Directions are not preserved globally by a projective map, so "image
+        // up" has to be taken at the imaged centre of the face. A probe at the
+        // image corner gives a rotation that is off by several degrees here.
+        val outer = Conic.circle(Vec2(0.0, 0.0), 1.0).transformedBy(hPixels)
+        val inner = Conic.circle(Vec2(0.0, 0.0), 0.4).transformedBy(hPixels)
+        val result = Rectification.fromConcentricCircles(outer, 1.0, inner, 0.4)!!
+
+        val imagedCentre = hPixels.mapPoint(Vec2(0.0, 0.0))!!
+        val up = result.imageToTarget.mapDirection(imagedCentre, Vec2(0.0, -1.0))!!
+
+        // Straight up on the face is the negative y axis.
+        assertThat(abs(up.x)).isLessThan(1e-6 * up.length)
+        assertThat(up.y).isLessThan(0.0)
+    }
+
+    @Test
+    fun toleratesHalfPixelNoiseOnFittedRings() {
+        val random = Random(42)
+        fun noisyRing(radius: Double): Conic = Conic.fit(
+            circlePoints(radius, 60).map { p ->
+                val q = hPixels.mapPoint(p)!!
+                Vec2(q.x + random.nextDouble() - 0.5, q.y + random.nextDouble() - 0.5)
+            }
+        )!!
+
+        val result = Rectification.fromConcentricCircles(
+            noisyRing(1.0), 1.0, noisyRing(0.4), 0.4
+        )!!
+
+        // Prototype over 500 seeds: radius error below 0.002 target radii.
+        for (radius in listOf(1.0, 0.4)) {
+            for (p in circlePoints(radius, 37)) {
+                val recovered = result.imageToTarget.mapPoint(hPixels.mapPoint(p)!!)!!
+                assertThat(hypot(recovered.x, recovered.y)).isWithin(0.01).of(radius)
+            }
+        }
+    }
 }
 ```
+
 
 - [ ] **Step 2: Test laufen lassen und Fehlschlag bestätigen**
 
@@ -1393,15 +1614,20 @@ import kotlin.math.sqrt
  * Turns the images of two concentric target rings into the homography that maps
  * the photograph to target coordinates.
  *
- * The chain is: vanishing line from the pencil, affine rectification from that
- * line, metric rectification from the circular points, then scale and
- * translation from the known radii and the imaged centre. Rotation about the
- * target axis is not observable from concentric circles -- the face is
- * rotationally symmetric -- and is fixed by [imageUp].
+ * The chain is: imaged centre and vanishing line from the pencil, affine
+ * rectification from that line, metric rectification from the outer ellipse,
+ * then scale and translation from the known radii and the centre. Rotation
+ * about the target axis is not observable from concentric circles -- the face
+ * is rotationally symmetric -- and is fixed by [imageUp], measured at the
+ * imaged centre.
  */
 object Rectification {
 
-    class Result(val imageToTarget: Mat3, val vanishingLine: Vec3)
+    class Result(
+        val imageToTarget: Mat3,
+        val vanishingLine: Vec3,
+        val imagedCentre: Vec2
+    )
 
     /**
      * @param outer image of the ring with the larger nominal [outerRadius]
@@ -1419,7 +1645,8 @@ object Rectification {
     ): Result? {
         require(outerRadius > innerRadius) { "outer radius must be the larger one" }
 
-        val line = VanishingLine.fromConcentricCircles(outer, inner) ?: return null
+        val pencil = VanishingLine.fromConcentricCircles(outer, inner) ?: return null
+        val line = pencil.line
 
         // Affine rectification: send the vanishing line to (0, 0, 1).
         val affine = Mat3.of(
@@ -1464,13 +1691,15 @@ object Rectification {
 
         val withoutRotation = scaling * toOrigin * metric * affine
 
-        // Fix the remaining rotation so that imageUp points along -y in target
-        // coordinates, that is, upwards on the face.
-        val rotation = rotationAligning(withoutRotation, imageUp) ?: return null
+        // Fix the remaining rotation so that imageUp, taken at the imaged
+        // centre, points along -y in target coordinates: upwards on the face.
+        val rotation = rotationAligning(withoutRotation, pencil.imagedCentre, imageUp)
+            ?: return null
 
         return Result(
             imageToTarget = rotation * withoutRotation,
-            vanishingLine = line
+            vanishingLine = line,
+            imagedCentre = pencil.imagedCentre
         )
     }
 
@@ -1525,34 +1754,30 @@ object Rectification {
     }
 
     /**
-     * Rotation that makes [imageUp], as seen through [mapping], point along the
-     * negative y axis of target coordinates.
+     * Rotation that makes [imageUp], taken at [imagedCentre] and seen through
+     * [mapping], point along the negative y axis of target coordinates.
+     *
+     * The direction has to be taken at the centre of the face: [mapping] is
+     * projective, and the image of a direction depends on where it is attached.
+     * At the image corner the answer would differ by several degrees for a
+     * moderately tilted view.
      */
-    private fun rotationAligning(mapping: Mat3, imageUp: Vec2): Mat3? {
-        val origin = mapping.mapPoint(Vec2(0.0, 0.0)) ?: return null
-        val tip = mapping.mapPoint(imageUp * IMAGE_UP_PROBE_LENGTH) ?: return null
-        val direction = tip - origin
+    private fun rotationAligning(mapping: Mat3, imagedCentre: Vec2, imageUp: Vec2): Mat3? {
+        val direction = mapping.mapDirection(imagedCentre, imageUp) ?: return null
         if (direction.length < 1e-12) return null
         // We want direction to end up pointing at -90 degrees.
         val current = atan2(direction.y, direction.x)
         return Mat3.rotation(-PI / 2.0 - current)
     }
-
-    /**
-     * The up direction is a direction, not a point, so it has to be probed at
-     * some distance. Any length works as long as the probe stays in front of
-     * the camera; one pixel is enough and cannot leave the image.
-     */
-    private const val IMAGE_UP_PROBE_LENGTH = 1.0
 }
 ```
 
 - [ ] **Step 4: Test laufen lassen und Erfolg bestätigen**
 
 Run: `./gradlew :detection:testDevDebugUnitTest --tests "*RectificationTest*"`
-Expected: PASS, 5 Tests.
+Expected: PASS, 7 Tests.
 
-Der wahrscheinlichste Fehlschlag ist `preservesAnglesAroundTheCentre` mit einer Abweichung um Faktor zwei oder mit vertauschten Achsen. Ursache ist dann `metricFromEllipse`: Prüfe, ob `diag(sqrt(l)) V^T` statt `V diag(sqrt(l))` gebildet wurde.
+Der wahrscheinlichste Fehlschlag ist `preservesAnglesAroundTheCentre` mit einer Abweichung um Faktor zwei oder mit vertauschten Achsen. Ursache ist dann `metricFromEllipse`: Prüfe, ob `diag(sqrt(l)) V^T` statt `V diag(sqrt(l))` gebildet wurde. Schlägt nur `alignsImageUpAtTheFaceCentreWithTargetUp` fehl, wurde die Aufrechte nicht am Zentrum gemessen.
 
 - [ ] **Step 5: Committen**
 
@@ -1564,7 +1789,9 @@ git commit -m "Rectify the target plane from two imaged concentric rings"
 
 ---
 
-## Task 7: Fluchtpunkt der Scheibennormalen samt Vorzeichenwahl
+## Task 7: Fluchtpunkt der Scheibennormalen und Einschussende
+
+Der Fluchtpunkt ist bei gegebener Fluchtlinie **eindeutig**: `v = (K·Kᵀ)·l`. Es gibt keine Vorzeichenwahl. Was unsicher ist, ist die *Entfernung* der Fluchtlinie bei nahezu frontaler Aufnahme; dann liegt `v` nahe dem Hauptpunkt und seine genaue Lage ist schlecht bestimmt. Damit umzugehen ist Aufgabe von Plan 3, der die Streifen gegen einen unsicheren Fluchtpunkt prüft. Dieser Task liefert die Rechnung und die Regel.
 
 **Files:**
 - Create: `detection/src/main/java/de/dreier/mytargets/detection/geometry/NormalVanishingPoint.kt`
@@ -1573,10 +1800,12 @@ git commit -m "Rectify the target plane from two imaged concentric rings"
 **Interfaces:**
 - Consumes: `Mat3`, `Vec2`, `Vec3`
 - Produces:
-  - `CameraIntrinsics(val focalLengthPx: Double, val principalPoint: Vec2)` mit `CameraIntrinsics.approximate(imageWidth: Int, imageHeight: Int, focalLengthPx: Double? = null)`
-  - `Streak(val nearEnd: Vec2, val farEnd: Vec2)` — die beiden Enden eines Schaftstreifens, Reihenfolge noch unbekannt
+  - `CameraIntrinsics(val focalLengthPx: Double, val principalPoint: Vec2)` mit `CameraIntrinsics.approximate(imageWidth: Int, imageHeight: Int, focalLengthPx: Double? = null)` und `CameraIntrinsics.from35mmEquivalent(imageWidth: Int, imageHeight: Int, focalLength35mm: Double)`
+  - `Streak(val endA: Vec2, val endB: Vec2)` — die beiden Enden eines Schaftstreifens, Reihenfolge unbekannt
   - `NormalVanishingPoint.compute(vanishingLine: Vec3, intrinsics: CameraIntrinsics): Vec2?`
   - `NormalVanishingPoint.entryPoints(streaks: List<Streak>, vanishingPoint: Vec2): List<Vec2>` — für jeden Streifen das vom Fluchtpunkt weiter entfernte Ende
+
+Zur Brennweite: Handy-Hauptkameras liegen bei 24 bis 28 mm Kleinbild-Äquivalent. Die Bilddiagonale als Rückfall entspräche etwa 45 mm und läge um Faktor 1.7 daneben. Plan 3 liest deshalb `FocalLengthIn35mmFilm` aus EXIF und rechnet `f_px = f35 / 36 · lange Kante`; der Rückfall ohne EXIF ist `0.75 · lange Kante`, das entspricht 27 mm.
 
 - [ ] **Step 1: Den fehlschlagenden Test schreiben**
 
@@ -1593,9 +1822,17 @@ class NormalVanishingPointTest {
         val k = CameraIntrinsics.approximate(4000, 3000)
         assertThat(k.principalPoint.x).isWithin(1e-9).of(2000.0)
         assertThat(k.principalPoint.y).isWithin(1e-9).of(1500.0)
-        // Fallback focal length is the image diagonal, a common stand-in for an
-        // unknown phone lens.
-        assertThat(k.focalLengthPx).isWithin(1.0).of(5000.0)
+        // Fallback focal length: 0.75 times the long edge, about a 27 mm lens
+        // in 35 mm terms, which is where phone main cameras sit.
+        assertThat(k.focalLengthPx).isWithin(1e-9).of(3000.0)
+    }
+
+    @Test
+    fun focalLengthFollowsFromThe35mmEquivalent() {
+        // A 36 mm wide film frame spans the long edge of the image.
+        val k = CameraIntrinsics.from35mmEquivalent(4000, 3000, focalLength35mm = 26.0)
+        assertThat(k.focalLengthPx).isWithin(1e-6).of(26.0 / 36.0 * 4000.0)
+        assertThat(k.principalPoint.x).isWithin(1e-9).of(2000.0)
     }
 
     @Test
@@ -1610,18 +1847,21 @@ class NormalVanishingPointTest {
     @Test
     fun aPlaneTiltedAboutTheHorizontalAxisMovesTheVanishingPointVertically() {
         val k = CameraIntrinsics.approximate(4000, 3000)
-        // Vanishing line running horizontally above the centre.
-        val v = NormalVanishingPoint.compute(Vec3(0.0, 1.0, -4000.0), k)!!
+        // The line (0, 1, 1000) is y = -1000: horizontal, above the image
+        // (image y grows downwards). The normal then vanishes on the opposite
+        // side, below the principal point. With f = 3000 the value is
+        // v = (2000, 5100).
+        val v = NormalVanishingPoint.compute(Vec3(0.0, 1.0, 1000.0), k)!!
         assertThat(v.x).isWithin(1e-6).of(2000.0)
-        assertThat(v.y).isGreaterThan(1500.0)
+        assertThat(v.y).isWithin(1e-6).of(5100.0)
     }
 
     @Test
     fun entryPointIsTheEndFurtherFromTheVanishingPoint() {
         val vanishing = Vec2(0.0, 0.0)
         val streaks = listOf(
-            Streak(nearEnd = Vec2(10.0, 0.0), farEnd = Vec2(30.0, 0.0)),
-            Streak(nearEnd = Vec2(-40.0, 0.0), farEnd = Vec2(-15.0, 0.0))
+            Streak(endA = Vec2(10.0, 0.0), endB = Vec2(30.0, 0.0)),
+            Streak(endA = Vec2(-40.0, 0.0), endB = Vec2(-15.0, 0.0))
         )
         val entries = NormalVanishingPoint.entryPoints(streaks, vanishing)
 
@@ -1641,7 +1881,7 @@ Expected: FAIL — `Unresolved reference: CameraIntrinsics`.
 ```kotlin
 package de.dreier.mytargets.detection.geometry
 
-import kotlin.math.hypot
+import kotlin.math.max
 
 /**
  * A pinhole camera reduced to what this pipeline needs: square pixels, no skew.
@@ -1662,10 +1902,21 @@ class CameraIntrinsics(val focalLengthPx: Double, val principalPoint: Vec2) {
 
     companion object {
         /**
+         * Fallback focal length as a fraction of the long image edge. 0.75
+         * corresponds to a 27 mm lens in 35 mm terms, which is where phone main
+         * cameras sit (24 to 28 mm). The image diagonal, a common default, would
+         * be a 45 mm lens and off by a factor of 1.7.
+         */
+        private const val FALLBACK_FOCAL_FRACTION = 0.75
+
+        /** Width of a 35 mm film frame, the reference for EXIF's
+         *  FocalLengthIn35mmFilm. */
+        private const val FILM_WIDTH_MM = 36.0
+
+        /**
          * Principal point at the image centre. [focalLengthPx] should come from
-         * EXIF where available; the fallback is the image diagonal, which is a
-         * reasonable stand-in for a phone camera of unknown focal length and
-         * errs towards a narrow field of view.
+         * EXIF where available, see [from35mmEquivalent]; without it the long
+         * edge times [FALLBACK_FOCAL_FRACTION] is used.
          */
         fun approximate(
             imageWidth: Int,
@@ -1673,14 +1924,31 @@ class CameraIntrinsics(val focalLengthPx: Double, val principalPoint: Vec2) {
             focalLengthPx: Double? = null
         ): CameraIntrinsics = CameraIntrinsics(
             focalLengthPx
-                ?: hypot(imageWidth.toDouble(), imageHeight.toDouble()),
+                ?: FALLBACK_FOCAL_FRACTION * max(imageWidth, imageHeight),
             Vec2(imageWidth / 2.0, imageHeight / 2.0)
         )
+
+        /**
+         * From EXIF's FocalLengthIn35mmFilm: the film frame's 36 mm span the
+         * long edge of the image.
+         */
+        fun from35mmEquivalent(
+            imageWidth: Int,
+            imageHeight: Int,
+            focalLength35mm: Double
+        ): CameraIntrinsics {
+            require(focalLength35mm > 0.0) { "focal length must be positive" }
+            val longEdge = max(imageWidth, imageHeight).toDouble()
+            return approximate(
+                imageWidth, imageHeight,
+                focalLengthPx = focalLength35mm / FILM_WIDTH_MM * longEdge
+            )
+        }
     }
 }
 
 /** The two ends of an imaged arrow shaft, in no particular order. */
-data class Streak(val nearEnd: Vec2, val farEnd: Vec2)
+data class Streak(val endA: Vec2, val endB: Vec2)
 
 /**
  * The vanishing point of the target plane's normal, and what it is for.
@@ -1693,6 +1961,11 @@ data class Streak(val nearEnd: Vec2, val farEnd: Vec2)
  * vanishing line l of the plane; the vanishing point of the normal is
  * v = (K K^T) l, so the camera intrinsics are required. The spec's phrasing
  * "follows from the homography" is a shortcut.
+ *
+ * Given l, v is unique -- there is no sign to choose. What is uncertain for a
+ * nearly frontal view is how far away l is; v then sits close to the principal
+ * point and its exact position is poorly determined. Checking the streaks
+ * against an uncertain v is the perception pipeline's job.
  */
 object NormalVanishingPoint {
 
@@ -1707,12 +1980,12 @@ object NormalVanishingPoint {
      */
     fun entryPoints(streaks: List<Streak>, vanishingPoint: Vec2): List<Vec2> =
         streaks.map { streak ->
-            if (streak.nearEnd.distanceTo(vanishingPoint) >
-                streak.farEnd.distanceTo(vanishingPoint)
+            if (streak.endA.distanceTo(vanishingPoint) >
+                streak.endB.distanceTo(vanishingPoint)
             ) {
-                streak.nearEnd
+                streak.endA
             } else {
-                streak.farEnd
+                streak.endB
             }
         }
 }
@@ -1721,7 +1994,7 @@ object NormalVanishingPoint {
 - [ ] **Step 4: Test laufen lassen und Erfolg bestätigen**
 
 Run: `./gradlew :detection:testDevDebugUnitTest --tests "*NormalVanishingPointTest*"`
-Expected: PASS, 4 Tests.
+Expected: PASS, 5 Tests.
 
 - [ ] **Step 5: Committen**
 
@@ -1913,6 +2186,11 @@ git commit -m "Assign detected points to spots and convert to spot local coordin
 
 Setzt den Leitsatz der Spec um: Bei Unsicherheit lieber nichts eintragen als etwas Falsches.
 
+Zwei Regeln, beide aus dem Review:
+
+- **Pro Spot gilt eine Obergrenze, nicht "einer".** Das Datenmodell leitet den Spot aus `shot.index % faceCount` ab. Bei sechs Pfeilen auf einem 3-Spot gehören Index 0 und 3 legitim zum selben Spot. Die Grenze ist `ceil(shotsPerEnd / faceCount)`; bei der Vollauflage ist das `shotsPerEnd` und damit wirkungslos.
+- **Die Abstandsregel läuft von hinten nach vorn.** Bei 0.70, 0.69, 0.68, 0.67 und zwei erwarteten Pfeilen ist der erste Platz genauso umstritten wie der zweite. Angenommen wird das größte `k ≤ expectedShots`, bei dem Kandidat `k` deutlich über Kandidat `k+1` liegt — notfalls `k = 0`.
+
 **Files:**
 - Create: `detection/src/main/java/de/dreier/mytargets/detection/CandidateSelection.kt`
 - Test: `detection/src/test/java/de/dreier/mytargets/detection/CandidateSelectionTest.kt`
@@ -1922,8 +2200,8 @@ Setzt den Leitsatz der Spec um: Bei Unsicherheit lieber nichts eintragen als etw
 - Produces:
   - `Candidate(val faceIndex: Int, val local: Vec2, val confidence: Double)`
   - `SelectionOutcome(val accepted: List<Candidate>, val reason: SelectionReason)`
-  - `enum class SelectionReason { COMPLETE, FEWER_THAN_EXPECTED, AMBIGUOUS_SURPLUS, DUPLICATE_SPOT }`
-  - `CandidateSelection.select(candidates: List<Candidate>, expectedShots: Int, allowMultiplePerSpot: Boolean): SelectionOutcome`
+  - `enum class SelectionReason { COMPLETE, FEWER_THAN_EXPECTED, AMBIGUOUS_SURPLUS, SPOT_OVERFLOW }`
+  - `CandidateSelection.select(candidates: List<Candidate>, expectedShots: Int, maxPerSpot: Int): SelectionOutcome`
 
 - [ ] **Step 1: Den fehlschlagenden Test schreiben**
 
@@ -1944,7 +2222,7 @@ class CandidateSelectionTest {
         val outcome = CandidateSelection.select(
             listOf(candidate(0.9), candidate(0.8), candidate(0.7)),
             expectedShots = 3,
-            allowMultiplePerSpot = true
+            maxPerSpot = 3
         )
         assertThat(outcome.accepted).hasSize(3)
         assertThat(outcome.reason).isEqualTo(SelectionReason.COMPLETE)
@@ -1955,7 +2233,7 @@ class CandidateSelectionTest {
         val outcome = CandidateSelection.select(
             listOf(candidate(0.9), candidate(0.8)),
             expectedShots = 3,
-            allowMultiplePerSpot = true
+            maxPerSpot = 3
         )
         assertThat(outcome.accepted).hasSize(2)
         assertThat(outcome.reason).isEqualTo(SelectionReason.FEWER_THAN_EXPECTED)
@@ -1966,7 +2244,7 @@ class CandidateSelectionTest {
         val outcome = CandidateSelection.select(
             listOf(candidate(0.95), candidate(0.92), candidate(0.20)),
             expectedShots = 2,
-            allowMultiplePerSpot = true
+            maxPerSpot = 2
         )
         assertThat(outcome.accepted).hasSize(2)
         assertThat(outcome.reason).isEqualTo(SelectionReason.COMPLETE)
@@ -1977,7 +2255,7 @@ class CandidateSelectionTest {
         val outcome = CandidateSelection.select(
             listOf(candidate(0.95), candidate(0.61), candidate(0.60)),
             expectedShots = 2,
-            allowMultiplePerSpot = true
+            maxPerSpot = 2
         )
         // The second place is contested, so only the uncontested one is set.
         assertThat(outcome.accepted).hasSize(1)
@@ -1986,7 +2264,20 @@ class CandidateSelectionTest {
     }
 
     @Test
-    fun onlyOneArrowPerSpotOnMultiSpotFaces() {
+    fun everythingContestedLeavesTheWholeEndOpen() {
+        // Any two of these could be the real arrows; picking the first would be
+        // as much of a coin toss as picking the second.
+        val outcome = CandidateSelection.select(
+            listOf(candidate(0.70), candidate(0.69), candidate(0.68), candidate(0.67)),
+            expectedShots = 2,
+            maxPerSpot = 2
+        )
+        assertThat(outcome.accepted).isEmpty()
+        assertThat(outcome.reason).isEqualTo(SelectionReason.AMBIGUOUS_SURPLUS)
+    }
+
+    @Test
+    fun perSpotCapDropsTheSurplusOnThatSpot() {
         val outcome = CandidateSelection.select(
             listOf(
                 candidate(0.9, faceIndex = 0),
@@ -1994,11 +2285,23 @@ class CandidateSelectionTest {
                 candidate(0.7, faceIndex = 1)
             ),
             expectedShots = 3,
-            allowMultiplePerSpot = false
+            maxPerSpot = 1
         )
         assertThat(outcome.accepted).hasSize(2)
         assertThat(outcome.accepted.map { it.faceIndex }).containsExactly(0, 1)
-        assertThat(outcome.reason).isEqualTo(SelectionReason.DUPLICATE_SPOT)
+        assertThat(outcome.reason).isEqualTo(SelectionReason.SPOT_OVERFLOW)
+    }
+
+    @Test
+    fun twoArrowsPerSpotAreFineWhenTheEndHasSixShots() {
+        // Six arrows on a three spot face: shot indices 0 and 3 share spot 0.
+        val outcome = CandidateSelection.select(
+            (0 until 6).map { i -> candidate(0.9 - 0.05 * i, faceIndex = i % 3) },
+            expectedShots = 6,
+            maxPerSpot = 2
+        )
+        assertThat(outcome.accepted).hasSize(6)
+        assertThat(outcome.reason).isEqualTo(SelectionReason.COMPLETE)
     }
 }
 ```
@@ -2032,8 +2335,12 @@ enum class SelectionReason {
     /** More candidates than places, and the surplus is too close to call. */
     AMBIGUOUS_SURPLUS,
 
-    /** A multi spot face had two candidates on one spot, which cannot be stored. */
-    DUPLICATE_SPOT
+    /**
+     * A spot had more candidates than the end can store on it. The data model
+     * derives the spot from the shot index, so a spot holds at most
+     * ceil(shotsPerEnd / faceCount) arrows.
+     */
+    SPOT_OVERFLOW
 }
 
 class SelectionOutcome(
@@ -2051,42 +2358,52 @@ class SelectionOutcome(
 object CandidateSelection {
 
     /**
-     * A surplus candidate is only discarded when the last accepted candidate is
-     * clearly more confident than the first rejected one. "Clearly" is this
-     * much of the confidence scale.
+     * A candidate is only accepted over the next one down when it is clearly
+     * more confident. "Clearly" is this much of the confidence scale.
      */
     private const val REQUIRED_CONFIDENCE_GAP = 0.15
 
     /**
-     * @param allowMultiplePerSpot false for multi spot faces, where the data
-     *        model cannot represent two arrows on one spot
+     * @param maxPerSpot how many arrows one spot can hold in this end,
+     *        ceil(shotsPerEnd / faceCount); equal to [expectedShots] for a
+     *        single spot face, where it has no effect
      */
     fun select(
         candidates: List<Candidate>,
         expectedShots: Int,
-        allowMultiplePerSpot: Boolean
+        maxPerSpot: Int
     ): SelectionOutcome {
+        require(maxPerSpot > 0) { "a spot holds at least one arrow" }
         val ranked = candidates.sortedByDescending { it.confidence }
 
-        if (!allowMultiplePerSpot) {
-            val perSpot = mutableMapOf<Int, Candidate>()
-            var dropped = false
-            for (c in ranked) {
-                if (perSpot.containsKey(c.faceIndex)) {
-                    dropped = true
-                } else {
-                    perSpot[c.faceIndex] = c
-                }
+        // Per spot cap first, keeping the most confident candidates per spot.
+        val perSpotCount = mutableMapOf<Int, Int>()
+        val capped = mutableListOf<Candidate>()
+        var overflow = false
+        for (c in ranked) {
+            val n = perSpotCount.getOrDefault(c.faceIndex, 0)
+            if (n >= maxPerSpot) {
+                overflow = true
+            } else {
+                perSpotCount[c.faceIndex] = n + 1
+                capped += c
             }
-            if (dropped) {
-                return SelectionOutcome(
-                    perSpot.values.sortedByDescending { it.confidence },
-                    SelectionReason.DUPLICATE_SPOT
-                )
-            }
-            return select(perSpot.values.toList(), expectedShots, true)
         }
 
+        val outcome = selectByConfidence(capped, expectedShots)
+        return if (overflow) {
+            // The overflow is what the user needs to hear about; it explains
+            // both an open place and a surplus.
+            SelectionOutcome(outcome.accepted, SelectionReason.SPOT_OVERFLOW)
+        } else {
+            outcome
+        }
+    }
+
+    private fun selectByConfidence(
+        ranked: List<Candidate>,
+        expectedShots: Int
+    ): SelectionOutcome {
         if (ranked.size < expectedShots) {
             return SelectionOutcome(ranked, SelectionReason.FEWER_THAN_EXPECTED)
         }
@@ -2094,18 +2411,20 @@ object CandidateSelection {
             return SelectionOutcome(ranked, SelectionReason.COMPLETE)
         }
 
-        val lastAccepted = ranked[expectedShots - 1]
-        val firstRejected = ranked[expectedShots]
-        val gap = lastAccepted.confidence - firstRejected.confidence
+        // Walk down from the last place: accept the largest k for which the
+        // k-th candidate is clearly above the (k+1)-th. Every place below a
+        // contested one is contested as well, so nothing above k is safe
+        // either until a clear gap appears.
+        var k = expectedShots
+        while (k > 0 && ranked[k - 1].confidence - ranked[k].confidence < REQUIRED_CONFIDENCE_GAP) {
+            k--
+        }
 
-        return if (gap >= REQUIRED_CONFIDENCE_GAP) {
-            SelectionOutcome(ranked.take(expectedShots), SelectionReason.COMPLETE)
+        return if (k == expectedShots) {
+            SelectionOutcome(ranked.take(k), SelectionReason.COMPLETE)
         } else {
-            // The contested place stays open rather than being filled by a coin toss.
-            SelectionOutcome(
-                ranked.take(expectedShots - 1),
-                SelectionReason.AMBIGUOUS_SURPLUS
-            )
+            // Contested places stay open rather than being filled by a coin toss.
+            SelectionOutcome(ranked.take(k), SelectionReason.AMBIGUOUS_SURPLUS)
         }
     }
 }
@@ -2114,7 +2433,7 @@ object CandidateSelection {
 - [ ] **Step 4: Test laufen lassen und Erfolg bestätigen**
 
 Run: `./gradlew :detection:testDevDebugUnitTest --tests "*CandidateSelectionTest*"`
-Expected: PASS, 5 Tests.
+Expected: PASS, 7 Tests.
 
 - [ ] **Step 5: Committen**
 
@@ -2141,9 +2460,11 @@ Legt die Typen fest, an denen sich die Pläne 3 und 4 orientieren. Noch ohne Imp
   - `enum class DetectionFailure { FACE_NOT_FOUND, FACE_MISMATCH }`
   - `DetectionResult(val shots: List<DetectedShot>, val faceConfidence: Float, val reason: SelectionReason?, val failure: DetectionFailure?)` mit `DetectionResult.failed(DetectionFailure)`
   - `interface ArrowDetector { fun detect(request: DetectionRequest): DetectionResult }`
-  - `DetectionRequest(val layout: FaceLayout, val zoneRadii: List<Double>, val expectedShots: Int, val intrinsics: CameraIntrinsics, val allowMultiplePerSpot: Boolean)`
+  - `DetectionRequest(val layout: FaceLayout, val zoneRadii: List<Double>, val expectedShots: Int, val intrinsics: CameraIntrinsics)` mit abgeleitetem `maxArrowsPerSpot: Int`
 
 Das Bitmap fehlt hier bewusst: `DetectionRequest` bleibt android-frei, damit die Vertragstests im JVM laufen. Plan 3 ergänzt eine Unterschnittstelle mit dem Bild.
+
+`maxArrowsPerSpot` wird nicht übergeben, sondern aus `expectedShots` und `layout.faceCount` gerechnet: `ceil(expectedShots / faceCount)`. Es gibt nur eine richtige Antwort, und die soll niemand von Hand falsch setzen.
 
 - [ ] **Step 1: Den fehlschlagenden Test schreiben**
 
@@ -2152,6 +2473,7 @@ package de.dreier.mytargets.detection
 
 import com.google.common.truth.Truth.assertThat
 import de.dreier.mytargets.detection.geometry.CameraIntrinsics
+import de.dreier.mytargets.detection.geometry.Vec2
 import org.junit.Test
 
 class ArrowDetectorContractTest {
@@ -2160,9 +2482,25 @@ class ArrowDetectorContractTest {
         layout = FaceLayout.singleSpot(),
         zoneRadii = listOf(0.2, 0.4, 0.6, 0.8, 1.0),
         expectedShots = 3,
-        intrinsics = CameraIntrinsics.approximate(4000, 3000),
-        allowMultiplePerSpot = true
+        intrinsics = CameraIntrinsics.approximate(4000, 3000)
     )
+
+    private val threeSpot = FaceLayout(
+        facePositions = listOf(Vec2(-0.52, 0.5), Vec2(0.0, -0.5), Vec2(0.52, 0.5)),
+        faceRadius = 0.48
+    )
+
+    @Test
+    fun capsArrowsPerSpotFromTheEndSize() {
+        // Single spot: the cap equals the end size and never bites.
+        assertThat(request.maxArrowsPerSpot).isEqualTo(3)
+        // Three spots, three arrows: one per spot.
+        assertThat(request.copy(layout = threeSpot).maxArrowsPerSpot).isEqualTo(1)
+        // Three spots, six arrows: indices 0 and 3 share a spot.
+        assertThat(request.copy(layout = threeSpot, expectedShots = 6).maxArrowsPerSpot).isEqualTo(2)
+        // Rounds up: four arrows on three spots need two on one of them.
+        assertThat(request.copy(layout = threeSpot, expectedShots = 4).maxArrowsPerSpot).isEqualTo(2)
+    }
 
     @Test
     fun failedResultCarriesNoShots() {
@@ -2260,14 +2598,22 @@ data class DetectionRequest(
     val layout: FaceLayout,
     val zoneRadii: List<Double>,
     val expectedShots: Int,
-    val intrinsics: CameraIntrinsics,
-    val allowMultiplePerSpot: Boolean
+    val intrinsics: CameraIntrinsics
 ) {
     init {
         require(zoneRadii.isNotEmpty()) { "at least one zone radius is required" }
         require(zoneRadii.all { it > 0.0 }) { "zone radii must be positive" }
         require(expectedShots > 0) { "an end has at least one shot" }
     }
+
+    /**
+     * How many arrows one spot can hold in this end. The app derives the spot
+     * of a shot from `index % faceCount`, so with six shots on three spots the
+     * indices 0 and 3 share spot 0. Rounded up: four shots on three spots put
+     * two on one of them.
+     */
+    val maxArrowsPerSpot: Int
+        get() = (expectedShots + layout.faceCount - 1) / layout.faceCount
 }
 
 /**
@@ -2285,12 +2631,12 @@ interface ArrowDetector {
 - [ ] **Step 4: Test laufen lassen und Erfolg bestätigen**
 
 Run: `./gradlew :detection:testDevDebugUnitTest --tests "*ArrowDetectorContractTest*"`
-Expected: PASS, 3 Tests.
+Expected: PASS, 4 Tests.
 
 - [ ] **Step 5: Alle Tests des Moduls laufen lassen**
 
 Run: `./gradlew :detection:testDevDebugUnitTest`
-Expected: PASS, 47 Tests insgesamt (5 + 4 + 7 + 5 + 4 + 5 + 4 + 5 + 5 + 3).
+Expected: PASS, 56 Tests insgesamt (6 + 4 + 7 + 5 + 6 + 7 + 5 + 5 + 7 + 4).
 
 - [ ] **Step 6: Prüfen, dass die App weiterhin baut**
 
@@ -2312,8 +2658,8 @@ git commit -m "Define the ArrowDetector seam and its android free request type"
 Damit beim Abnehmen klar ist, wo die Grenze verläuft:
 
 - **Kein Bild wird verarbeitet.** Segmentierung, Farbabgleich, Residuum und Schaftfindung sind Plan 3.
-- **Die Vorzeichenwahl der Kipprichtung ist nicht implementiert.** Task 7 liefert den Fluchtpunkt für ein *gegebenes* Vorzeichen. Die Mehrheitsabstimmung über alle Streifen braucht echte Streifen und gehört deshalb zu Plan 3.
-- **Die Anbindung an `:shared` fehlt.** `FaceLayout` ist noch nicht aus `TargetModelBase` befüllt, `zoneRadii` nicht aus den Zonen gelesen. Das ist Plan 4.
+- **Der Umgang mit einem unsicheren Fluchtpunkt ist nicht implementiert.** Task 7 rechnet den Fluchtpunkt aus Fluchtlinie und Kameramatrix; bei nahezu frontaler Aufnahme ist die Fluchtlinie schlecht bestimmt und der Punkt entsprechend unsicher. Die Prüfung der Streifen dagegen (Konsistenz der Richtungen, Befiederungsmerkmal) braucht echte Streifen und gehört zu Plan 3.
+- **Die Anbindung an `:shared` fehlt.** `FaceLayout` ist noch nicht aus `TargetModelBase` befüllt, `zoneRadii` nicht aus den Zonen gelesen, die Brennweite nicht aus EXIF. Das ist Plan 4 beziehungsweise Plan 3.
 - **Keine Kennzahlen.** Ohne Korpus gibt es nichts zu messen.
 
 ## Self-Review
@@ -2321,10 +2667,21 @@ Damit beim Abnehmen klar ist, wo die Grenze verläuft:
 **Spec-Abdeckung.** Von den Stufen der Spec deckt dieser Plan die Geometrie ab: Stufe 2 (Kegelschnittfit, Registrierung) in Task 3, 5 und 6, Stufe 6 (Fluchtpunkt) in Task 7, Stufe 7 (Spot-Zuordnung, Auswahl) in Task 8 und 9. Die Schnittstelle aus dem Abschnitt *Schnittstelle* steht in Task 10, angepasst um `intrinsics` und `zoneRadii`, die in der Spec fehlten. Stufen 1, 3, 4, 5 sowie Integration und Korpus sind ausdrücklich den Plänen 2 bis 4 zugewiesen.
 
 **Abweichungen von der Spec, jeweils im Code begründet:**
-1. Fluchtlinie über das Kegelschnittbüschel statt über den Schnitt zweier Kegelschnitte (Task 5).
+1. Zentrum und Fluchtlinie über das einfache Mitglied des Kegelschnittbüschels statt über den Schnitt zweier Kegelschnitte (Task 5).
 2. `CameraIntrinsics` als Pflichtparameter für den Fluchtpunkt (Task 7) — die Spec unterschlägt, dass `K` gebraucht wird.
 3. `FaceLayout` statt `TargetModelBase`, um Android aus den Tests zu halten (Task 8).
+4. Obergrenze pro Spot statt "ein Pfeil pro Spot" (Task 9 und 10); die Spec wurde entsprechend nachgezogen.
 
 **Typkonsistenz.** `Vec2`/`Vec3`/`Mat3` durchgehend `Double`; `DetectedShot` wechselt bewusst auf `Float`, weil `Shot.x`/`Shot.y` `Float` sind — die Umwandlung passiert an genau einer Stelle, in Task 10. `SelectionReason` wird in Task 9 definiert und in Task 10 verwendet, nicht umgekehrt. `Candidate` (intern, `Double`) und `DetectedShot` (Ausgabe, `Float`) sind absichtlich verschieden.
 
-**Offener Punkt, der beim Ausführen auffallen wird.** `REQUIRED_CONFIDENCE_GAP = 0.15` und `RANK_ONE_TOLERANCE = 1e-4` sind geraten. Beide sind im Code als solche markiert und gehören zu den Werten, die Plan 2 am Korpus festschreibt.
+**Offener Punkt, der beim Ausführen auffallen wird.** `REQUIRED_CONFIDENCE_GAP = 0.15` ist geraten, im Code als solches markiert und gehört zu den Werten, die Plan 2 am Korpus festschreibt. Die Toleranzen der Rauschtests sind dagegen gemessen, nicht geraten.
+
+## Änderungen nach Review
+
+Am 2026-09-09 gegen den Code und mit einem numerischen Prototyp geprüft. Geändert wurde:
+
+1. **Task 5** sucht nicht mehr das Rang-1-Mitglied an der Doppelnullstelle, sondern das Rang-2-Mitglied an der einfachen Nullstelle. Der alte Weg fiel im Prototyp schon bei exakten Eingaben aus, weil die Doppelnullstelle durch Rundung zu einem komplexen Paar wurde. Der neue Weg liefert nebenbei das abgebildete Zentrum, arbeitet in einem normierten Koordinatenrahmen und braucht keine geratene Toleranz mehr.
+2. **Task 6** misst die Bildaufrechte am abgebildeten Zentrum statt an der Bildecke; dafür bekam `Mat3` in Task 1 ein `mapDirection`. Neuer Test dafür und ein Rauschtest.
+3. **Task 7:** Der Test zur geneigten Ebene hatte die Fluchtlinie auf der falschen Seite und wäre fehlgeschlagen. Brennweiten-Rückfall von Bilddiagonale auf 0.75·lange Kante, dazu `from35mmEquivalent` für EXIF. `Streak`-Felder heißen `endA`/`endB`. Die Rede von einer "Vorzeichenwahl" ist gestrichen; der Fluchtpunkt ist eindeutig, unsicher ist nur seine Lage bei frontaler Aufnahme.
+4. **Task 9 und 10:** Obergrenze pro Spot `ceil(shotsPerEnd / faceCount)` statt "höchstens einer", abgeleitet im `DetectionRequest`. Abstandsregel läuft von hinten nach vorn.
+5. **Kleinigkeiten:** `targetSdk` aus dem Katalog, `testInstrumentationRunner` entfernt, Sweep-Schleife in `SymmetricEigen` mit `break`, Testname in Task 3.

@@ -26,7 +26,7 @@ zu bewerten.
 | Auflagen: WA Full-Face und WA Spiegel/3-Spot | Beide sind farblich und geometrisch exakt im Modell beschrieben. Feldbogen und 3D bleiben außen vor. |
 | Vollständig offline auf dem Gerät | Bogenplätze haben oft kein Netz. MyTargets ist GPLv2 und F-Droid-freundlich. |
 | Kamera wird aufrecht gehalten | Konzentrische Kreise legen die Drehung um die Scheibenachse nicht fest (siehe *Offene Risiken*). |
-| Bei Spiegelauflagen steckt je Passe höchstens ein Pfeil pro Spot | Das Datenmodell ordnet Treffer über den Schussindex einem Spot zu und kann zwei Pfeile in einem Spot nicht darstellen (siehe *Koordinatensystem*). |
+| Bei Spiegelauflagen stecken je Spot höchstens `ceil(shotsPerEnd / faceCount)` Pfeile | Das Datenmodell ordnet Treffer über den Schussindex einem Spot zu. Bei drei Pfeilen auf drei Spots ist das einer pro Spot, bei sechs Pfeilen sind es zwei. Mehr kann das Modell nicht darstellen (siehe *Koordinatensystem*). |
 
 ## Umfang
 
@@ -88,12 +88,22 @@ Funktionen rechnet. Die Schnittstelle unten macht den Tausch möglich.
 
 ```kotlin
 interface ArrowDetector {
-    fun detect(bitmap: Bitmap, target: Target, expectedShots: Int): DetectionResult
+    fun detect(request: DetectionRequest): DetectionResult
+}
+
+data class DetectionRequest(
+    val layout: FaceLayout,             // Spot-Anordnung, android-frei aus TargetModelBase
+    val zoneRadii: List<Double>,        // Ringradien, spot-lokal
+    val expectedShots: Int,             // Round.shotsPerEnd
+    val intrinsics: CameraIntrinsics    // Brennweite und Hauptpunkt, siehe Stufe 6
+) {
+    val maxArrowsPerSpot: Int           // ceil(expectedShots / faceCount), abgeleitet
 }
 
 data class DetectionResult(
     val shots: List<DetectedShot>,      // x/y spot-lokal, siehe Koordinatensystem
     val faceConfidence: Float,          // Güte der Auflagenregistrierung
+    val reason: SelectionReason?,       // warum die Liste kürzer ist als erwartet
     val failure: DetectionFailure?      // null bei Erfolg
 )
 
@@ -105,12 +115,20 @@ data class DetectedShot(
 )
 
 enum class DetectionFailure { FACE_NOT_FOUND, FACE_MISMATCH }
+enum class SelectionReason { COMPLETE, FEWER_THAN_EXPECTED, AMBIGUOUS_SURPLUS, SPOT_OVERFLOW }
 ```
 
-Ein Bitmap und ein `Target` hinein, eine Trefferliste heraus. Kein Kamerazugriff,
-kein Kontext, keine Nebenwirkungen. Genau diese Enge macht die Pipeline gegen
-einen Testkorpus prüfbar und erlaubt später den Tausch der Pfeilerkennung
-(Ansatz C), ohne die App anzufassen.
+Das Bild selbst kommt über eine Unterschnittstelle mit `Bitmap` dazu, die erst
+mit den Wahrnehmungsstufen entsteht. `DetectionRequest` bleibt bewusst frei von
+Android-Typen, damit die Verträge in JVM-Tests prüfbar sind. `FaceLayout` und
+`CameraIntrinsics` sind die Typen aus dem Geometrieplan
+(`docs/plans/2026-09-09-detection-geometry-core.md`), der diese Schnittstelle
+festlegt.
+
+Eine Anfrage hinein, eine Trefferliste heraus. Kein Kamerazugriff, kein
+Kontext, keine Nebenwirkungen. Genau diese Enge macht die Pipeline gegen einen
+Testkorpus prüfbar und erlaubt später den Tausch der Pfeilerkennung (Ansatz C),
+ohne die App anzufassen.
 
 ### Koordinatensystem
 
@@ -136,12 +154,15 @@ Der Schütze schießt Spot 0, 1, 2 der Reihe nach. Daraus folgt für die Pipelin
    `(p − facePositions[i]) / faceRadius`. Bei der Vollauflage ist das die
    Identität.
 4. Die Integration setzt `Shot.index` so, dass `index % faceCount == faceIndex`
-   gilt. Bei drei Pfeilen auf drei Spots ist das eindeutig.
+   gilt. Bei drei Pfeilen auf drei Spots ist das eindeutig; bei sechs Pfeilen
+   teilen sich Index 0 und 3 den Spot 0.
 
-**Zwei Pfeile im selben Spot** kann das Modell nicht abbilden: Der zweite
-Treffer würde auf dem falschen Spot gezeichnet. In diesem Fall wird pro Spot nur
-der zuversichtlichste Treffer gesetzt, der Rest bleibt offen, und die Snackbar
-nennt den Grund. Das folgt dem Leitsatz unter *Fehlerfälle*.
+**Mehr Pfeile in einem Spot, als die Passe dort vorsieht,** kann das Modell
+nicht abbilden: Ein Spot fasst `ceil(shotsPerEnd / faceCount)` Treffer, jeder
+weitere würde auf dem falschen Spot gezeichnet. In diesem Fall werden pro Spot
+nur die zuversichtlichsten Treffer bis zu dieser Grenze gesetzt, der Rest bleibt
+offen, und die Snackbar nennt den Grund. Das folgt dem Leitsatz unter
+*Fehlerfälle*.
 
 ## Die Erkennungspipeline
 
@@ -178,11 +199,16 @@ Bildellipse das Bild des Kreiszentrums. Ein naiver Fit "konzentrischer
 Ellipsen" baut einen systematischen Fehler ein, der in der Scheibenmitte am
 größten ist — genau dort, wo Ringe eng sind. Der Weg ist daher:
 
-1. Zwei Kegelschnitte desselben Zentrums schneiden sich in den Kreispunkten der
-   Scheibenebene. Aus ihnen folgt die metrische Rektifizierung bis auf
-   Ähnlichkeit (Hartley/Zisserman, Kap. 2 und 8).
+1. Im Büschel `C1 − λ·C2` zweier Kegelschnitte desselben Zentrums hat das
+   Mitglied zur einfachen Nullstelle von `det(C1 − λ·C2)` Rang 2; sein
+   Nullvektor ist das Bild des gemeinsamen Zentrums. Die Polare dieses Punkts
+   ist die Fluchtlinie. Daraus folgt die affine und, über den Ellipsenblock,
+   die metrische Rektifizierung bis auf Ähnlichkeit (Hartley/Zisserman, Kap. 2
+   und 8). Der Weg über die Kreispunkte oder über das Rang-1-Mitglied an der
+   Doppelnullstelle ist numerisch fragil und wird nicht verwendet; Begründung
+   im Geometrieplan, Task 5.
 2. Maßstab und Translation folgen aus den bekannten Radien und dem Bild des
-   gemeinsamen Zentrums (Pol der Fluchtlinie bezüglich eines Kegelschnitts).
+   Zentrums.
 3. Die Drehung ist damit noch offen (siehe *Offene Risiken*): bei
    Spiegelauflagen legen die Spot-Positionen sie fest, bei der Vollauflage die
    Bildaufrechte.
@@ -215,9 +241,13 @@ Zusammenhangskomponenten sind Schaftkandidaten; kompakte kleine Flecken sind
 Altlöcher.
 
 **Stufe 6 — Einschusspunkt.** Der Pfeil steht als Stab zur Kamera hin aus der
-Scheibe; im Bild wird daraus ein Streifen. Aus der Homographie folgt der
-Fluchtpunkt der Scheibennormalen. Ein Punkt über der Ebene wird stets *zu diesem
-Fluchtpunkt hin* verschoben abgebildet. Also gilt:
+Scheibe; im Bild wird daraus ein Streifen. Aus der Fluchtlinie `l` der
+Scheibenebene und der Kameramatrix `K` folgt der Fluchtpunkt der
+Scheibennormalen, `v = (K·Kᵀ)·l`. `K` wird genähert: quadratische Pixel,
+Hauptpunkt in der Bildmitte, Brennweite aus `FocalLengthIn35mmFilm` in EXIF
+(`f_px = f35 / 36 · lange Kante`), ohne EXIF `0.75 · lange Kante`, was 27 mm
+entspricht. Ein Punkt über der Ebene wird stets *zu diesem Fluchtpunkt hin*
+verschoben abgebildet. Also gilt:
 
 > **Der Einschusspunkt ist das vom Fluchtpunkt weiter entfernte Ende des Streifens.**
 
@@ -226,15 +256,17 @@ und macht die Zuordnung berechenbar statt heuristisch.
 
 Zwei Einschränkungen, die der Spec ausdrücklich behandelt:
 
-- **Vorzeichen der Kipprichtung.** Aus einem Kegelschnitt folgt die Ebenennormale
-  nur bis auf die Kipprichtung; konzentrische Kreise lösen das nur schwach über
-  den Versatz ihrer Bildzentren. Der Fluchtpunkt liegt dann auf der einen oder
-  anderen Seite des Bildzentrums, und die Regel oben kippt für Pfeile nahe der
-  Mitte. Auflösung: Alle Streifen zeigen vom selben Fluchtpunkt weg. Die beiden
-  Kandidaten werden gegen alle Streifen geprüft; der Kandidat, mit dem die
-  Mehrheit der Streifen konsistent ist, gewinnt. Als zweites, unabhängiges
-  Merkmal wird das Befiederungsende genutzt: Es ist farbig und dicker als der
-  Schaft und muss am **nahen** Ende liegen.
+- **Unsicherer Fluchtpunkt bei frontaler Aufnahme.** Bei gegebener Fluchtlinie
+  ist der Fluchtpunkt eindeutig, es gibt keine Vorzeichenwahl. Unsicher ist die
+  *Entfernung* der Fluchtlinie: Je frontaler die Aufnahme, desto weiter liegt
+  sie weg und desto schlechter ist sie aus den Ringen bestimmt. Der Fluchtpunkt
+  liegt dann nahe dem Hauptpunkt, seine genaue Lage wackelt, und die Regel oben
+  kippt für Pfeile nahe der Mitte. Absicherung: Alle Streifen zeigen vom selben
+  Fluchtpunkt weg. Ist die Mehrheit der Streifen mit dem gerechneten Punkt
+  inkonsistent, wird der Fluchtpunkt aus den Streifen selbst geschätzt oder die
+  Zuordnung als unsicher gemeldet. Als zweites, unabhängiges Merkmal dient das
+  Befiederungsende: Es ist farbig und dicker als der Schaft und muss am
+  **nahen** Ende liegen.
 - **Frontale Aufnahme, Pfeil nahe der Mitte.** Ein Pfeil nahe dem Fluchtpunkt
   bildet sich als kurzer Streifen oder Punkt ab und ist dann von einem Altloch
   kaum zu unterscheiden — ausgerechnet im Zehner, wo jeder Millimeter zählt.
@@ -246,9 +278,10 @@ Zwei Einschränkungen, die der Spec ausdrücklich behandelt:
 umrechnen (siehe *Koordinatensystem*). `Round.shotsPerEnd` ist ein starker
 Filter: Bei weniger Kandidaten meldet die Pipeline die Lücke, statt zu raten.
 Bei mehr Kandidaten gewinnen die zuversichtlichsten, **aber nur mit Abstand**:
-Liegt die Konfidenz des ersten verworfenen Kandidaten nahe an der des letzten
-gewählten, wird die Passe nicht aufgefüllt, sondern die unsicheren Plätze
-bleiben offen. Ringwert über `getZoneFromPoint()`.
+Angenommen wird das größte `k ≤ shotsPerEnd`, bei dem Kandidat `k` deutlich
+über Kandidat `k+1` liegt. Liegen alle Kandidaten dicht beieinander, bleibt die
+ganze Passe offen, denn der erste Platz ist dann genauso ein Münzwurf wie der
+letzte. Ringwert über `getZoneFromPoint()`.
 
 ### Bekannte Grenzen der Pipeline
 
@@ -256,8 +289,8 @@ bleiben offen. Ringwert über `getZoneFromPoint()`.
   Sie werden von Hand nachgetragen.
 - **Zwei Pfeile im selben Loch** ergeben einen Streifen und damit einen Treffer.
 - **Stark überlappende Schäfte** können zu einem Kandidaten verschmelzen.
-- **Zwei Pfeile im selben Spot** einer Spiegelauflage: nur einer wird gesetzt
-  (siehe *Koordinatensystem*).
+- **Mehr Pfeile in einem Spot, als die Passe dort vorsieht:** nur die
+  zuversichtlichsten bis zur Grenze werden gesetzt (siehe *Koordinatensystem*).
 
 ## Integration in die App
 
@@ -366,8 +399,8 @@ Jeder Fall bekommt eine eigene Antwort, keine Sammelmeldung.
 | Auflage nicht gefunden | Nichts wird geschrieben. Meldung mit Ursache, Angebot zur Neuaufnahme. Foto wird gespeichert. |
 | Spot-Zahl passt nicht zur Auflage | Hinweis, dass das Bild nicht zur eingestellten Auflage passt, mit deren Namen. |
 | Weniger Pfeile als `shotsPerEnd` | Gefundene werden gesetzt, Rest bleibt offen, Snackbar nennt die Zahl. |
-| Mehr Kandidaten als `shotsPerEnd` | Die zuversichtlichsten gewinnen, sofern der Abstand zum nächsten Kandidaten deutlich ist; sonst bleiben die unsicheren Plätze offen. |
-| Zwei Pfeile im selben Spot (Spiegel) | Nur der zuversichtlichste wird gesetzt, Snackbar nennt den Grund. |
+| Mehr Kandidaten als `shotsPerEnd` | Die zuversichtlichsten gewinnen, sofern der Abstand zum nächsten Kandidaten deutlich ist; sonst bleiben die unsicheren Plätze offen, notfalls alle. |
+| Mehr Pfeile in einem Spot als vorgesehen (Spiegel) | Nur die zuversichtlichsten bis zur Grenze `ceil(shotsPerEnd / faceCount)` werden gesetzt, Snackbar nennt den Grund. |
 | Passe hat schon Treffer | Rückfrage vor dem Überschreiben. |
 | `endId` passt nicht mehr | Nichts wird geschrieben, Foto wird abgelegt, Hinweis an den Nutzer. |
 
@@ -411,28 +444,33 @@ erste Mal gemessen wurden. Eine Zielgenauigkeit vorab festzulegen wäre geraten.
 
 Im Modul stecken zwei Arten von Code, und sie brauchen unterschiedliche Verfahren.
 
-**Deterministische Geometrie** — Kegelschnittfit, Rektifizierung über die
-Kreispunkte, Fluchtpunkt und Vorzeichenwahl, Spot-Zuordnung und spot-lokale
+**Deterministische Geometrie** — Kegelschnittfit, Zentrum und Fluchtlinie aus
+dem Büschel, Rektifizierung, Fluchtpunkt, Spot-Zuordnung und spot-lokale
 Umrechnung, die `shotsPerEnd`-Auswahl mit Abstandsregel. Schnelle JVM-Unit-Tests
 ohne Bild, klassisch testgetrieben entwickelt. Die Tests verwenden synthetische
 Eingaben: bekannte Homographie auf bekannte Kreise anwenden, Rückrechnung
-prüfen. `PointF` aus `:shared` ist dabei die einzige Android-Klasse; sie ist in
-JVM-Tests über `unitTests.returnDefaultValues` oder ein eigenes Datentyp-Paar im
-Modul zu vermeiden.
+prüfen — exakt **und mit Pixelrauschen**, weil exakte Tests einen numerisch
+fragilen Rechenweg nicht von einem robusten unterscheiden können. Android-Typen
+wie `PointF` bleiben aus dem Geometriecode heraus; das Modul führt eigene
+Vektortypen und ein eigenes `FaceLayout`, die Umwandlung aus `TargetModelBase`
+liegt in der App.
 
 **Wahrnehmungsstufen** — Segmentierung, Farbabgleich, Residuum, Schaftfindung.
 Diese lassen sich nicht sinnvoll rot-grün treiben; sie werden am Korpus
 gemessen. OpenCV braucht dafür native Bibliotheken, also laufen diese Messungen
-als Instrumentierungstests oder über ein Kommandozeilen-Werkzeug in `:tools`,
-nicht als JVM-Unit-Tests. Das wird hier festgehalten, damit später niemand
-rot-grün erwartet, wo es nicht hingehört.
+als Instrumentierungstests auf dem Gerät oder Emulator, nicht als
+JVM-Unit-Tests. Ein eigenes JVM-Werkzeug dafür gibt es im Projekt nicht;
+`tools/` enthält nur Gradle-Skripte. Ob sich ein solches Modul lohnt,
+entscheidet Plan 2. Das wird hier festgehalten, damit später niemand rot-grün
+erwartet, wo es nicht hingehört.
 
 ### Debug-Ansicht
 
 Ein Bildschirm im Debug-Build, erreichbar aus der Galerie, der ein Foto durch
 die Pipeline schickt und jede Stufe als Bild zeigt: Segmentierung, gefittete
 Kegelschnitte, entzerrtes Bild, Farbklassenmaske, Residuum, Schaftkandidaten,
-Fluchtpunkt mit beiden Kandidaten, gewählte Einschusspunkte mit Spot. Das ist
+gerechneter Fluchtpunkt samt Streifenrichtungen, gewählte Einschusspunkte mit
+Spot. Das ist
 **Pflicht, kein Extra** — ohne die Ansicht lässt sich ein Fehler nicht
 lokalisieren, nur erraten.
 
@@ -445,8 +483,9 @@ lokalisieren, nur erraten.
 3. **APK-Zuwachs durch OpenCV messen** (siehe *Offene Risiken*), bevor die
    Abhängigkeit festgezurrt wird.
 4. Modul `:detection` anlegen, Schnittstelle und Datentypen.
-5. Geometrie testgetrieben: Kegelschnittfit, Rektifizierung, Fluchtpunkt samt
-   Vorzeichenwahl, Spot-Zuordnung, Umrechnung.
+5. Geometrie testgetrieben: Kegelschnittfit, Zentrum und Fluchtlinie,
+   Rektifizierung, Fluchtpunkt, Spot-Zuordnung, Umrechnung, Auswahl. Plan:
+   `docs/plans/2026-09-09-detection-geometry-core.md`.
 6. Debug-Ansicht, sobald Stufe 3 ein Bild liefert.
 7. Wahrnehmungsstufen gegen den Korpus, Kennzahlen festschreiben.
 8. Integration in `InputActivity` und `GalleryActivity` samt Fotoablage,
@@ -462,9 +501,9 @@ die Bildaufrechte die Drehung. Das ist eine **Annahme über die Handhaltung** un
 gehört ausdrücklich in den Testkorpus — mit bewusst verkantet aufgenommenen
 Bildern.
 
-**Vorzeichen der Kipprichtung.** Die Mehrheitsabstimmung der Streifen (Stufe 6)
-ist bei einem einzelnen Pfeil nahe der Mitte keine Mehrheit. Dann entscheidet
-allein das Befiederungsmerkmal. Ob das reicht, zeigt der Korpus.
+**Unsicherer Fluchtpunkt.** Die Konsistenzprüfung der Streifen (Stufe 6) ist
+bei einem einzelnen Pfeil nahe der Mitte keine Prüfung. Dann entscheidet allein
+das Befiederungsmerkmal. Ob das reicht, zeigt der Korpus.
 
 **APK-Größe.** OpenCV bringt native Bibliotheken mit. Vor der Integration ist zu
 messen, wie viel je ABI dazukommt, und zu entscheiden, ob ABI-Splits genügen
@@ -484,12 +523,11 @@ wurden gelesen.
 echten Altdatenbank und die Positionswiederherstellung nach Prozesstod sind noch
 auf dem Gerät nachzustellen.
 
-**Die Kameramatrix fehlt in Stufe 6.** Aus der Homographie folgt die Fluchtlinie,
-nicht der Fluchtpunkt der Normalen; dafür gilt `v = (K·Kᵀ)·l′` und damit braucht
-es `K`. Der Plan führt `K` als expliziten Parameter mit dokumentierter Näherung
-(quadratische Pixel, Hauptpunkt in Bildmitte, Brennweite aus EXIF mit Rückfall
-auf einen Bilddiagonalen-Schätzwert). Wie stark die Näherung trägt, muss der
-Korpus zeigen.
+**Die Kameramatrix ist eine Näherung.** Stufe 6 braucht `K`; der Plan führt sie
+als expliziten Parameter mit quadratischen Pixeln, Hauptpunkt in der Bildmitte
+und Brennweite aus EXIF, Rückfall `0.75 · lange Kante`. Fehlt EXIF und weicht
+das Objektiv stark von 27 mm ab (Ultraweitwinkel, Tele), liegt der Fluchtpunkt
+entsprechend daneben. Wie stark die Näherung trägt, muss der Korpus zeigen.
 
 ## Upgrade-Pfad zu Ansatz C
 

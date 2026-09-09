@@ -16,16 +16,18 @@
 package de.dreier.mytargets.detection.metrics
 
 import de.dreier.mytargets.detection.corpus.CorpusEntry
-import de.dreier.mytargets.detection.corpus.Score
+import de.dreier.mytargets.detection.corpus.PrintedScore
 import de.dreier.mytargets.detection.corpus.SpotPosition
+import de.dreier.mytargets.detection.corpus.TruthShot
 
 /**
- * One arrow a detector claims to have found. Unlike a [de.dreier.mytargets
- * .detection.corpus.TruthShot] it always carries a position — a detector that
- * cannot say where an arrow is has not detected it.
+ * One arrow a detector claims to have found. It always carries a position — a
+ * detector that cannot say where an arrow is has not found it — and whichever
+ * of the two score forms it can produce.
  */
 data class DetectedShotRecord(
-    val score: Score,
+    val scoringRing: Int?,
+    val printedScore: PrintedScore?,
     val position: SpotPosition,
     val confidence: Double
 )
@@ -64,19 +66,18 @@ class MatchResult(
 object ShotMatching {
 
     /**
-     * How far a detection may sit from its true position and still count as the
-     * same arrow, in spot radii. 0.05 of an 80 cm face is 2 cm, roughly two
-     * arrow diameters. This is one of the values the corpus is meant to settle;
-     * until it has, it is an informed guess.
+     * The tolerance used for a truth shot that states none of its own, in spot
+     * radii. The corpus records a tolerance per hit, so this only applies to
+     * entries that predate that.
      */
-    const val DEFAULT_POSITION_GATE = 0.05
+    const val DEFAULT_POSITION_TOLERANCE = 0.05
 
     fun match(
         entry: CorpusEntry,
         detected: List<DetectedShotRecord>,
-        positionGate: Double = DEFAULT_POSITION_GATE
+        defaultPositionTolerance: Double = DEFAULT_POSITION_TOLERANCE
     ): MatchResult = if (entry.hasPositions) {
-        matchByPosition(entry, detected, positionGate)
+        matchByPosition(entry, detected, defaultPositionTolerance)
     } else {
         matchByScore(entry, detected)
     }
@@ -84,19 +85,17 @@ object ShotMatching {
     private fun matchByPosition(
         entry: CorpusEntry,
         detected: List<DetectedShotRecord>,
-        positionGate: Double
+        defaultPositionTolerance: Double
     ): MatchResult {
         val candidates = mutableListOf<MatchedPair>()
         entry.shots.forEachIndexed { truthIndex, truth ->
-            // matchByPosition only runs when entry.hasPositions is true, which
-            // means every shot in this entry carries a position -- so this
-            // can never actually skip a shot. Kept null-safe anyway rather
-            // than asserted, so a future change to hasPositions cannot turn
-            // this into a silent NPE instead of a silent skip.
+            // hasPositions guarantees this, so the elvis can never fire; kept
+            // null safe rather than asserted.
             val truthPosition = truth.position ?: return@forEachIndexed
+            val tolerance = truth.positionTolerance ?: defaultPositionTolerance
             detected.forEachIndexed { detectedIndex, record ->
                 val distance = truthPosition.distanceTo(record.position)
-                if (distance != null && distance <= positionGate) {
+                if (distance != null && distance <= tolerance) {
                     candidates.add(MatchedPair(truthIndex, detectedIndex, distance))
                 }
             }
@@ -123,8 +122,8 @@ object ShotMatching {
         val pairs = mutableListOf<MatchedPair>()
 
         for (detectedIndex in byConfidence) {
-            val score = detected[detectedIndex].score
-            val hit = remainingTruth.firstOrNull { entry.shots[it].score == score }
+            val record = detected[detectedIndex]
+            val hit = remainingTruth.firstOrNull { scoresAgree(entry.shots[it], record) }
             if (hit != null) {
                 remainingTruth.remove(hit)
                 pairs.add(MatchedPair(hit, detectedIndex, null))
@@ -137,6 +136,20 @@ object ShotMatching {
             unmatchedTruth = remainingTruth.sorted(),
             unmatchedDetected = detected.indices.filterNot { it in matchedDetected }
         )
+    }
+
+    /**
+     * Whether a truth shot and a detection carry the same score. The zone index
+     * wins where both sides have one, because it is exact; the printed value is
+     * the fallback for the inherited photographs, which have no target model
+     * and therefore no index.
+     */
+    internal fun scoresAgree(truth: TruthShot, detected: DetectedShotRecord): Boolean = when {
+        truth.scoringRing != null && detected.scoringRing != null ->
+            truth.scoringRing == detected.scoringRing
+        truth.printedScore != null && detected.printedScore != null ->
+            truth.printedScore == detected.printedScore
+        else -> false
     }
 
     private fun takeGreedily(

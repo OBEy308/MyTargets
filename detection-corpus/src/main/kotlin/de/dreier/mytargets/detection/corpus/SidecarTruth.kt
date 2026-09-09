@@ -16,7 +16,7 @@
 package de.dreier.mytargets.detection.corpus
 
 import com.google.gson.Gson
-import com.google.gson.JsonSyntaxException
+import com.google.gson.JsonParseException
 
 /**
  * Ground truth read from a JSON sidecar next to the image.
@@ -66,8 +66,13 @@ object SidecarTruth {
     fun parse(imageName: String, json: String): CorpusEntry {
         val parsed = try {
             gson.fromJson(json, EntryJson::class.java)
-        } catch (e: JsonSyntaxException) {
-            throw IllegalArgumentException("$imageName: malformed JSON sidecar", e)
+        } catch (e: RuntimeException) {
+            // Not just JsonSyntaxException: a hand typed decimal comma such as
+            // "0,031" parses as valid JSON but fails inside gson's number
+            // conversion with a bare NumberFormatException. Either way, a
+            // corpus of a hundred photographs still needs to know which one
+            // is broken.
+            throw IllegalArgumentException("$imageName: cannot read JSON sidecar", e)
         } ?: throw IllegalArgumentException("$imageName: empty JSON sidecar")
 
         val shotsJson = parsed.shots
@@ -108,10 +113,16 @@ object SidecarTruth {
         )
     }
 
-    /** The `targetModel` from a directory level defaults file, or null. */
-    fun defaultsTargetModel(json: String): String? = try {
+    /**
+     * The `targetModel` from a directory level defaults file, or null.
+     *
+     * @throws IllegalArgumentException with the directory name in the
+     *         message, so a corpus loader that recurses over arbitrarily
+     *         many directories still says which one is broken.
+     */
+    fun defaultsTargetModel(directoryName: String, json: String): String? = try {
         gson.fromJson(json, DefaultsJson::class.java)?.targetModel
-    } catch (e: JsonSyntaxException) {
-        throw IllegalArgumentException("malformed defaults.json", e)
+    } catch (e: JsonParseException) {
+        throw IllegalArgumentException("$directoryName: malformed defaults.json", e)
     }
 }

@@ -40,17 +40,21 @@ class Metrics(
     val entriesWithPositions: Int
 ) {
 
-    /** Share of true arrows that were found at all. */
-    val detectionRate: Double
+    /** Share of true arrows that were found at all. Null when the corpus has
+     *  no expected arrows to measure against -- an empty corpus must not read
+     *  as a perfect run. */
+    val detectionRate: Double?
         get() = ratio(matchedShots)
 
-    /** Invented arrows per expected arrow. Can exceed one. */
-    val falsePositiveRate: Double
+    /** Invented arrows per expected arrow. Can exceed one. Null when the
+     *  corpus has no expected arrows to measure against. */
+    val falsePositiveRate: Double?
         get() = ratio(falsePositives)
 
     /** Share of true arrows found AND given the right score. The number that
-     *  matters to the archer. */
-    val scoreAccuracy: Double
+     *  matters to the archer. Null when the corpus has no expected arrows to
+     *  measure against. */
+    val scoreAccuracy: Double?
         get() = ratio(correctScores)
 
     /** Null when no entry in the corpus carried positions. */
@@ -61,14 +65,13 @@ class Metrics(
     val p95PositionError: Double?
         get() = percentile(0.95)
 
-    private fun ratio(count: Int): Double =
-        if (expectedShots == 0) 0.0 else count.toDouble() / expectedShots
+    private fun ratio(count: Int): Double? =
+        if (expectedShots == 0) null else count.toDouble() / expectedShots
 
     /** Linear interpolation between order statistics, the common definition. */
     private fun percentile(fraction: Double): Double? {
         if (positionErrors.isEmpty()) return null
         val sorted = positionErrors.sorted()
-        if (sorted.size == 1) return sorted[0]
         val rank = fraction * (sorted.size - 1)
         val lower = rank.toInt()
         val upper = minOf(lower + 1, sorted.size - 1)

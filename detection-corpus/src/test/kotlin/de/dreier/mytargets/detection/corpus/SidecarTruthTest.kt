@@ -99,9 +99,31 @@ class SidecarTruthTest {
 
     @Test
     fun readsTheDirectoryDefault() {
-        assertThat(SidecarTruth.defaultsTargetModel("""{ "targetModel": "WA6Ring" }"""))
-            .isEqualTo("WA6Ring")
-        assertThat(SidecarTruth.defaultsTargetModel("{}")).isNull()
+        assertThat(
+            SidecarTruth.defaultsTargetModel("dir", """{ "targetModel": "WA6Ring" }""")
+        ).isEqualTo("WA6Ring")
+        assertThat(SidecarTruth.defaultsTargetModel("dir", "{}")).isNull()
+    }
+
+    @Test
+    fun aMalformedDefaultsFileNamesItsDirectory() {
+        val error = runCatching {
+            SidecarTruth.defaultsTargetModel("inherited-249", "{ not json")
+        }.exceptionOrNull()
+        assertThat(error).isInstanceOf(IllegalArgumentException::class.java)
+        assertThat(error!!).hasMessageThat().contains("inherited-249")
+    }
+
+    @Test
+    fun aDecimalCommaInAPositionNamesTheImageRatherThanThrowingBare() {
+        // A hand typed decimal comma -- likely on a German-default machine --
+        // parses as valid JSON syntax but fails inside gson's number
+        // conversion with a bare NumberFormatException. That must still be
+        // rewrapped with the image name, the same as any other parse failure.
+        val json = """{ "shots": [ { "score": "9", "x": "0,031", "y": 0.1 } ] }"""
+        val error = runCatching { SidecarTruth.parse("comma.jpg", json) }.exceptionOrNull()
+        assertThat(error).isInstanceOf(IllegalArgumentException::class.java)
+        assertThat(error!!).hasMessageThat().contains("comma.jpg")
     }
 
     @Test

@@ -104,6 +104,17 @@ class MetricsReportTest {
     }
 
     @Test
+    fun anEmptyCorpusReportsNotMeasuredRatherThanZeroPercent() {
+        // A rate of 0.0 % reads as a perfect run. An empty corpus must say
+        // plainly that nothing was measured, so it cannot silently pass a
+        // regression bound such as falsePositiveRate <= 0.05.
+        val report = MetricsReport.render(emptyList(), title = "Empty")
+
+        assertThat(report).contains("not measured")
+        assertThat(report).doesNotContain("0.0 %")
+    }
+
+    @Test
     fun theWorstEntriesTableShowsTheWorstAndNotTheBest() {
         // Six entries against a cap of five: the single good one must be the
         // one left out. A two entry corpus cannot tell a correct sort from a

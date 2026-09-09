@@ -89,16 +89,20 @@ object MetricsReport {
 
     private fun plural(count: Int, one: String, many: String) = if (count == 1) one else many
 
+    /** Renders a value that may be absent -- an empty corpus, or one with no
+     *  annotated positions -- as "not measured" rather than a number that
+     *  could be mistaken for a real zero. */
+    private fun measured(value: Double?, format: (Double) -> String) =
+        if (value == null) "not measured" else format(value)
+
     // Locale.ROOT on purpose: a report that says "97,3 %" on one machine and
     // "97.3 %" on another cannot be diffed between runs.
-    private fun percent(value: Double) =
-        String.format(java.util.Locale.ROOT, "%.1f %%", value * 100.0)
+    private fun percent(value: Double?) = measured(value) {
+        String.format(java.util.Locale.ROOT, "%.1f %%", it * 100.0)
+    }
 
     /** Position errors are in spot radii, so a bare number would be ambiguous. */
-    private fun spotRadii(value: Double?) =
-        if (value == null) {
-            "not measured"
-        } else {
-            String.format(java.util.Locale.ROOT, "%.4f spot radii", value)
-        }
+    private fun spotRadii(value: Double?) = measured(value) {
+        String.format(java.util.Locale.ROOT, "%.4f spot radii", it)
+    }
 }

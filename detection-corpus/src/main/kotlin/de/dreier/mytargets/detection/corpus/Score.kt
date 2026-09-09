@@ -42,7 +42,11 @@ value class Score(val text: String) {
 
         fun of(text: String): Score {
             require(text.isNotBlank()) { "a score needs a value" }
-            return Score(text)
+            // Uppercase and trim so a hand typed "x" or " 9 " equals the
+            // canonical "X" or "9" -- otherwise a sidecar typo is counted as
+            // both a missed arrow and an invented one instead of one
+            // mis-scored arrow.
+            return Score(text.trim().uppercase())
         }
 
         /**

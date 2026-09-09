@@ -38,6 +38,17 @@ class CorpusEntryTest {
     }
 
     @Test
+    fun scoreOfNormalisesCaseAndWhitespace() {
+        // Score.parseFilenameChar already normalises 'x' to "X". Score.of must
+        // match it, or a sidecar written "score": "x" produces a Score that
+        // never equals Score.X -- one typo counted as both a missed arrow and
+        // an invented one.
+        assertThat(Score.of("x")).isEqualTo(Score.X)
+        assertThat(Score.of("m")).isEqualTo(Score.MISS)
+        assertThat(Score.of(" 9 ")).isEqualTo(Score.of("9"))
+    }
+
+    @Test
     fun missIsRecognised() {
         assertThat(Score.MISS.isMiss).isTrue()
         assertThat(Score.X.isMiss).isFalse()

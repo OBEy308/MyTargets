@@ -59,7 +59,7 @@ object CorpusLoader {
 
         val defaultsFile = File(directory, DEFAULTS_FILE)
         val defaultModel = if (defaultsFile.isFile) {
-            SidecarTruth.defaultsTargetModel(defaultsFile.readText())
+            SidecarTruth.defaultsTargetModel(directory.name, defaultsFile.readText())
         } else {
             null
         }

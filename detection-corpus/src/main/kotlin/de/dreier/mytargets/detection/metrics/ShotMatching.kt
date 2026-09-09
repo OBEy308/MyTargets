@@ -88,6 +88,11 @@ object ShotMatching {
     ): MatchResult {
         val candidates = mutableListOf<MatchedPair>()
         entry.shots.forEachIndexed { truthIndex, truth ->
+            // matchByPosition only runs when entry.hasPositions is true, which
+            // means every shot in this entry carries a position -- so this
+            // can never actually skip a shot. Kept null-safe anyway rather
+            // than asserted, so a future change to hasPositions cannot turn
+            // this into a silent NPE instead of a silent skip.
             val truthPosition = truth.position ?: return@forEachIndexed
             detected.forEachIndexed { detectedIndex, record ->
                 val distance = truthPosition.distanceTo(record.position)

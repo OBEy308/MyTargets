@@ -44,9 +44,9 @@ class MetricsTest {
         val e = entry("p.jpg", shots = arrayOf(truth("X", 0.0, 0.0), truth("9", 0.3, 0.0)))
         val m = Metrics.over(listOf(outcome(e, listOf(found("X", 0.0, 0.0), found("9", 0.3, 0.0)))))
 
-        assertThat(m.detectionRate).isWithin(1e-9).of(1.0)
-        assertThat(m.falsePositiveRate).isWithin(1e-9).of(0.0)
-        assertThat(m.scoreAccuracy).isWithin(1e-9).of(1.0)
+        assertThat(m.detectionRate!!).isWithin(1e-9).of(1.0)
+        assertThat(m.falsePositiveRate!!).isWithin(1e-9).of(0.0)
+        assertThat(m.scoreAccuracy!!).isWithin(1e-9).of(1.0)
         assertThat(m.medianPositionError!!).isWithin(1e-9).of(0.0)
     }
 
@@ -55,9 +55,9 @@ class MetricsTest {
         val e = entry("m.jpg", shots = arrayOf(truth("X", 0.0, 0.0), truth("9", 0.3, 0.0)))
         val m = Metrics.over(listOf(outcome(e, listOf(found("X", 0.0, 0.0)))))
 
-        assertThat(m.detectionRate).isWithin(1e-9).of(0.5)
-        assertThat(m.scoreAccuracy).isWithin(1e-9).of(0.5)
-        assertThat(m.falsePositiveRate).isWithin(1e-9).of(0.0)
+        assertThat(m.detectionRate!!).isWithin(1e-9).of(0.5)
+        assertThat(m.scoreAccuracy!!).isWithin(1e-9).of(0.5)
+        assertThat(m.falsePositiveRate!!).isWithin(1e-9).of(0.0)
     }
 
     @Test
@@ -65,8 +65,8 @@ class MetricsTest {
         val e = entry("f.jpg", shots = arrayOf(truth("X", 0.0, 0.0)))
         val m = Metrics.over(listOf(outcome(e, listOf(found("X", 0.0, 0.0), found("9", 0.8, 0.0)))))
 
-        assertThat(m.detectionRate).isWithin(1e-9).of(1.0)
-        assertThat(m.falsePositiveRate).isWithin(1e-9).of(1.0)
+        assertThat(m.detectionRate!!).isWithin(1e-9).of(1.0)
+        assertThat(m.falsePositiveRate!!).isWithin(1e-9).of(1.0)
     }
 
     @Test
@@ -83,7 +83,7 @@ class MetricsTest {
 
         assertThat(m.matchedShots).isEqualTo(1)
         assertThat(m.falsePositives).isEqualTo(2)
-        assertThat(m.falsePositiveRate).isWithin(1e-9).of(1.0)
+        assertThat(m.falsePositiveRate!!).isWithin(1e-9).of(1.0)
     }
 
     @Test
@@ -91,8 +91,8 @@ class MetricsTest {
         val e = entry("w.jpg", shots = arrayOf(truth("X", 0.0, 0.0)))
         val m = Metrics.over(listOf(outcome(e, listOf(found("9", 0.01, 0.0)))))
 
-        assertThat(m.detectionRate).isWithin(1e-9).of(1.0)
-        assertThat(m.scoreAccuracy).isWithin(1e-9).of(0.0)
+        assertThat(m.detectionRate!!).isWithin(1e-9).of(1.0)
+        assertThat(m.scoreAccuracy!!).isWithin(1e-9).of(0.0)
     }
 
     @Test
@@ -114,8 +114,8 @@ class MetricsTest {
         )
         val m = Metrics.over(listOf(outcome(e, detected)))
 
-        assertThat(m.detectionRate).isWithin(1e-9).of(1.0)
-        assertThat(m.scoreAccuracy).isWithin(1e-9).of(2.0 / 3.0)
+        assertThat(m.detectionRate!!).isWithin(1e-9).of(1.0)
+        assertThat(m.scoreAccuracy!!).isWithin(1e-9).of(2.0 / 3.0)
     }
 
     @Test
@@ -126,7 +126,7 @@ class MetricsTest {
         val e = entry("s.jpg", shots = shots)
         val m = Metrics.over(listOf(outcome(e, listOf(found("9", 0.0, 0.0)))))
 
-        assertThat(m.scoreAccuracy).isWithin(1e-9).of(1.0 / 6.0)
+        assertThat(m.scoreAccuracy!!).isWithin(1e-9).of(1.0 / 6.0)
     }
 
     @Test
@@ -158,19 +158,23 @@ class MetricsTest {
         val e = entry("r.jpg", shots = arrayOf(TruthShot(Score.of("9")), TruthShot(Score.of("8"))))
         val m = Metrics.over(listOf(outcome(e, listOf(found("9", 0.0, 0.0), found("8", 0.5, 0.0)))))
 
-        assertThat(m.detectionRate).isWithin(1e-9).of(1.0)
-        assertThat(m.scoreAccuracy).isWithin(1e-9).of(1.0)
+        assertThat(m.detectionRate!!).isWithin(1e-9).of(1.0)
+        assertThat(m.scoreAccuracy!!).isWithin(1e-9).of(1.0)
         assertThat(m.entriesWithPositions).isEqualTo(0)
         assertThat(m.medianPositionError).isNull()
         assertThat(m.p95PositionError).isNull()
     }
 
     @Test
-    fun anEmptyCorpusYieldsZerosAndNoPositionError() {
+    fun anEmptyCorpusMeasuresNothingRatherThanReportingZero() {
+        // A rate of 0.0 would read as a perfect run once printed as a
+        // percentage, and would silently pass any regression bound placed on
+        // it. An empty corpus must say it measured nothing instead.
         val m = Metrics.over(emptyList())
         assertThat(m.expectedShots).isEqualTo(0)
-        assertThat(m.detectionRate).isWithin(1e-9).of(0.0)
-        assertThat(m.scoreAccuracy).isWithin(1e-9).of(0.0)
+        assertThat(m.detectionRate).isNull()
+        assertThat(m.falsePositiveRate).isNull()
+        assertThat(m.scoreAccuracy).isNull()
         assertThat(m.medianPositionError).isNull()
     }
 
@@ -187,7 +191,7 @@ class MetricsTest {
         )
 
         assertThat(byTag.keys).containsExactly("dark", "untagged")
-        assertThat(byTag["dark"]!!.detectionRate).isWithin(1e-9).of(0.0)
-        assertThat(byTag["untagged"]!!.detectionRate).isWithin(1e-9).of(1.0)
+        assertThat(byTag["dark"]!!.detectionRate!!).isWithin(1e-9).of(0.0)
+        assertThat(byTag["untagged"]!!.detectionRate!!).isWithin(1e-9).of(1.0)
     }
 }

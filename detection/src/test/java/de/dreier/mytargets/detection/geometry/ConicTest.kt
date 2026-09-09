@@ -74,6 +74,12 @@ class ConicTest {
     }
 
     @Test
+    fun fitRejectsCollinearPoints() {
+        val collinear = (0 until 6).map { Vec2(it.toDouble(), 0.0) }
+        assertThat(Conic.fit(collinear)).isNull()
+    }
+
+    @Test
     fun transformedConicVanishesOnTransformedPoints() {
         val h = Mat3.of(
             1.3, 0.2, 40.0,

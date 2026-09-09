@@ -114,7 +114,16 @@ class Conic(val matrix: Mat3) {
                 v[1] / 2.0, v[2], v[4] / 2.0,
                 v[3] / 2.0, v[4] / 2.0, v[5]
             )
-            if (normalisedConic.det().isNaN()) return null
+
+            // Check for degeneracy: reject rank-deficient conics (e.g. a doubled line
+            // from collinear points). An isNaN() test does not work because SymmetricEigen
+            // guards every division, so finite input produces finite output. Instead use
+            // a scale-relative threshold like Mat3.inverse() does.
+            val d = normalisedConic.det()
+            val scale = maxOf(
+                abs(v[0]), abs(v[1]), abs(v[2]), abs(v[3]), abs(v[4]), abs(v[5])
+            )
+            if (scale == 0.0 || abs(d) < 1e-12 * scale * scale * scale) return null
 
             // Undo the normalisation: C = T^T C_norm T
             return Conic(t.transpose() * normalisedConic * t)

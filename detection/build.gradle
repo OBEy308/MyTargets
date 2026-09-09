@@ -1,0 +1,57 @@
+/*
+ * Copyright (C) 2026 MyTargets contributors
+ *
+ * This file is part of MyTargets.
+ *
+ * MyTargets is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2
+ * as published by the Free Software Foundation.
+ *
+ * MyTargets is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+plugins {
+    alias(libs.plugins.android.library)
+    alias(libs.plugins.kotlin.android)
+}
+
+android {
+    namespace = "de.dreier.mytargets.detection"
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+    defaultConfig {
+        minSdkVersion libs.versions.minSdk.get().toInteger()
+        compileSdk libs.versions.compileSdk.get().toInteger()
+    }
+
+    // Must mirror the flavors of :shared, otherwise the dependency cannot be resolved.
+    flavorDimensions "mode"
+    productFlavors {
+        dev { dimension "mode" }
+        regular { dimension "mode" }
+        screengrab { dimension "mode" }
+    }
+
+    // The catalog has no separate targetSdk entry; :app effectively uses compileSdk too.
+    lint {
+        targetSdk libs.versions.compileSdk.get().toInteger()
+    }
+    testOptions {
+        targetSdk libs.versions.compileSdk.get().toInteger()
+    }
+}
+
+dependencies {
+    implementation libs.kotlin.stdlib.jdk7
+
+    testImplementation libs.junit4
+    testImplementation libs.truth
+}

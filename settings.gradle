@@ -25,6 +25,7 @@ pluginManagement {
 include ':app'
 include ':wearable'
 include ':shared'
+include ':detection'
 include ':tools'
 include ':discreteseekbar'
 include ':signaturepad'

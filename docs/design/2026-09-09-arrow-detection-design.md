@@ -522,7 +522,7 @@ lokalisieren, nur erraten.
    `<DETECTION_CORPUS_DIR>/inherited-249/`, mit Ringwerten im Dateinamen und
    ohne Positionen. Sie decken dunkel, verrauscht, überlappend, frontal und
    mehrere Auflagen ab — nicht aber die von dieser Spec bevorzugte leicht
-   schräge Aufnahme, verkantete Bilder oder Spiegelauflagen. Eigene Fotos
+   schräge Aufnahme, verkantete Bilder oder 3-Spot-Auflagen. Eigene Fotos
    ergänzen genau diese Lücken; Originalauflösung behalten.
 3. **APK-Zuwachs durch OpenCV messen** (siehe *Offene Risiken*), bevor die
    Abhängigkeit festgezurrt wird.

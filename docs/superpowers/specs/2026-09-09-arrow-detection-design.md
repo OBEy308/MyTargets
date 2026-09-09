@@ -291,8 +291,9 @@ Extra** — ohne die Ansicht lässt sich ein Fehler nicht lokalisieren, nur erra
 
 ## Reihenfolge der Umsetzung
 
-1. **Build-Umgebung herstellen.** Auf der Entwicklungsmaschine fehlen derzeit
-   JDK und Android SDK. Ohne sie läuft weder Gradle noch ein Test.
+1. ~~**Build-Umgebung herstellen.**~~ Erledigt. Android Studio mit JBR (JDK 25)
+   und SDK unter `D:\AndroidSDK`. Drei Hürden waren dabei zu nehmen, alle
+   dokumentiert unter *Lokale Build-Voraussetzungen*.
 2. **Fotos sammeln.** Bevor genug Korpusbilder da sind, ist jede Zeile
    Pipeline-Code unüberprüfbar.
 3. Modul `:detection` anlegen, Schnittstelle und Datentypen.
@@ -300,6 +301,31 @@ Extra** — ohne die Ansicht lässt sich ein Fehler nicht lokalisieren, nur erra
 5. Debug-Ansicht, sobald Stufe 3 ein Bild liefert.
 6. Wahrnehmungsstufen gegen den Korpus, Kennzahlen festschreiben.
 7. Integration in `InputActivity` samt Fotoablage und Fehlerfällen.
+
+## Lokale Build-Voraussetzungen
+
+Der Klon baut nicht ohne drei lokale Handgriffe. Alle drei betreffen Dateien,
+die bewusst nicht im Repo liegen (`.gitignore`), plus eine Codekorrektur.
+
+**`local.properties`** — `sdk.dir` auf das Android SDK zeigen lassen.
+
+**`gradle-local.properties`** — aus `gradle-local.properties.example` erzeugen.
+Die Vorlage zeigt auf `../debug.keystore` und `../keystore.jks`, die der Fork
+(zu Recht) aus dem Repo entfernt hat. Für Debug-Builds genügt der
+Standard-Android-Keystore unter `~/.android/debug.keystore`; existiert er nicht,
+lässt er sich mit `keytool` erzeugen (`-alias androiddebugkey`, Passwort
+`android`). Release-Signatur ist lokal nicht eingerichtet.
+
+**`app/google-services.json`** — wird vom Google-Services-Plugin verlangt, das
+über den `plugins`-Block aktiv ist (der auskommentierte `apply plugin` weiter
+unten in `app/build.gradle` ist ein Altrest und führt in die Irre). Eine
+Platzhalterdatei genügt zum Bauen; Firebase und Crashlytics funktionieren damit
+nicht, was für die Entwicklung unerheblich ist.
+
+**Codekorrektur `b87dd2d7`** — davon unabhängig war das Projekt schlicht nicht
+baubar: Zwei Klassen registrierten denselben `selectedUnit`-Adapter, und Data
+Binding brach kapt mit einer leeren Fehlerliste ab. Das betraf auch den Stand
+*vor* dem Fork-Merge, war also keine Regression des Merges.
 
 ## Offene Risiken
 
@@ -321,8 +347,11 @@ offen (stiller Datenverlust in `EditRoundFragment.onSaveRound`, wenn
 `selectedItem` null ist — `finish()` läuft dort bereits vor dem Speichern). Nicht
 alle 163 geänderten Dateien wurden gelesen.
 
-**Die drei Korrekturen sind nicht kompiliert.** Sie entstanden ohne verfügbares
-JDK und sind bislang nur sorgfältig gelesen, nicht gebaut und nicht getestet.
+**Die Korrekturen sind kompiliert, aber nicht zur Laufzeit geprüft.**
+`:app:assembleDevDebug` läuft durch und erzeugt ein APK. Damit ist belegt, dass
+sie übersetzen — nicht, dass sie sich richtig verhalten. Insbesondere sind
+`Migration27` (an einer echten Altdatenbank) und die Positionswiederherstellung
+nach Prozesstod noch auf dem Gerät nachzustellen.
 
 ## Upgrade-Pfad zu Ansatz C
 

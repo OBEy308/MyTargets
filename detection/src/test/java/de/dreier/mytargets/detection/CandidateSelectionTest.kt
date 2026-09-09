@@ -1,3 +1,18 @@
+/*
+ * Copyright (C) 2026 MyTargets contributors
+ *
+ * This file is part of MyTargets.
+ *
+ * MyTargets is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2
+ * as published by the Free Software Foundation.
+ *
+ * MyTargets is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
 package de.dreier.mytargets.detection
 
 import com.google.common.truth.Truth.assertThat
@@ -94,5 +109,28 @@ class CandidateSelectionTest {
         )
         assertThat(outcome.accepted).hasSize(6)
         assertThat(outcome.reason).isEqualTo(SelectionReason.COMPLETE)
+    }
+
+    @Test
+    fun anOversubscribedSpotCanCrowdOutAnotherSpotsArrow() {
+        // Known limitation of running the confidence selection before the per
+        // spot cap: 0.95 and 0.90 take both places on raw confidence, then the
+        // cap leaves only 0.95, and the uncontested arrow on spot 1 is lost.
+        // Capping first would keep 0.95 and 0.30, but that order fails two of
+        // this file's other tests. Pinned here so that changing it is a
+        // decision, not an accident. See the KDoc on CandidateSelection.select.
+        val outcome = CandidateSelection.select(
+            listOf(
+                candidate(0.95, faceIndex = 0),
+                candidate(0.90, faceIndex = 0),
+                candidate(0.30, faceIndex = 1),
+                candidate(0.20, faceIndex = 1)
+            ),
+            expectedShots = 2,
+            maxPerSpot = 1
+        )
+        assertThat(outcome.accepted).hasSize(1)
+        assertThat(outcome.accepted[0].confidence).isWithin(1e-9).of(0.95)
+        assertThat(outcome.reason).isEqualTo(SelectionReason.SPOT_OVERFLOW)
     }
 }

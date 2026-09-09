@@ -63,6 +63,19 @@ object CandidateSelection {
     private const val REQUIRED_CONFIDENCE_GAP = 0.15
 
     /**
+     * Selects which candidates become accepted shots, applying two filters in order:
+     * confidence-based selection, then per-spot capacity.
+     *
+     * Confidence selection runs first to detect ambiguity on the full candidate set. The
+     * per-spot cap would otherwise remove surplus candidates before the margin rule can
+     * compare them, losing information about whether they contest a place. This order means
+     * candidates on an oversubscribed spot can crowd a legitimate arrow on a different spot
+     * out of the global ranking: for example, 0.95 and 0.90 on spot 0, 0.30 and 0.20 on
+     * spot 1, with expectedShots=2 and maxPerSpot=1 will accept only 0.95 (the cap removes
+     * 0.90), losing the uncontested 0.30. Swapping the order would keep 0.95 and 0.30, but
+     * breaks two other tests. Resolution waits on measured detector confidences, so the
+     * order is not changed lightly.
+     *
      * @param maxPerSpot how many arrows one spot can hold in this end,
      *        ceil(shotsPerEnd / faceCount); equal to [expectedShots] for a
      *        single spot face, where it has no effect

@@ -330,6 +330,29 @@ class MetricsTest {
     }
 
     @Test
+    fun unresolvedArrowsForgiveEveryUnmatchedDetectionNotJustAsManyAsAreUnresolved() {
+        // This is the case that actually tells the literal README rule apart
+        // from the tighter "forgive only min(surplus, unresolvedArrows)"
+        // reading: one unresolved arrow but THREE surplus detections. The
+        // literal rule forgives all three; the tighter rule would still
+        // charge two of them as false positives. The other two tests in this
+        // file (unresolved = 2 with exactly 2 surplus detections) cannot
+        // distinguish the two rules, because they happen to agree whenever
+        // surplus <= unresolvedArrows.
+        val e = entryWithUnresolved(unresolved = 1)
+        val detected = listOf(
+            found(0, 0.0, 0.0), found(2, 0.3, 0.0),
+            found(3, 0.6, 0.0), found(3, 0.9, 0.0),
+            found(2, 2.0, 0.0), found(2, 3.0, 0.0), found(2, 4.0, 0.0)
+        )
+        val m = Metrics.over(listOf(outcome(e, detected)))
+
+        assertThat(m.matchedShots).isEqualTo(4)
+        assertThat(m.falsePositives).isEqualTo(0)
+        assertThat(m.forgivenEntries).isEqualTo(1)
+    }
+
+    @Test
     fun ringAccuracyCountsOnlyComparableTruth() {
         // An inherited entry carries printed values; a detector that reports only
         // zone indices cannot be scored against it, so it must not drag the ring

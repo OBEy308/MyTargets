@@ -32,13 +32,22 @@ class EntryOutcome(
  * hits at all, some entries carry hits with no position, and ring accuracy
  * can only be judged where the truth and the detection carry a comparable
  * kind of score. Mixing all of that into one shared denominator would hide
- * exactly what was measured, so every rate here gets its own count of what
- * it is a share of.
+ * exactly what was measured, so each rate here has its own denominator, and
+ * the two are not the same shot count.
  *
- * All rates are relative to the EXPECTED shots (or the comparable subset of
- * them), never to the matched ones. A detector that misses five of six
- * arrows and scores the sixth correctly must not come out at a hundred
- * percent ring accuracy.
+ * [detectionRate] is against every listed truth shot: a missed arrow always
+ * lowers it. [scoreAccuracy] is against the shots that were actually MATCHED
+ * and whose truth is comparable with what the detector reported; a missed
+ * arrow has nothing to compare, so it lowers [detectionRate] and leaves
+ * [scoreAccuracy] untouched. A detector that misses five of six arrows and
+ * scores the sixth correctly is not perfectly accurate on the whole end --
+ * [detectionRate] says so -- but it did get the one comparison it could make
+ * right, and [scoreAccuracy] says that too.
+ *
+ * A rate is meaningless without knowing what it was measured against, which
+ * is why every rate here is nullable rather than reporting a zero for a
+ * denominator of zero, and why the report prints the denominator alongside
+ * the rate.
  */
 class Metrics(
     val expectedShots: Int,

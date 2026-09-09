@@ -142,7 +142,7 @@ class InputActivity : ChildActivityBase(), TargetViewBase.OnEndFinishedListener,
         updateSummaryVisibility()
 
         if (data == null) {
-            supportLoaderManager.initLoader(0, intent.extras, this).forceLoad()
+            supportLoaderManager.initLoader(0, loaderArgs(savedInstanceState), this).forceLoad()
         }
         LocalBroadcastManager.getInstance(this).registerReceiver(
             updateReceiver,
@@ -161,17 +161,37 @@ class InputActivity : ChildActivityBase(), TargetViewBase.OnEndFinishedListener,
         // causing TransactionTooLargeException during activityStopped.
         // On recreation, data == null triggers the loader to reload from DB.
         //
-        // Persist current round/end position into intent extras so the loader
-        // restores the user to the correct position, not the original launch position.
+        // Persist the current round/end position in outState so the loader restores
+        // the user to the correct position, not the original launch position.
+        //
+        // This must go into outState rather than into the intent: local mutations of
+        // getIntent() are not handed back to the system, so after process death the
+        // recreated activity receives the unmodified launch intent. outState is the
+        // only channel that survives it.
         val d = data
         if (d != null) {
-            val currentRound = d.currentRound.round
-            intent.putExtra(ROUND_ID, currentRound.id)
-            intent.putExtra(END_INDEX, d.endIndex)
+            outState.putLong(TRAINING_ID, d.training.training.id)
+            outState.putLong(ROUND_ID, d.currentRound.round.id)
+            outState.putInt(END_INDEX, d.endIndex)
         }
         data = null
         super.onSaveInstanceState(outState)
         data = d
+    }
+
+    /**
+     * Arguments for the loader: the position saved in [savedInstanceState] if the
+     * activity is being restored, otherwise the position it was launched with.
+     */
+    private fun loaderArgs(savedInstanceState: Bundle?): Bundle? {
+        if (savedInstanceState != null && savedInstanceState.containsKey(ROUND_ID)) {
+            return Bundle().apply {
+                putLong(TRAINING_ID, savedInstanceState.getLong(TRAINING_ID))
+                putLong(ROUND_ID, savedInstanceState.getLong(ROUND_ID))
+                putInt(END_INDEX, savedInstanceState.getInt(END_INDEX))
+            }
+        }
+        return intent.extras
     }
 
     override fun onResume() {

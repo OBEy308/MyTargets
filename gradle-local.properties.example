@@ -8,3 +8,7 @@ KEY_ALIAS=replace_me
 KEY_PASSWORD=replace_me
 CROWDIN_API_KEY=replace_me
 PLAY_STORE_JSON=../googlePlayAndroidDeveloper.json
+
+# Optional: test photo corpus for the arrow detection, kept outside the repository.
+# Leave unset to skip the corpus tests. See BUILDING.md, section 4.
+DETECTION_CORPUS_DIR=../MyTargets-corpus

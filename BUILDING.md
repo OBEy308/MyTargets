@@ -1,7 +1,8 @@
 # Building
 
 A fresh clone does not build as-is. Three files are deliberately kept out of
-version control (see `.gitignore`) and have to be supplied locally.
+version control (see `.gitignore`) and have to be supplied locally. A fourth
+item, the photo corpus for the arrow detection, is optional.
 
 ## Requirements
 
@@ -75,6 +76,22 @@ Otherwise a placeholder is enough to build. It needs one `client` entry per
 application id — `de.dreier.mytargets` and, for debug builds,
 `de.dreier.mytargets.debug`. Firebase and Crashlytics will not work with a
 placeholder, which does not matter for development.
+
+## 4. Photo corpus (optional)
+
+The arrow detection (`docs/design/2026-09-09-arrow-detection-design.md`) is
+measured against real photos of target faces. They are not in the repository:
+they are large, they never change, and they are not covered by the project's
+licence. Keep them in a folder next to the checkout and point to it from
+`gradle-local.properties`:
+
+```properties
+DETECTION_CORPUS_DIR=../MyTargets-corpus
+```
+
+Without the entry the corpus tests are skipped and everything else builds as
+usual. The folder layout, the naming scheme and the ground truth format are
+described in the corpus's own `README.md`.
 
 ## Build
 

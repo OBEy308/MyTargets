@@ -1,0 +1,88 @@
+# Building
+
+A fresh clone does not build as-is. Three files are deliberately kept out of
+version control (see `.gitignore`) and have to be supplied locally.
+
+## Requirements
+
+- Android Studio, or a JDK plus the Android command line tools
+- An Android SDK matching `compileSdk` in `gradle/libs.versions.toml`
+
+If you build from the command line, point `JAVA_HOME` at a JDK. The one bundled
+with Android Studio works:
+
+```
+# Windows
+set JAVA_HOME=<Android Studio>\jbr
+
+# macOS / Linux
+export JAVA_HOME=<Android Studio>/jbr
+```
+
+## 1. `local.properties`
+
+Tells Gradle where the SDK is. Android Studio writes this file on first open;
+for command line builds create it yourself:
+
+```properties
+sdk.dir=/path/to/Android/Sdk
+```
+
+On Windows use forward slashes (`sdk.dir=D:/AndroidSDK`) or escaped backslashes.
+
+## 2. `gradle-local.properties`
+
+Holds the signing configuration. Copy the template and edit it:
+
+```
+cp gradle-local.properties.example gradle-local.properties
+```
+
+The template points at `../debug.keystore` and `../keystore.jks`, neither of
+which is in the repository. For debug builds, point `DEBUG_KEYSTORE_*` at the
+standard Android debug keystore instead:
+
+```properties
+DEBUG_KEYSTORE_NAME=/path/to/home/.android/debug.keystore
+DEBUG_KEYSTORE_PASSWORD=android
+DEBUG_KEY_ALIAS=androiddebugkey
+DEBUG_KEY_PASSWORD=android
+```
+
+If that keystore does not exist yet, create it:
+
+```
+keytool -genkeypair -v \
+  -keystore ~/.android/debug.keystore \
+  -storepass android -keypass android \
+  -alias androiddebugkey \
+  -keyalg RSA -keysize 2048 -validity 10000 \
+  -dname "CN=Android Debug,O=Android,C=US"
+```
+
+`KEYSTORE_*` is only needed for release builds. Point it at the debug keystore
+too if you only build debug variants — the values must resolve, but they are not
+used.
+
+## 3. `app/google-services.json`
+
+The Google Services plugin is applied through the `plugins` block in
+`app/build.gradle` and refuses to run without this file. (The commented-out
+`apply plugin` further down in the same file is a leftover and misleading.)
+
+If you have a Firebase project, download its `google-services.json` into `app/`.
+Otherwise a placeholder is enough to build. It needs one `client` entry per
+application id — `de.dreier.mytargets` and, for debug builds,
+`de.dreier.mytargets.debug`. Firebase and Crashlytics will not work with a
+placeholder, which does not matter for development.
+
+## Build
+
+```
+./gradlew :app:assembleDevDebug
+```
+
+The APK lands in `app/build/outputs/apk/dev/debug/`.
+
+There are three product flavors — `dev`, `regular` and `screengrab`. Plain
+`assembleDebug` builds all three; name the flavor to build just one.

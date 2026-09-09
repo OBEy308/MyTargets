@@ -14,7 +14,10 @@ Android app, which helps archers keep track of their training progress.
 </a>
 
 ## Build ##
-The project is written in Kotlin and therefore can be built using Android Studio 3.0 or newer.
+The project is written in Kotlin and is built with Android Studio or Gradle.
+
+A fresh clone needs three files that are not in version control before it will
+build. See [BUILDING.md](BUILDING.md).
 
 ## Contribute
 Every contribution is very welcome.

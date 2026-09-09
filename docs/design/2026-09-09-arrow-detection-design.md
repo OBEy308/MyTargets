@@ -1,0 +1,491 @@
+# Bilderkennung geschossener Pfeile — Design
+
+Datum: 2026-09-09 (überarbeitet nach Review am selben Tag)
+Status: Entwurf zur Umsetzung
+Basis: `merge/eidgah-3.5.0` (Version 3.5.0, `ee274123` plus drei Korrekturen)
+
+## Ziel
+
+Der Schütze fotografiert nach jeder Passe die Auflage. Die App erkennt die
+steckenden Pfeile, errechnet Lage und Ringwert und trägt sie als Treffer der
+laufenden Passe ein. Das Foto wird zur Passe gespeichert, sodass die Korrektur
+nicht am Schießplatz stattfinden muss.
+
+Der Nutzen ist die Zeitersparnis am Ziel und eine Trefferlage, die genauer ist
+als das, was sich mit dem Finger auf einem Handydisplay antippen lässt.
+
+## Annahmen
+
+Diese Annahmen begrenzen den Lösungsraum. Ändert sich eine, ist das Design neu
+zu bewerten.
+
+| Annahme | Begründung |
+|---|---|
+| Nahaufnahme aus 1–3 m, **leicht schräg** (etwa 20–40° zur Scheibennormalen) | Der Schütze geht ohnehin zum Ziel, um die Pfeile zu ziehen. Aufnahmen von der Schießlinie lösen die Pfeilspitzen nicht auf. Die Schrägstellung ist gewollt: Erst sie macht jeden Schaft zu einem eindeutigen Streifen (siehe Stufe 6). Frontale Aufnahmen funktionieren, sind aber der schwächere Fall. |
+| Ein Foto pro Passe, Pfeile stecken noch | Eindeutige Zuordnung ohne Vergleich mit Vorbildern. |
+| Auflagen: WA Full-Face und WA Spiegel/3-Spot | Beide sind farblich und geometrisch exakt im Modell beschrieben. Feldbogen und 3D bleiben außen vor. |
+| Vollständig offline auf dem Gerät | Bogenplätze haben oft kein Netz. MyTargets ist GPLv2 und F-Droid-freundlich. |
+| Kamera wird aufrecht gehalten | Konzentrische Kreise legen die Drehung um die Scheibenachse nicht fest (siehe *Offene Risiken*). |
+| Bei Spiegelauflagen steckt je Passe höchstens ein Pfeil pro Spot | Das Datenmodell ordnet Treffer über den Schussindex einem Spot zu und kann zwei Pfeile in einem Spot nicht darstellen (siehe *Koordinatensystem*). |
+
+## Umfang
+
+**In v1:**
+
+- Erkennung von Trefferlage (`x`/`y`), Spot und Ringwert (`scoringRing`)
+- Eintragen in die laufende Passe über den bestehenden `TargetView`
+- Speichern des **unverzerrten Fotos** als `EndImage` der Passe
+- Nachscannen eines bereits gespeicherten Passenfotos aus der Galerie
+- Fehlerbehandlung mit unterscheidbaren Meldungen
+- Debug-Ansicht der Pipelinestufen im Debug-Build
+- Testkorpus mit Wahrheitsdaten und vier Kennzahlen
+
+**Ausdrücklich nicht in v1:**
+
+- Erkennung von Pfeilnummern (auf dem Foto meist unlesbar)
+- Optische Markierung unsicherer Treffer im `TargetView`
+- Feldbogen-, IFAA- und 3D-Auflagen sowie 5- und 6-Spot-Auflagen
+- Aufnahmen von der Schießlinie
+- Mehrere Passen auf einem Bild
+
+## Architektur
+
+### Modulschnitt
+
+```
+:wearable ──> :shared                    (unverändert)
+:app ──> :detection ──> :shared          (neu)
+```
+
+`:detection` ist ein eigenes Gradle-Modul (Android-Library, weil `Bitmap` und
+die Modellklassen aus `:shared` Android-Typen wie `PointF` verwenden). Der
+ausschlaggebende Grund für das eigene Modul ist die **Iterationsgeschwindigkeit**:
+`:app` umfasst 255 Kotlin-Dateien und 60 Layouts mit kapt, Data Binding,
+Navigation-Safe-Args und Crashlytics in der Build-Kette. CV-Arbeit bedeutet
+dutzende Durchläufe pro Sitzung; jeder davon hinge sonst am vollständigen
+App-Build.
+
+Zweitens erzwingt die Modulgrenze, was sonst Disziplin wäre: In `:app` lägen
+Room-DAOs, `SharedPreferences` und `InputActivity` in Reichweite, und die
+Erkennung würde über kurz oder lang selbst darauf zugreifen — womit sie ohne
+Datenbank nicht mehr testbar wäre.
+
+`:detection` verwendet aus `:shared` ausschließlich `Target` und
+`TargetModelBase` (Zonenradien, Farben, `faceRadius`, `facePositions`). Es kennt
+weder Room noch UI noch Kontext. `TargetDrawable` wird **nicht** verwendet, siehe
+Stufe 4.
+
+Abhängigkeit: OpenCV, ab 4.9 als Maven-Artefakt `org.opencv:opencv` verfügbar
+(Apache-2.0, mit GPLv2 verträglich). Die nativen Bibliotheken vergrößern das
+APK spürbar; über ABI-Splits beziehungsweise ein App Bundle bekommt der einzelne
+Nutzer nur seine Architektur. Die Alternative — Segmentierung, Kegelschnittfit
+und Warp in reinem Kotlin — ist machbar und würde APK und F-Droid-Build
+einfacher halten. Sie wird bewusst zurückgestellt: Erst wenn die Pipeline am
+Korpus funktioniert, lohnt sich die Frage, ob sich der Nachbau der genutzten
+Funktionen rechnet. Die Schnittstelle unten macht den Tausch möglich.
+
+### Schnittstelle
+
+```kotlin
+interface ArrowDetector {
+    fun detect(bitmap: Bitmap, target: Target, expectedShots: Int): DetectionResult
+}
+
+data class DetectionResult(
+    val shots: List<DetectedShot>,      // x/y spot-lokal, siehe Koordinatensystem
+    val faceConfidence: Float,          // Güte der Auflagenregistrierung
+    val failure: DetectionFailure?      // null bei Erfolg
+)
+
+data class DetectedShot(
+    val faceIndex: Int,                 // Spot, 0 bei Vollauflage
+    val x: Float,
+    val y: Float,
+    val confidence: Float
+)
+
+enum class DetectionFailure { FACE_NOT_FOUND, FACE_MISMATCH }
+```
+
+Ein Bitmap und ein `Target` hinein, eine Trefferliste heraus. Kein Kamerazugriff,
+kein Kontext, keine Nebenwirkungen. Genau diese Enge macht die Pipeline gegen
+einen Testkorpus prüfbar und erlaubt später den Tausch der Pfeilerkennung
+(Ansatz C), ohne die App anzufassen.
+
+### Koordinatensystem
+
+`Shot.x`/`Shot.y` sind **spot-lokale** Koordinaten: Mittelpunkt des Spots `(0,0)`,
+äußerster Ring des Spots Radius `1.0`. Bei der Vollauflage ist der Spot die ganze
+Auflage (`WAFull.kt`, Zonen bis `1.0`). Bei Spiegelauflagen gilt dasselbe je
+Spot: `WA5Ring` definiert seine Zonen ebenfalls bis Radius `1.0`, obwohl der
+Spot auf der Gesamtauflage nur `faceRadius = 0.32` groß ist. `faceRadius` und
+`facePositions` beschreiben nur die Anordnung der Spots auf der Auflage. Der
+Ringwert folgt aus den spot-lokalen Koordinaten über
+`TargetModelBase.getZoneFromPoint()`.
+
+**Welcher Spot zu einem Treffer gehört, steht nicht im `Shot`.** Es ergibt sich
+aus `shot.index % faceCount` (`TargetImpactDrawable.kt:103`, `TargetView.kt:123`).
+Der Schütze schießt Spot 0, 1, 2 der Reihe nach. Daraus folgt für die Pipeline:
+
+1. Stufe 3 entzerrt in **Auflagenkoordinaten** (Vollauflage: Radius `1.0`;
+   3-Spot: der Bereich, der alle drei Spots umfasst).
+2. Für jeden Kandidaten wird der Spot bestimmt, dessen Kreis um
+   `facePositions[i]` mit Radius `faceRadius` den Einschusspunkt enthält. Liegt
+   er in keinem, ist der Pfeil neben der Auflage.
+3. Die Koordinaten werden **spot-lokal umgerechnet**:
+   `(p − facePositions[i]) / faceRadius`. Bei der Vollauflage ist das die
+   Identität.
+4. Die Integration setzt `Shot.index` so, dass `index % faceCount == faceIndex`
+   gilt. Bei drei Pfeilen auf drei Spots ist das eindeutig.
+
+**Zwei Pfeile im selben Spot** kann das Modell nicht abbilden: Der zweite
+Treffer würde auf dem falschen Spot gezeichnet. In diesem Fall wird pro Spot nur
+der zuversichtlichste Treffer gesetzt, der Rest bleibt offen, und die Snackbar
+nennt den Grund. Das folgt dem Leitsatz unter *Fehlerfälle*.
+
+## Die Erkennungspipeline
+
+Der Kern des Ansatzes: Die App muss die Auflage nicht *verstehen* — sie kennt
+sie bereits. Ringradien, Farben und Spot-Positionen stehen in den Modellklassen.
+Aus einer offenen Erkennungsaufgabe wird damit eine **Registrierung**.
+
+**Stufe 1 — Vorverarbeitung.** EXIF-Rotation anwenden (`androidx.exifinterface`
+ist bereits Abhängigkeit). Für die Lokalisierung (Stufe 2) wird eine auf 1600 px
+lange Kante verkleinerte Kopie verwendet; nach HSV/Lab wandeln. **Das Warpen in
+Stufe 3 liest aus dem Originalbild**, nicht aus der verkleinerten Kopie. Grund:
+Eine 40-cm-Auflage aus 3 m mit Handy-Weitwinkel füllt bei 1600 px grob 150 px.
+Der Zehner hätte dann etwa 15 px Durchmesser, ein Schaft unter 2 px. Das reicht
+nicht.
+
+**Stufe 2 — Auflage lokalisieren.** Gelbe Blobs segmentieren; ihre Anzahl muss zu
+`facePositions.size` passen, sonst `FACE_MISMATCH`. An den Farbübergängen mit
+bekannten Radien Kegelschnitte fitten (RANSAC gegen Ausreißer durch Schäfte und
+Schatten). Die Farbübergänge je Modell:
+
+| Modell | Übergänge (Radius, spot-lokal) |
+|---|---|
+| `WAFull` | 0.2 gelb→rot, 0.4 rot→blau, 0.6 blau→schwarz, 0.8 schwarz→weiß, 1.0 weiß→Scheibe |
+| `WA5Ring` (Vertical/Vegas 3-Spot) | 0.4 gelb→rot, 0.8 rot→blau, 1.0 blau→Scheibe |
+| `WA3Ring` (`WA3Ring3Spot`) | 0.666 gelb→rot, 1.0 rot→Scheibe |
+
+Der Übergang bei 1.0 ist auf heller Scheibe (weiß→Scheibe bei `WAFull`) unzuverlässig
+und zählt nur als Zusatz. `WA3Ring3Spot` hat je Spot nur zwei brauchbare
+Kreise; dort muss die Registrierung aus allen drei Spots zusammen kommen.
+
+**Von Kegelschnitten zur Homographie.** Unter Perspektive sind die Bilder
+konzentrischer Kreise weder konzentrisch, noch ist der Mittelpunkt einer
+Bildellipse das Bild des Kreiszentrums. Ein naiver Fit "konzentrischer
+Ellipsen" baut einen systematischen Fehler ein, der in der Scheibenmitte am
+größten ist — genau dort, wo Ringe eng sind. Der Weg ist daher:
+
+1. Zwei Kegelschnitte desselben Zentrums schneiden sich in den Kreispunkten der
+   Scheibenebene. Aus ihnen folgt die metrische Rektifizierung bis auf
+   Ähnlichkeit (Hartley/Zisserman, Kap. 2 und 8).
+2. Maßstab und Translation folgen aus den bekannten Radien und dem Bild des
+   gemeinsamen Zentrums (Pol der Fluchtlinie bezüglich eines Kegelschnitts).
+3. Die Drehung ist damit noch offen (siehe *Offene Risiken*): bei
+   Spiegelauflagen legen die Spot-Positionen sie fest, bei der Vollauflage die
+   Bildaufrechte.
+4. Alle weiteren Kreise und Spots gehen als Beobachtungen in eine
+   Ausgleichung; damit ist die Homographie überbestimmt.
+
+Diese Geometrie ist deterministisch und wird testgetrieben entwickelt (siehe
+*Zwei Teststufen*).
+
+**Stufe 3 — Entzerren.** Per Homographie aus dem Originalbild in ein kanonisches
+Quadrat warpen, das die Auflage mit Rand abdeckt (Vollauflage `[-1.1, 1.1]²`,
+3-Spot entsprechend der Spot-Anordnung). Die Auflösung des Quadrats richtet sich
+nach der im Original verfügbaren Pixeldichte, nicht nach einem festen Wert. Ab
+hier arbeitet alles in Auflagenkoordinaten.
+
+**Stufe 4 — Farbabgleich.** Eine Referenzmaske derselben Auflösung wird direkt
+aus den Zonenradien und `facePositions` gerechnet: Für jedes Pixel ist bekannt,
+welche **Farbklasse** (Gelb, Rot, Blau, Schwarz, Weiß) dort liegen muss. Die
+Maske wird bewusst nicht mit `TargetDrawable` gezeichnet: Das braucht einen
+Android-`Canvas` und wäre in JVM-Tests ohne Robolectric nicht lauffähig. Die
+Modellfarben sind außerdem Anzeigefarben, keine Druckfarben; geschätzt wird
+deshalb je Klasse die tatsächliche Farbe im Bild, nicht ein Abgleich gegen feste
+RGB-Werte. Daraus folgen Belichtung und Weißabgleich, die herausgerechnet werden,
+bevor die Segmentierung sie sieht.
+
+**Stufe 5 — Pfeile als Residuum.** Referenzklasse vom abgeglichenen Foto
+abziehen. Übrig bleiben Schäfte, Befiederung, Schatten und Altlöcher. Reine
+Abdunklung ohne Farbtonänderung ist Schatten und wird verworfen. Längliche
+Zusammenhangskomponenten sind Schaftkandidaten; kompakte kleine Flecken sind
+Altlöcher.
+
+**Stufe 6 — Einschusspunkt.** Der Pfeil steht als Stab zur Kamera hin aus der
+Scheibe; im Bild wird daraus ein Streifen. Aus der Homographie folgt der
+Fluchtpunkt der Scheibennormalen. Ein Punkt über der Ebene wird stets *zu diesem
+Fluchtpunkt hin* verschoben abgebildet. Also gilt:
+
+> **Der Einschusspunkt ist das vom Fluchtpunkt weiter entfernte Ende des Streifens.**
+
+Das erklärt auch, warum Pfeile auf Scheibenfotos nach außen zu spreizen scheinen,
+und macht die Zuordnung berechenbar statt heuristisch.
+
+Zwei Einschränkungen, die der Spec ausdrücklich behandelt:
+
+- **Vorzeichen der Kipprichtung.** Aus einem Kegelschnitt folgt die Ebenennormale
+  nur bis auf die Kipprichtung; konzentrische Kreise lösen das nur schwach über
+  den Versatz ihrer Bildzentren. Der Fluchtpunkt liegt dann auf der einen oder
+  anderen Seite des Bildzentrums, und die Regel oben kippt für Pfeile nahe der
+  Mitte. Auflösung: Alle Streifen zeigen vom selben Fluchtpunkt weg. Die beiden
+  Kandidaten werden gegen alle Streifen geprüft; der Kandidat, mit dem die
+  Mehrheit der Streifen konsistent ist, gewinnt. Als zweites, unabhängiges
+  Merkmal wird das Befiederungsende genutzt: Es ist farbig und dicker als der
+  Schaft und muss am **nahen** Ende liegen.
+- **Frontale Aufnahme, Pfeil nahe der Mitte.** Ein Pfeil nahe dem Fluchtpunkt
+  bildet sich als kurzer Streifen oder Punkt ab und ist dann von einem Altloch
+  kaum zu unterscheiden — ausgerechnet im Zehner, wo jeder Millimeter zählt.
+  Deshalb die Annahme *leicht schräg*: Sie macht jeden Schaft lang. Der Korpus
+  enthält frontale Mittentreffer als bekannten Schwachpunkt, damit die
+  Kennzahlen ihn sichtbar machen.
+
+**Stufe 7 — Auswahl und Ausgabe.** Spot je Kandidat bestimmen und spot-lokal
+umrechnen (siehe *Koordinatensystem*). `Round.shotsPerEnd` ist ein starker
+Filter: Bei weniger Kandidaten meldet die Pipeline die Lücke, statt zu raten.
+Bei mehr Kandidaten gewinnen die zuversichtlichsten, **aber nur mit Abstand**:
+Liegt die Konfidenz des ersten verworfenen Kandidaten nahe an der des letzten
+gewählten, wird die Passe nicht aufgefüllt, sondern die unsicheren Plätze
+bleiben offen. Ringwert über `getZoneFromPoint()`.
+
+### Bekannte Grenzen der Pipeline
+
+- **Pfeile neben der Auflage** sind nicht registrierbar und werden nicht erkannt.
+  Sie werden von Hand nachgetragen.
+- **Zwei Pfeile im selben Loch** ergeben einen Streifen und damit einen Treffer.
+- **Stark überlappende Schäfte** können zu einem Kandidaten verschmelzen.
+- **Zwei Pfeile im selben Spot** einer Spiegelauflage: nur einer wird gesetzt
+  (siehe *Koordinatensystem*).
+
+## Integration in die App
+
+### Einstiegspunkte
+
+**Aus der Eingabe.** Ein zweiter Menüpunkt in `input_end.xml` neben
+`action_photo`, sichtbar unter derselben Bedingung (`Utils.hasCameraHardware`).
+Das Menü zeigt bereits vier Icons mit `ifRoom`; der neue Eintrag bekommt
+`showAsAction="never"` und landet im Überlauf, statt auf Telefonen ein
+bestehendes Icon zu verdrängen. Aufnahme über `EasyImage.openCameraForImage` —
+derselbe Weg, den `GalleryActivity` und `EditWithImageFragmentBase` gehen.
+`InputActivity` übernimmt dafür `EasyImage.handleActivityResult`.
+
+Der Aufruf wird in `try`/`catch (ActivityNotFoundException)` gekapselt mit dem
+vorhandenen String `no_camera_app`, wie es `GalleryActivity` seit `a9acbee2` tut.
+
+**Aus der Galerie.** Ein Passenfoto, das bereits als `EndImage` gespeichert ist,
+lässt sich aus `GalleryActivity` nachscannen. Das ist der Weg, wenn die
+Erkennung am Platz fehlgeschlagen ist oder das Foto ohne Scan gemacht wurde, und
+im Debug-Build der natürliche Ort für die Debug-Ansicht. Das Ergebnis geht
+denselben Weg wie aus der Eingabe (`endId`-Prüfung, Rückfrage bei vorhandenen
+Treffern).
+
+### Nebenläufigkeit
+
+`lifecycleScope` mit `withContext(Dispatchers.Default)` für die Pipeline, dem
+Muster aus `a9acbee2` folgend. Kein `AsyncTask`. Die Erkennung dauert ein bis
+drei Sekunden und gehört nicht auf den UI-Thread; währenddessen läuft eine
+Fortschrittsanzeige.
+
+### Zustand über den Kamera-Ausflug hinweg
+
+**Dies ist die wichtigste Nebenbedingung der Integration.** Die Kamera-App ist
+speicherhungrig; Prozesstod während der Aufnahme ist der Normalfall, nicht die
+Ausnahme. `InputActivity.onSaveInstanceState` setzt `data` auf `null` und lädt
+nach der Rückkehr aus der Datenbank neu.
+
+Daraus folgt:
+
+1. Der Scan-Zustand darf **nicht** in `data` (`LoaderResult`) gehalten werden.
+   Er lebt als *pending scan* (Fotopfad plus `endId` der Zielpasse) im
+   `outState`. EasyImage merkt sich den Fotopfad seinerseits in
+   `SharedPreferences` und übersteht den Prozesstod.
+2. Nach Prozesstod kommt `onActivityResult` **vor** dem Loader. Der pending scan
+   wird deshalb nur abgelegt und erst verbraucht, wenn der Loader `data`
+   geliefert hat. Erst dann läuft die Erkennung.
+3. Vor dem Anwenden wird geprüft, ob die inzwischen geladene Passe dieselbe
+   `endId` hat. Passt sie nicht, wird **nichts geschrieben** und das Foto
+   lediglich abgelegt.
+
+Ohne Punkt 3 könnten erkannte Treffer nach einem Prozesstod in der falschen
+Passe landen. Der zugehörige Fehler in der Positionswiederherstellung ist auf
+diesem Branch bereits behoben (`6f1b0b40`), aber die ID-Prüfung bleibt als
+zweite Absicherung bestehen — sie kostet nichts und schützt vor Datenverfälschung.
+
+### Anwenden und Korrigieren
+
+Erkannte Treffer sind gewöhnliche `Shot`-Objekte mit `index`, `endId`, `x`, `y`
+und `scoringRing`. Die Liste hat immer `shotsPerEnd` Einträge; nicht erkannte
+Plätze bleiben `NOTHING_SELECTED`. Sie geht über
+`TargetView.replaceWithEnd(shots, exact = true)` in die Passe.
+
+`TargetView.replaceWithEnd` (`TargetView.kt:164`) wählt bei gesetzten Ringwerten
+`SettingsManager.inputMethod`. Steht der Nutzer auf Tastatureingabe, landete er
+nach dem Scan im Tastaturmodus, wo sich Treffer nicht verschieben lassen.
+Deshalb wird nach einem Scan **explizit Plotting** aktiviert. Danach greift der
+bestehende Korrekturweg: `selectPreviousShots` und `updateShotToPosition`
+erlauben, jeden Treffer anzutippen und zu verschieben — genau wie bei manueller
+Eingabe. Es wird **keine neue Korrektur-UI gebaut**.
+
+Dazu eine Snackbar mit dem Ergebnis und einer **Rückgängig**-Aktion. Da die
+Eingabe die Passe fortlaufend speichert, stellt Rückgängig den vorherigen Stand
+nicht nur in der View, sondern über denselben Speicherweg **auch in der
+Datenbank** wieder her.
+
+Die Konfidenz steuert intern die Auswahl der besten Kandidaten und den Text der
+Snackbar. Sie färbt in v1 nichts ein; eine optische Markierung unsicherer Treffer
+ist nachrüstbar, falls sie im Gebrauch vermisst wird.
+
+### Fotoablage
+
+Das Foto wird als `EndImage(fileName, endId)` gespeichert — dieselbe Ablage,
+die der vorhandene Galerieweg nutzt (`filesDir`, Cascade-Delete an der Passe).
+**Keine Schemaänderung, keine Migration.**
+
+Gespeichert wird das **unverzerrte** Bild, nicht das entzerrte: Liegt die
+Homographie daneben, wäre das entzerrte Bild auf dieselbe Weise falsch wie die
+Treffer. Beides sähe stimmig aus, obwohl beides verschoben ist — das entzerrte
+Bild kann den eigenen Fehler nicht aufdecken. Das unverzerrte kann es.
+
+Dafür braucht es nicht die volle Kameraauflösung. Originale moderner Handys
+haben 3 bis 12 MB; pro Passe gespeichert wäre das für Speicher und Backup zu
+viel. Das Bild wird auf **2048 px lange Kante** verkleinert abgelegt; das
+Original dient nur der Erkennung und wird danach gelöscht.
+
+Das Foto wird **unabhängig vom Erkennungserfolg** abgelegt. Schlägt die Erkennung
+fehl, lässt sich die Passe später vom Bild abtippen oder aus der Galerie
+nachscannen.
+
+### Fehlerfälle
+
+Jeder Fall bekommt eine eigene Antwort, keine Sammelmeldung.
+
+| Fall | Verhalten |
+|---|---|
+| Auflage nicht gefunden | Nichts wird geschrieben. Meldung mit Ursache, Angebot zur Neuaufnahme. Foto wird gespeichert. |
+| Spot-Zahl passt nicht zur Auflage | Hinweis, dass das Bild nicht zur eingestellten Auflage passt, mit deren Namen. |
+| Weniger Pfeile als `shotsPerEnd` | Gefundene werden gesetzt, Rest bleibt offen, Snackbar nennt die Zahl. |
+| Mehr Kandidaten als `shotsPerEnd` | Die zuversichtlichsten gewinnen, sofern der Abstand zum nächsten Kandidaten deutlich ist; sonst bleiben die unsicheren Plätze offen. |
+| Zwei Pfeile im selben Spot (Spiegel) | Nur der zuversichtlichste wird gesetzt, Snackbar nennt den Grund. |
+| Passe hat schon Treffer | Rückfrage vor dem Überschreiben. |
+| `endId` passt nicht mehr | Nichts wird geschrieben, Foto wird abgelegt, Hinweis an den Nutzer. |
+
+Leitsatz: **Bei Unsicherheit lieber nichts eintragen als etwas Falsches.** Ein
+nicht erkannter Pfeil kostet zwei Sekunden, ein falsch erkannter verfälscht die
+Statistik dauerhaft.
+
+## Test und Genauigkeitsmessung
+
+Der schwierige Teil ist nicht, die Pipeline zu schreiben, sondern zu wissen, ob
+sie funktioniert. Ohne Messung wird Schwellwert-Tuning zum Blindflug.
+
+### Testkorpus
+
+Echte Fotos in **Originalauflösung** mit je einer JSON-Datei, die Auflage und
+erwartete Treffer festhält. Die Wahrheitsdaten verwenden dasselbe Format wie
+`Shot`: `faceIndex`, spot-lokale `x`/`y`, `scoringRing`. So lassen sich
+korrigierte Passen aus der App direkt als Korpuseinträge exportieren, und der
+Korpus wächst mit dem Gebrauch.
+
+Abzudecken sind die Fälle, an denen die Pipeline realistisch scheitert:
+Hallenlicht und Sonne mit harten Schatten, frontale und schräge Winkel,
+bewusst verkantete Aufnahmen, verschiedene Befiederungsfarben, Pfeile nah am
+Zentrum (stark verkürzt) und am Rand (lang), dicht beieinander steckende
+Pfeile, viele Altlöcher, kleine Auflage aus großer Distanz, alle drei
+Modelltypen (`WAFull`, `WA5Ring`-Spiegel, `WA3Ring3Spot`).
+
+### Kennzahlen
+
+| Metrik | Bedeutung |
+|---|---|
+| Erkennungsrate | Anteil der Pfeile, die gefunden wurden |
+| Falsch-Positive | Erfundene Treffer — teurer als übersehene |
+| Ringtreue | Anteil der Treffer mit korrektem Spot **und** `scoringRing`. **Die entscheidende Zahl** |
+| Positionsfehler | Median und 95. Perzentil in Spot-Radien |
+
+Diese Werte werden als Regressionsschranke festgeschrieben, **nachdem** sie das
+erste Mal gemessen wurden. Eine Zielgenauigkeit vorab festzulegen wäre geraten.
+
+### Zwei Teststufen
+
+Im Modul stecken zwei Arten von Code, und sie brauchen unterschiedliche Verfahren.
+
+**Deterministische Geometrie** — Kegelschnittfit, Rektifizierung über die
+Kreispunkte, Fluchtpunkt und Vorzeichenwahl, Spot-Zuordnung und spot-lokale
+Umrechnung, die `shotsPerEnd`-Auswahl mit Abstandsregel. Schnelle JVM-Unit-Tests
+ohne Bild, klassisch testgetrieben entwickelt. Die Tests verwenden synthetische
+Eingaben: bekannte Homographie auf bekannte Kreise anwenden, Rückrechnung
+prüfen. `PointF` aus `:shared` ist dabei die einzige Android-Klasse; sie ist in
+JVM-Tests über `unitTests.returnDefaultValues` oder ein eigenes Datentyp-Paar im
+Modul zu vermeiden.
+
+**Wahrnehmungsstufen** — Segmentierung, Farbabgleich, Residuum, Schaftfindung.
+Diese lassen sich nicht sinnvoll rot-grün treiben; sie werden am Korpus
+gemessen. OpenCV braucht dafür native Bibliotheken, also laufen diese Messungen
+als Instrumentierungstests oder über ein Kommandozeilen-Werkzeug in `:tools`,
+nicht als JVM-Unit-Tests. Das wird hier festgehalten, damit später niemand
+rot-grün erwartet, wo es nicht hingehört.
+
+### Debug-Ansicht
+
+Ein Bildschirm im Debug-Build, erreichbar aus der Galerie, der ein Foto durch
+die Pipeline schickt und jede Stufe als Bild zeigt: Segmentierung, gefittete
+Kegelschnitte, entzerrtes Bild, Farbklassenmaske, Residuum, Schaftkandidaten,
+Fluchtpunkt mit beiden Kandidaten, gewählte Einschusspunkte mit Spot. Das ist
+**Pflicht, kein Extra** — ohne die Ansicht lässt sich ein Fehler nicht
+lokalisieren, nur erraten.
+
+## Reihenfolge der Umsetzung
+
+1. **Build-Umgebung herstellen.** Auf der Entwicklungsmaschine fehlen derzeit
+   JDK und Android SDK. Ohne sie läuft weder Gradle noch ein Test.
+2. **Fotos sammeln.** Bevor genug Korpusbilder da sind, ist jede Zeile
+   Pipeline-Code unüberprüfbar. Originalauflösung behalten.
+3. **APK-Zuwachs durch OpenCV messen** (siehe *Offene Risiken*), bevor die
+   Abhängigkeit festgezurrt wird.
+4. Modul `:detection` anlegen, Schnittstelle und Datentypen.
+5. Geometrie testgetrieben: Kegelschnittfit, Rektifizierung, Fluchtpunkt samt
+   Vorzeichenwahl, Spot-Zuordnung, Umrechnung.
+6. Debug-Ansicht, sobald Stufe 3 ein Bild liefert.
+7. Wahrnehmungsstufen gegen den Korpus, Kennzahlen festschreiben.
+8. Integration in `InputActivity` und `GalleryActivity` samt Fotoablage,
+   pending scan und Fehlerfällen.
+
+## Offene Risiken
+
+**Drehung um die Scheibenachse.** Konzentrische Kreise legen die Homographie nur
+bis auf eine Drehung fest, weil die Auflage rotationssymmetrisch ist. Für die
+Trefferbildauswertung ist „links" gegen „oben" aber wesentlich. Bei
+Spiegelauflagen lösen die drei Spot-Positionen das; bei der Vollauflage fixiert
+die Bildaufrechte die Drehung. Das ist eine **Annahme über die Handhaltung** und
+gehört ausdrücklich in den Testkorpus — mit bewusst verkantet aufgenommenen
+Bildern.
+
+**Vorzeichen der Kipprichtung.** Die Mehrheitsabstimmung der Streifen (Stufe 6)
+ist bei einem einzelnen Pfeil nahe der Mitte keine Mehrheit. Dann entscheidet
+allein das Befiederungsmerkmal. Ob das reicht, zeigt der Korpus.
+
+**APK-Größe.** OpenCV bringt native Bibliotheken mit. Vor der Integration ist zu
+messen, wie viel je ABI dazukommt, und zu entscheiden, ob ABI-Splits genügen
+oder ob die Kotlin-Alternative aus *Modulschnitt* doch vorzuziehen ist.
+
+**Unverifizierter Fremdcode.** Die Basis enthält 35 Commits aus einem fremden
+Fork, davon breite maschinelle Umbauten. Vier Befunde wurden geprüft, drei
+behoben (`79823331`, `6f1b0b40`, `8e3a8b7b`). Der vierte — stiller Datenverlust
+in `EditRoundFragment.onSaveRound`, wenn `selectedItem` null ist, weil
+`finish()` in `onSave` vor dem Speichern läuft — ist unabhängig von dieser
+Funktion und wird als eigenes Ticket geführt. Nicht alle 163 geänderten Dateien
+wurden gelesen.
+
+**Die drei Korrekturen sind nicht kompiliert.** Sie entstanden ohne verfügbares
+JDK und sind bislang nur sorgfältig gelesen, nicht gebaut und nicht getestet.
+
+## Upgrade-Pfad zu Ansatz C
+
+Ansatz A (klassisches CV) liefert nebenbei, was ein gelerntes Modell brauchte:
+entzerrte Bilder in Auflagenkoordinaten plus die Korrekturen des Nutzers im
+`TargetView` sind fertig annotierte Trainingsdaten. Bleibt die Schaftfindung
+klassisch zu wackelig, wird sie hinter der `ArrowDetector`-Schnittstelle gegen
+einen TFLite-Detektor getauscht — Geometrie und App-Integration bleiben, wie sie
+sind. Nichts von der Arbeit an v1 ist dabei verloren.

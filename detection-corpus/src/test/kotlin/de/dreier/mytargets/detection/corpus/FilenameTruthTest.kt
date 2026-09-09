@@ -20,7 +20,8 @@ import org.junit.Test
 
 class FilenameTruthTest {
 
-    private fun scoresOf(entry: CorpusEntry) = entry.shots.map { it.score.text }
+    private fun scoresOf(entry: CorpusEntry) =
+        entry.shots.map { it.printedScore!!.text }
 
     @Test
     fun parsesSixArrowsWithoutATag() {
@@ -30,14 +31,44 @@ class FilenameTruthTest {
         assertThat(scoresOf(entry)).containsExactly("9", "9", "8", "8", "7", "7").inOrder()
         assertThat(entry.tags).isEmpty()
         assertThat(entry.hasPositions).isFalse()
-        assertThat(entry.targetModel).isNull()
+        assertThat(entry.target).isNull()
+    }
+
+    @Test
+    fun anInheritedEntryCarriesNoRingIndexAndNoMetadata() {
+        // The file name gives printed values and no target model, so these
+        // entries cannot support ring accuracy against a zone index, and they
+        // have no capture conditions to group by.
+        val entry = FilenameTruth.parse("a6_998877.jpg")!!
+
+        assertThat(entry.shots.all { it.scoringRing == null }).isTrue()
+        assertThat(entry.shots.all { it.printedScore != null }).isTrue()
+        assertThat(entry.target).isNull()
+        assertThat(entry.image).isNull()
+        assertThat(entry.tags).isEmpty()
+        assertThat(entry.unresolvedArrows).isEqualTo(0)
+        assertThat(entry.hasPositions).isFalse()
     }
 
     @Test
     fun parsesXRingsAndATag() {
         val entry = FilenameTruth.parse("a6_x99765_noise.jpg")!!
         assertThat(scoresOf(entry)).containsExactly("X", "9", "9", "7", "6", "5").inOrder()
-        assertThat(entry.tags).containsExactly("noise")
+        assertThat(FilenameTruth.tagOf("a6_x99765_noise.jpg")).isEqualTo("noise")
+        // Stronger than the brief's own assertion: a real inherited tag must
+        // NOT leak into CorpusEntry.tags, which is derived from capture
+        // conditions only. Both "no tag present" (see
+        // parsesSixArrowsWithoutATag) and "tag present" must land here empty,
+        // otherwise the "no tag" case alone can't tell a correct
+        // implementation from one that always returns an empty set.
+        assertThat(entry.tags).isEmpty()
+    }
+
+    @Test
+    fun theInheritedMarkerIsAvailableSeparately() {
+        assertThat(FilenameTruth.tagOf("a6_x99765_noise.jpg")).isEqualTo("noise")
+        assertThat(FilenameTruth.tagOf("a6_998877.jpg")).isNull()
+        assertThat(FilenameTruth.tagOf("holiday.jpg")).isNull()
     }
 
     @Test
@@ -46,14 +77,15 @@ class FilenameTruthTest {
         assertThat(entry.expectedShots).isEqualTo(8)
         assertThat(scoresOf(entry))
             .containsExactly("X", "X", "X", "9", "9", "9", "8", "8").inOrder()
-        assertThat(entry.tags).containsExactly("front")
+        assertThat(FilenameTruth.tagOf("a8_xxx99988_front.jpg")).isEqualTo("front")
     }
 
     @Test
     fun parsesAnUnderscoredTag() {
         val entry = FilenameTruth.parse("a6_x99999_multiple_targets.jpg")!!
         assertThat(entry.expectedShots).isEqualTo(6)
-        assertThat(entry.tags).containsExactly("multiple_targets")
+        assertThat(FilenameTruth.tagOf("a6_x99999_multiple_targets.jpg"))
+            .isEqualTo("multiple_targets")
     }
 
     @Test

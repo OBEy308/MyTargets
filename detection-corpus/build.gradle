@@ -1,0 +1,38 @@
+/*
+ * Copyright (C) 2026 MyTargets contributors
+ *
+ * This file is part of MyTargets.
+ *
+ * MyTargets is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2
+ * as published by the Free Software Foundation.
+ *
+ * MyTargets is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+// A plain JVM library on purpose: it reads file names and JSON and does
+// arithmetic. Keeping Android out means the tests run in milliseconds and the
+// measuring apparatus can be finished before there is a detector to measure.
+plugins {
+    alias(libs.plugins.kotlin.jvm)
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+kotlin {
+    jvmToolchain(17)
+}
+
+dependencies {
+    implementation libs.kotlin.stdlib.jdk7
+    implementation libs.gson
+
+    testImplementation libs.junit4
+    testImplementation libs.truth
+}

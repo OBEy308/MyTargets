@@ -23,10 +23,11 @@ zu bewerten.
 |---|---|
 | Nahaufnahme aus 1–3 m, **leicht schräg** (etwa 20–40° zur Scheibennormalen) | Der Schütze geht ohnehin zum Ziel, um die Pfeile zu ziehen. Aufnahmen von der Schießlinie lösen die Pfeilspitzen nicht auf. Die Schrägstellung ist gewollt: Erst sie macht jeden Schaft zu einem eindeutigen Streifen (siehe Stufe 6). Frontale Aufnahmen funktionieren, sind aber der schwächere Fall. |
 | Ein Foto pro Passe, Pfeile stecken noch | Eindeutige Zuordnung ohne Vergleich mit Vorbildern. |
-| Auflagen: WA Full-Face und WA Spiegel/3-Spot | Beide sind farblich und geometrisch exakt im Modell beschrieben. Feldbogen und 3D bleiben außen vor. |
+| Auflagen: WA Vollauflage und WA 3-Spot-Auflage (vertikal und Vegas) | Beide sind farblich und geometrisch exakt im Modell beschrieben. Feldbogen und 3D bleiben außen vor. |
 | Vollständig offline auf dem Gerät | Bogenplätze haben oft kein Netz. MyTargets ist GPLv2 und F-Droid-freundlich. |
 | Kamera wird aufrecht gehalten | Konzentrische Kreise legen die Drehung um die Scheibenachse nicht fest (siehe *Offene Risiken*). |
-| Bei Spiegelauflagen stecken je Spot höchstens `ceil(shotsPerEnd / faceCount)` Pfeile | Das Datenmodell ordnet Treffer über den Schussindex einem Spot zu. Bei drei Pfeilen auf drei Spots ist das einer pro Spot, bei sechs Pfeilen sind es zwei. Mehr kann das Modell nicht darstellen (siehe *Koordinatensystem*). |
+| Die Auflage darf **angeschnitten** sein | Aus 1–3 m passt eine 122-cm-Auflage oft nicht ganz ins Bild. Die Registrierung darf sich deshalb nicht auf die äußeren Übergänge verlassen, sondern muss aus den innersten zwei sichtbaren Farbübergängen auskommen — bei `WAFull` also Gelb→Rot bei 0.2 und Rot→Blau bei 0.4. Bestätigt an den geerbten Fotos. |
+| Bei 3-Spot-Auflagen stecken je Spot höchstens `ceil(shotsPerEnd / faceCount)` Pfeile | Das Datenmodell ordnet Treffer über den Schussindex einem Spot zu. Bei drei Pfeilen auf drei Spots ist das einer pro Spot, bei sechs Pfeilen sind es zwei. Mehr kann das Modell nicht darstellen (siehe *Koordinatensystem*). |
 
 ## Umfang
 
@@ -134,7 +135,7 @@ ohne die App anzufassen.
 
 `Shot.x`/`Shot.y` sind **spot-lokale** Koordinaten: Mittelpunkt des Spots `(0,0)`,
 äußerster Ring des Spots Radius `1.0`. Bei der Vollauflage ist der Spot die ganze
-Auflage (`WAFull.kt`, Zonen bis `1.0`). Bei Spiegelauflagen gilt dasselbe je
+Auflage (`WAFull.kt`, Zonen bis `1.0`). Bei 3-Spot-Auflagen gilt dasselbe je
 Spot: `WA5Ring` definiert seine Zonen ebenfalls bis Radius `1.0`, obwohl der
 Spot auf der Gesamtauflage nur `faceRadius = 0.32` groß ist. `faceRadius` und
 `facePositions` beschreiben nur die Anordnung der Spots auf der Auflage. Der
@@ -209,9 +210,11 @@ größten ist — genau dort, wo Ringe eng sind. Der Weg ist daher:
    im Geometrieplan, Task 5.
 2. Maßstab und Translation folgen aus den bekannten Radien und dem Bild des
    Zentrums.
-3. Die Drehung ist damit noch offen (siehe *Offene Risiken*): bei
-   Spiegelauflagen legen die Spot-Positionen sie fest, bei der Vollauflage die
-   Bildaufrechte.
+3. Die Drehung ist damit noch offen (siehe *Offene Risiken*): Bei der
+   Triangel-Auflage legen die drei Spot-Zentren sie vollständig fest. Bei der
+   vertikalen Auflage liegen die Zentren auf einer Linie und legen nur die
+   Achse fest, nicht oben gegen unten. Dort und bei der Vollauflage entscheidet
+   die Bildaufrechte.
 4. Alle weiteren Kreise und Spots gehen als Beobachtungen in eine
    Ausgleichung; damit ist die Homographie überbestimmt.
 
@@ -233,6 +236,13 @@ Modellfarben sind außerdem Anzeigefarben, keine Druckfarben; geschätzt wird
 deshalb je Klasse die tatsächliche Farbe im Bild, nicht ein Abgleich gegen feste
 RGB-Werte. Daraus folgen Belichtung und Weißabgleich, die herausgerechnet werden,
 bevor die Segmentierung sie sieht.
+
+**Die Korrektur muss räumlich veränderlich sein, nicht global.** Die geerbten
+Fotos zeigen Auflagen, deren eine Hälfte im tiefen Schatten liegt und deren
+andere hell ausgeleuchtet ist. Ein einziger Gewinn- und Offsetwert je Kanal
+richtet dort nichts aus. Geschätzt wird deshalb ein langsam veränderliches Feld —
+je Farbklasse über die Fläche, danach interpoliert. Wie fein es sein muss, sagt
+der Korpus.
 
 **Stufe 5 — Pfeile als Residuum.** Referenzklasse vom abgeglichenen Foto
 abziehen. Übrig bleiben Schäfte, Befiederung, Schatten und Altlöcher. Reine
@@ -412,7 +422,7 @@ Jeder Fall bekommt eine eigene Antwort, keine Sammelmeldung.
 | Spot-Zahl passt nicht zur Auflage | Hinweis, dass das Bild nicht zur eingestellten Auflage passt, mit deren Namen. |
 | Weniger Pfeile als `shotsPerEnd` | Gefundene werden gesetzt, Rest bleibt offen, Snackbar nennt die Zahl. |
 | Mehr Kandidaten als `shotsPerEnd` | Die zuversichtlichsten gewinnen, sofern der Abstand zum nächsten Kandidaten deutlich ist; sonst bleiben die unsicheren Plätze offen, notfalls alle. |
-| Mehr Pfeile in einem Spot als vorgesehen (Spiegel) | Nur die zuversichtlichsten bis zur Grenze `ceil(shotsPerEnd / faceCount)` werden gesetzt, Snackbar nennt den Grund. |
+| Mehr Pfeile in einem Spot als vorgesehen (3-Spot) | Nur die zuversichtlichsten bis zur Grenze `ceil(shotsPerEnd / faceCount)` werden gesetzt, Snackbar nennt den Grund. |
 | Passe hat schon Treffer | Rückfrage vor dem Überschreiben. |
 | `endId` passt nicht mehr | Nichts wird geschrieben, Foto wird abgelegt, Hinweis an den Nutzer. |
 
@@ -433,12 +443,30 @@ erwartete Treffer festhält. Die Wahrheitsdaten verwenden dasselbe Format wie
 korrigierte Passen aus der App direkt als Korpuseinträge exportieren, und der
 Korpus wächst mit dem Gebrauch.
 
+**Teilwahrheit ist zulässig.** Ein Eintrag darf die Ringwerte ohne Positionen
+angeben. Er zählt dann für Erkennungsrate, Falsch-Positive und Ringtreue, aber
+nicht für den Positionsfehler. Ohne diese Regel wären die geerbten Fotos unten
+erst nach vollständiger Nachannotation brauchbar, und die drei Kennzahlen, die
+sie schon jetzt tragen können, blieben ungemessen.
+
+**16 geerbte Fotos.** Der Branch `feature/249_auto_detect_arrows` (Florian
+Dreier, Dezember 2017, nie gemergt) enthält einen OpenCV-Prototyp derselben
+Funktion samt 16 Testfotos, rund 40 MB. Die Wahrheit steckt im Dateinamen:
+`a6_998877` sind sechs Pfeile mit 9,9,8,8,7,7, `a8_xxx99988_front` acht Pfeile
+mit drei X, frontal. Die Marker `dark`, `noise`, `overlap`, `front` und
+`multiple_targets` benennen die jeweilige Erschwernis.
+
+Sie liegen unter `<DETECTION_CORPUS_DIR>/inherited-249/`, nicht im Repo — im
+Prototyp lagen sie in `res/drawable-nodpi` und damit im APK, was dort ProGuard
+schon für Debug-Builds nötig machte.
+
 Abzudecken sind die Fälle, an denen die Pipeline realistisch scheitert:
 Hallenlicht und Sonne mit harten Schatten, frontale und schräge Winkel,
 bewusst verkantete Aufnahmen, verschiedene Befiederungsfarben, Pfeile nah am
 Zentrum (stark verkürzt) und am Rand (lang), dicht beieinander steckende
 Pfeile, viele Altlöcher, kleine Auflage aus großer Distanz, alle drei
-Modelltypen (`WAFull`, `WA5Ring`-Spiegel, `WA3Ring3Spot`).
+Auflagenformen: Vollauflage (`WAFull`), 3-Spot vertikal (`WAVertical3Spot`)
+und 3-Spot Triangel (`WAVegas3Spot`, `WA3Ring3Spot`).
 
 ### Kennzahlen
 
@@ -490,8 +518,12 @@ lokalisieren, nur erraten.
 
 1. ~~**Build-Umgebung herstellen.**~~ Erledigt: Android Studio mit JBR und SDK.
    Die drei lokal beizusteuernden Dateien sind in `BUILDING.md` beschrieben.
-2. **Fotos sammeln.** Bevor genug Korpusbilder da sind, ist jede Zeile
-   Pipeline-Code unüberprüfbar. Originalauflösung behalten.
+2. **Fotos sammeln.** 16 geerbte Fotos liegen bereits unter
+   `<DETECTION_CORPUS_DIR>/inherited-249/`, mit Ringwerten im Dateinamen und
+   ohne Positionen. Sie decken dunkel, verrauscht, überlappend, frontal und
+   mehrere Auflagen ab — nicht aber die von dieser Spec bevorzugte leicht
+   schräge Aufnahme, verkantete Bilder oder Spiegelauflagen. Eigene Fotos
+   ergänzen genau diese Lücken; Originalauflösung behalten.
 3. **APK-Zuwachs durch OpenCV messen** (siehe *Offene Risiken*), bevor die
    Abhängigkeit festgezurrt wird.
 4. Modul `:detection` anlegen, Schnittstelle und Datentypen.
@@ -507,15 +539,52 @@ lokalisieren, nur erraten.
 
 **Drehung um die Scheibenachse.** Konzentrische Kreise legen die Homographie nur
 bis auf eine Drehung fest, weil die Auflage rotationssymmetrisch ist. Für die
-Trefferbildauswertung ist „links" gegen „oben" aber wesentlich. Bei
-Spiegelauflagen lösen die drei Spot-Positionen das; bei der Vollauflage fixiert
-die Bildaufrechte die Drehung. Das ist eine **Annahme über die Handhaltung** und
-gehört ausdrücklich in den Testkorpus — mit bewusst verkantet aufgenommenen
-Bildern.
+Trefferbildauswertung ist „links" gegen „oben" aber wesentlich. Bei der
+Triangel-Auflage lösen die drei Spot-Zentren das vollständig. Bei der
+vertikalen 3-Spot-Auflage liegen die Zentren auf einer Linie; das legt die
+Achse fest, aber nicht, welcher Spot der obere ist, und damit hängt die
+Zuordnung zu Spot 0 bis 2 an der Bildaufrechten. Bei der Vollauflage fixiert
+die Bildaufrechte die Drehung ganz. Das ist eine **Annahme über die
+Handhaltung** und gehört ausdrücklich in den Testkorpus — mit bewusst verkantet
+aufgenommenen Bildern der Vollauflage und der vertikalen Auflage.
 
 **Unsicherer Fluchtpunkt.** Die Konsistenzprüfung der Streifen (Stufe 6) ist
 bei einem einzelnen Pfeil nahe der Mitte keine Prüfung. Dann entscheidet allein
 das Befiederungsmerkmal. Ob das reicht, zeigt der Korpus.
+
+**Der Prototyp von 2017 als Vorarbeit.** `feature/249_auto_detect_arrows` löst
+dieselbe Aufgabe mit OpenCV 3.1 in Java. Zwei Befunde daraus gehören
+festgehalten.
+
+Erstens bestätigt er Stufe 6: Er steht vor derselben Frage, welches Schaftende
+der Einschuss ist, und beantwortet sie mit einem Boolean
+`isFromLeftViewpoint()`, das den linkesten oder rechtesten Endpunkt wählt. Das
+ist unsere Regel auf eine Achse reduziert und versagt bei Aufnahmen von schräg
+oben oder unten. Der Fluchtpunkt behandelt jede Kipprichtung.
+
+Zweitens bestätigt er die Warnung in Stufe 2: Seine `PerspectiveDetection`
+fittet je Farbzone eine Ellipse und legt dann eine **lineare Regression durch
+die Ellipsenmittelpunkte über dem Radius**, extrapoliert auf Radius 0. Das ist
+genau ein Pflaster für die Drift, die dieser Abschnitt beschreibt — eine
+Näherung erster Ordnung, wo unser Weg über Büschel und Kreispunkte exakt rechnet.
+Dass jemand dieses Pflaster brauchte, ist der beste Beleg, dass der Fehler real
+ist.
+
+Zu übernehmen wäre `ColorUtils.getDistinctColorTargetZones` und `getColorMask` —
+die Abbildung vom `Target`-Modell auf Farbmasken, die Stufe 2 und 4 brauchen.
+Der Code selbst ist von 2017, nutzt `android.support.*` und die längst
+verschwundene Maven-Koordinate `org.opencv:OpenCV-Android:3.1.0`; er baut heute
+nicht. Als Referenz taugt er, als Grundlage nicht. Seine beiden
+Pfeilerkennungs-Strategien sind die Messlatte: Schlägt unsere klassische
+Pipeline einen acht Jahre alten Prototyp nicht, ist das ein Signal.
+
+**Zwei Fälle im geerbten Korpus, die außerhalb des Umfangs liegen.** Ein Foto
+zeigt drei Auflagen nebeneinander (`multiple_targets`) — die Pipeline nimmt eine
+an; hier muss sie sauber `FACE_MISMATCH` melden statt eine beliebige zu wählen.
+Und mindestens eines zeigt eine **FITA 80 cm 6-Ring**-Auflage (`WA6Ring`), die
+v1 nicht abdeckt. Welche Auflage je Foto zu sehen ist, klärt sich bei der
+Annotation; Fotos außerhalb des Umfangs bleiben im Korpus, aber außerhalb der
+Kennzahlen.
 
 **APK-Größe.** OpenCV bringt native Bibliotheken mit. Vor der Integration ist zu
 messen, wie viel je ABI dazukommt, und zu entscheiden, ob ABI-Splits genügen

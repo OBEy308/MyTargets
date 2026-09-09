@@ -77,6 +77,26 @@ class CorpusLoaderTest {
     }
 
     @Test
+    fun aSidecarsCaptureBlockIsNotOverwrittenByTheFileNameTag() {
+        // The inherited scheme's tag becomes a capture-based tag only when
+        // the entry has no capture block of its own. Pairing an
+        // inherited-looking file name with a sidecar that DOES carry a real
+        // capture block -- a pairing nothing else in this suite creates --
+        // must keep that real capture, not have it replaced by the file
+        // name's marker.
+        write("a6_998877_noise.jpg")
+        write(
+            "a6_998877_noise.json",
+            sidecar(shots = """[ { "faceIndex": 0, "x": 0.0, "y": 0.0, "scoringRing": 0 } ]""")
+        )
+
+        val entry = CorpusLoader.load(folder.root).entries.single()
+
+        assertThat(entry.tags).containsExactly("bedeckt", "frontal")
+        assertThat(entry.tags).doesNotContain("noise")
+    }
+
+    @Test
     fun aSidecarWinsOverTheFileName() {
         write("a6_998877.jpg")
         write(

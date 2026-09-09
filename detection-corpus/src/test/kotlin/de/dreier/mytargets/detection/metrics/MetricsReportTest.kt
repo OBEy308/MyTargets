@@ -96,6 +96,33 @@ class MetricsReportTest {
     }
 
     @Test
+    fun theHeaderReportsAnnotatedEntriesNotExpectedShots() {
+        // One entry with two listed hits plus one registration-only entry
+        // with none: annotatedEntries is 1, expectedShots is 2. If the
+        // header's "annotated" slot were fed expectedShots instead, it would
+        // read "2 annotated" -- a number that happens to already appear
+        // elsewhere in this report as the hit count, so a test that only
+        // checked for the digit "1" or "2" somewhere in the text would miss
+        // the swap. This pins the exact phrase.
+        val annotated = entry("a.jpg", shots = arrayOf(truth(9, 0.0, 0.0), truth(8, 0.1, 0.0)))
+        val registrationOnly = CorpusEntry(
+            imageName = "r.jpg", image = null, camera = null, capture = null,
+            target = null, shotsPerEnd = 6, shots = emptyList(),
+            unresolvedArrows = 0, registration = null
+        )
+        val report = MetricsReport.render(
+            listOf(
+                outcome(annotated, listOf(found(9, 0.0, 0.0), found(8, 0.1, 0.0))),
+                outcome(registrationOnly, emptyList())
+            ),
+            title = "Header"
+        )
+
+        assertThat(report).contains("1 annotated")
+        assertThat(report).doesNotContain("2 annotated")
+    }
+
+    @Test
     fun aTagBreakdownAppearsWhenThereAreTags() {
         val dark = entry("d.jpg", tags = setOf("dark"), shots = arrayOf(truth(9, 0.0, 0.0)))
         val plain = entry("p.jpg", shots = arrayOf(truth(9, 0.0, 0.0)))

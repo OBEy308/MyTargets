@@ -407,6 +407,24 @@ class MetricsTest {
     }
 
     @Test
+    fun entriesWithPositionsCountsAnnotatedEntriesThatCarryPositions() {
+        // Only ever asserted in the == 0 case elsewhere in this file (see
+        // ringOnlyEntriesContributeEverythingButThePositionError); this pins
+        // down the positive count too, so the field cannot be left
+        // permanently at zero.
+        val positioned = entry("pos.jpg", shots = arrayOf(truth(2, 0.0, 0.0)))
+        val ringOnly = entry("ring.jpg", shots = arrayOf(TruthShot(scoringRing = 3)))
+        val m = Metrics.over(
+            listOf(
+                outcome(positioned, listOf(found(2, 0.0, 0.0))),
+                outcome(ringOnly, listOf(found(3, 0.0, 0.0)))
+            )
+        )
+
+        assertThat(m.entriesWithPositions).isEqualTo(1)
+    }
+
+    @Test
     fun ringAccuracyCountsOnlyComparableTruth() {
         // An inherited entry carries printed values; a detector that reports only
         // zone indices cannot be scored against it, so it must not drag the ring

@@ -77,6 +77,68 @@ class CorpusEntryTest {
     }
 
     @Test
+    fun aPositionToleranceMustBePositive() {
+        try {
+            TruthShot(scoringRing = 0, positionTolerance = 0.0)
+            throw AssertionError("expected IllegalArgumentException")
+        } catch (expected: IllegalArgumentException) {
+            // A non-positive tolerance would either reject every detection
+            // or admit anything, neither of which is a tolerance.
+        }
+    }
+
+    @Test
+    fun aScoringRingCannotBeNegative() {
+        try {
+            TruthShot(scoringRing = -1)
+            throw AssertionError("expected IllegalArgumentException")
+        } catch (expected: IllegalArgumentException) {
+            // Zone indices are array positions; a negative one is not a ring.
+        }
+    }
+
+    @Test
+    fun unresolvedArrowsCannotBeNegative() {
+        try {
+            entry(listOf(ringShot(0)), unresolved = -1)
+            throw AssertionError("expected IllegalArgumentException")
+        } catch (expected: IllegalArgumentException) {
+            // A negative count of unresolved arrows is not meaningful.
+        }
+    }
+
+    @Test
+    fun anImageNeedsAPositiveSize() {
+        try {
+            ImageInfo("t.jpg", 0, 100, null)
+            throw AssertionError("expected IllegalArgumentException")
+        } catch (expected: IllegalArgumentException) {
+            // A zero or negative dimension is not a photograph.
+        }
+    }
+
+    @Test
+    fun aTargetNeedsAModelName() {
+        try {
+            TargetInfo("", 80.0, 1)
+            throw AssertionError("expected IllegalArgumentException")
+        } catch (expected: IllegalArgumentException) {
+            // An unnamed model cannot be looked up among the shared target
+            // models.
+        }
+    }
+
+    @Test
+    fun aTargetNeedsAtLeastOneFace() {
+        try {
+            TargetInfo("WAFull", 80.0, 0)
+            throw AssertionError("expected IllegalArgumentException")
+        } catch (expected: IllegalArgumentException) {
+            // A target with no spot cannot be scored against.
+        }
+    }
+
+    @Test
     fun distanceIsOnlyDefinedWithinOneSpot() {
         val a = SpotPosition(0, 0.0, 0.0)
         assertThat(a.distanceTo(SpotPosition(0, 3.0, 4.0))!!).isWithin(1e-9).of(5.0)

@@ -70,6 +70,24 @@ class ShotMatchingTest {
     }
 
     @Test
+    fun aDetectionExactlyAtTheToleranceBoundaryStillMatches() {
+        // The tolerance comparison is <=, not <: a detection sitting exactly
+        // on the boundary is still within tolerance. 0.05 and 0.0 are both
+        // exactly representable and Math.hypot(0.05, 0.0) returns exactly
+        // 0.05, so this is a genuine boundary case, not one that only looks
+        // like one due to floating point rounding.
+        val e = entry(truth(ringX, 0.0, 0.0, tolerance = 0.05))
+        val detected = listOf(found(ringX, 0.05, 0.0))
+
+        val result = ShotMatching.match(e, detected)
+
+        assertThat(result.pairs).hasSize(1)
+        assertThat(result.pairs[0].distance!!).isWithin(1e-9).of(0.05)
+        assertThat(result.unmatchedTruth).isEmpty()
+        assertThat(result.unmatchedDetected).isEmpty()
+    }
+
+    @Test
     fun aDetectionBeyondTheGateIsNotAMatch() {
         val e = entry(truth(ringX, 0.0, 0.0))
         val detected = listOf(found(ringX, 0.5, 0.0))

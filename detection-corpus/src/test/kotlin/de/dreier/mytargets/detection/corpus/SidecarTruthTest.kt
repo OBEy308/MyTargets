@@ -150,6 +150,42 @@ class SidecarTruthTest {
     }
 
     @Test
+    fun aFaceIndexWithoutXAndYIsRejected() {
+        val json = """
+            {
+              "image": { "file": "f.jpg", "width": 100, "height": 100 },
+              "target": { "model": "WAFull", "faceCount": 1 },
+              "shots": [ { "faceIndex": 1, "scoringRing": 0 } ]
+            }
+        """.trimIndent()
+
+        val error = runCatching { SidecarTruth.parse("f.jpg", json) }.exceptionOrNull()
+        assertThat(error).isInstanceOf(IllegalArgumentException::class.java)
+        assertThat(error!!).hasMessageThat().contains("f.jpg")
+        assertThat(error!!).hasMessageThat().contains("faceIndex")
+    }
+
+    @Test
+    fun anImagedCentreOfTheWrongSizeNamesTheImage() {
+        val json = """
+            {
+              "image": { "file": "z.jpg", "width": 100, "height": 100 },
+              "target": { "model": "WAFull", "faceCount": 1 },
+              "shots": [],
+              "registration": {
+                "imageToTarget": [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+                "imagedCentre": [1.0]
+              }
+            }
+        """.trimIndent()
+
+        val error = runCatching { SidecarTruth.parse("z.jpg", json) }.exceptionOrNull()
+        assertThat(error).isInstanceOf(IllegalArgumentException::class.java)
+        assertThat(error!!).hasMessageThat().contains("z.jpg")
+        assertThat(error!!).hasMessageThat().contains("imagedCentre")
+    }
+
+    @Test
     fun aDecimalCommaNamesTheImageRatherThanThrowingBare() {
         val json = """
             {

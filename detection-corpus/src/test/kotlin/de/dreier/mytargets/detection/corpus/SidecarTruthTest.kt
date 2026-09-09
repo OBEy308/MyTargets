@@ -103,4 +103,31 @@ class SidecarTruthTest {
             .isEqualTo("WA6Ring")
         assertThat(SidecarTruth.defaultsTargetModel("{}")).isNull()
     }
+
+    @Test
+    fun rejectsABlankScore() {
+        val json = """{ "shots": [ { "score": "", "x": 0.1, "y": 0.1 } ] }"""
+        val error = runCatching { SidecarTruth.parse("blank.jpg", json) }.exceptionOrNull()
+        assertThat(error).isInstanceOf(IllegalArgumentException::class.java)
+        assertThat(error!!).hasMessageThat().contains("blank.jpg")
+        assertThat(error!!).hasMessageThat().contains("shot 0")
+    }
+
+    @Test
+    fun rejectsAPositionGivenAsYWithoutX() {
+        val json = """{ "shots": [ { "score": "9", "y": 0.2 } ] }"""
+        val error = runCatching { SidecarTruth.parse("bad.jpg", json) }.exceptionOrNull()
+        assertThat(error).isInstanceOf(IllegalArgumentException::class.java)
+        assertThat(error!!).hasMessageThat().contains("bad.jpg")
+    }
+
+    @Test
+    fun rejectsAFaceIndexWithoutCoordinates() {
+        // A face index alone says which spot but not where on it, which would
+        // otherwise become a silent position at the spot centre.
+        val json = """{ "shots": [ { "score": "9", "faceIndex": 1 } ] }"""
+        val error = runCatching { SidecarTruth.parse("bad.jpg", json) }.exceptionOrNull()
+        assertThat(error).isInstanceOf(IllegalArgumentException::class.java)
+        assertThat(error!!).hasMessageThat().contains("bad.jpg")
+    }
 }

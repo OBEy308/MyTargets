@@ -77,6 +77,9 @@ object SidecarTruth {
         val shots = shotsJson.mapIndexed { index, shot ->
             val scoreText = shot.score
                 ?: throw IllegalArgumentException("$imageName: shot $index has no score")
+            require(scoreText.isNotBlank()) {
+                "$imageName: shot $index has a blank score"
+            }
 
             val hasX = shot.x != null
             val hasY = shot.y != null

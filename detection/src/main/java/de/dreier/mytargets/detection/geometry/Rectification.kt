@@ -89,7 +89,7 @@ object Rectification {
         // were told they were.
         val expectedRatio = innerRadius / outerRadius
         val actualRatio = radiusOf(metricInner, centreInner) / radius
-        if (abs(actualRatio - expectedRatio) > RATIO_TOLERANCE) return null
+        if (abs(actualRatio - expectedRatio) > RATIO_TOLERANCE * expectedRatio) return null
 
         val scale = outerRadius / radius
         val toOrigin = Mat3.translation(Vec2(-centre.x, -centre.y))
@@ -101,25 +101,42 @@ object Rectification {
 
         val withoutRotation = scaling * toOrigin * metric * affine
 
+        val orientationFixed = if (isMirrored(withoutRotation, pencil.imagedCentre)) {
+            MIRROR_Y * withoutRotation
+        } else {
+            withoutRotation
+        }
+
         // Fix the remaining rotation so that imageUp, taken at the imaged
         // centre, points along -y in target coordinates: upwards on the face.
-        val rotation = rotationAligning(withoutRotation, pencil.imagedCentre, imageUp)
+        val rotation = rotationAligning(orientationFixed, pencil.imagedCentre, imageUp)
             ?: return null
 
         return Result(
-            imageToTarget = rotation * withoutRotation,
+            imageToTarget = rotation * orientationFixed,
             vanishingLine = line,
             imagedCentre = pencil.imagedCentre
         )
     }
 
     private const val CONCENTRIC_TOLERANCE = 0.05
+    // Relative tolerance on the dimensionless radius ratio; an absolute
+    // tolerance would weaken as the rings diverge -- at a ratio of 0.1 it
+    // would accept 80 percent relative error.
     private const val RATIO_TOLERANCE = 0.08
+
+    /** Reflection in the x axis, used to repair a mirrored rectification. */
+    private val MIRROR_Y = Mat3.of(
+        1.0, 0.0, 0.0,
+        0.0, -1.0, 0.0,
+        0.0, 0.0, 1.0
+    )
 
     /**
      * A linear map taking the given ellipse to a circle. The ellipse matrix
-     * restricted to its upper 2x2 block is symmetric positive definite; its
-     * inverse square root is the map we want.
+     * restricted to its upper 2x2 block is symmetric definite (positive or
+     * negative, depending on the conic's overall sign); its square root is
+     * the map we want.
      */
     private fun metricFromEllipse(conic: Conic): Mat3? {
         val c = conic.normalized().matrix
@@ -146,7 +163,12 @@ object Rectification {
         )
     }
 
-    /** Centre of a conic: the pole of the line at infinity. */
+    /**
+     * Centre of a conic: the pole of the line at infinity. Delegates to
+     * [Conic.centre] rather than routing through the 3x3 inverse, because
+     * that route is numerically unusable at pixel scale -- do not simplify
+     * this back.
+     */
     private fun centreOf(conic: Conic): Vec2? = conic.centre()
 
     /** Radius of a circle-shaped conic, measured from its centre. */
@@ -177,5 +199,25 @@ object Rectification {
         // We want direction to end up pointing at -90 degrees.
         val current = atan2(direction.y, direction.x)
         return Mat3.rotation(-PI / 2.0 - current)
+    }
+
+    /**
+     * Whether [mapping] reverses orientation at [at].
+     *
+     * The chain above constrains rotation but not handedness: the metric step's
+     * 2x2 block is diag(sqrt(lambda)) V^T, and the sign of det(V) is whatever
+     * the Jacobi sweeps left on the eigenvectors. Without this check the face
+     * comes out mirrored in about half of all views, and no assertion phrased in
+     * radii, dot products or distances can see it, because all of those are
+     * reflection invariant.
+     *
+     * Target coordinates share the image's handedness -- x right, y downwards,
+     * up on the face being negative y -- so a correct map has a positive
+     * Jacobian determinant.
+     */
+    private fun isMirrored(mapping: Mat3, at: Vec2): Boolean {
+        val jx = mapping.mapDirection(at, Vec2(1.0, 0.0)) ?: return false
+        val jy = mapping.mapDirection(at, Vec2(0.0, 1.0)) ?: return false
+        return jx.x * jy.y - jx.y * jy.x < 0.0
     }
 }

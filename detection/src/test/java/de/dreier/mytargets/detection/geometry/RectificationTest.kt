@@ -131,6 +131,33 @@ class RectificationTest {
     }
 
     @Test
+    fun doesNotMirrorTheFace() {
+        // Handedness is not constrained by the rest of the chain, and every
+        // other assertion in this file -- radii, dot products, distances --
+        // survives a reflection unchanged.
+        val outer = Conic.circle(Vec2(640.0, 480.0), 300.0)
+        val inner = Conic.circle(Vec2(640.0, 480.0), 120.0)
+        val result = Rectification.fromConcentricCircles(outer, 1.0, inner, 0.4)!!
+
+        val right = result.imageToTarget.mapPoint(Vec2(640.0 + 300.0, 480.0))!!
+        val up = result.imageToTarget.mapPoint(Vec2(640.0, 480.0 - 300.0))!!
+
+        assertThat(right.x).isWithin(1e-6).of(1.0)
+        assertThat(abs(right.y)).isLessThan(1e-6)
+        assertThat(up.y).isWithin(1e-6).of(-1.0)
+        assertThat(abs(up.x)).isLessThan(1e-6)
+    }
+
+    @Test
+    fun rejectsRingsWhoseRadiusRatioDisagreesWithTheDeclaredOne() {
+        // True ratio 0.4, declared 0.9. This has to reach the ratio guard rather
+        // than short-circuiting in the pencil.
+        val outer = Conic.circle(Vec2(0.0, 0.0), 1.0).transformedBy(h)
+        val inner = Conic.circle(Vec2(0.0, 0.0), 0.4).transformedBy(h)
+        assertThat(Rectification.fromConcentricCircles(outer, 1.0, inner, 0.9)).isNull()
+    }
+
+    @Test
     fun toleratesHalfPixelNoiseOnFittedRings() {
         val random = Random(42)
         fun noisyRing(radius: Double): Conic = Conic.fit(

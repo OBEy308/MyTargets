@@ -38,3 +38,20 @@ dependencies {
     testImplementation libs.junit4
     testImplementation libs.truth
 }
+
+// The corpus lives outside the repository -- it is large, it never changes
+// and it is not covered by the project's licence. Tests that need it skip
+// themselves when the property is absent, so a fresh clone still builds
+// green.
+//
+// rootProject.findProperty, not providers.gradleProperty: the root build
+// script loads gradle-local.properties into the root project's ext, which
+// the provider API does not see. rootProject.file, not file: the documented
+// value is relative to the repository root, not to this module.
+tasks.named('test') {
+    def corpusDir = rootProject.findProperty('DETECTION_CORPUS_DIR')
+    if (corpusDir != null) {
+        systemProperty 'detection.corpus.dir',
+            rootProject.file(corpusDir).absolutePath
+    }
+}

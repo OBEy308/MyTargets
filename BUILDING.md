@@ -93,6 +93,11 @@ Without the entry the corpus tests are skipped and everything else builds as
 usual. The folder layout, the naming scheme and the ground truth format are
 described in the corpus's own `README.md`.
 
+The corpus is read by `:detection-corpus`. Without the property its tests skip
+themselves, so a fresh clone builds green. The 16 photographs under
+`inherited-249/` come from the 2017 prototype branch and carry their ground
+truth in their file names; see the design document for the scheme.
+
 ## Build
 
 ```

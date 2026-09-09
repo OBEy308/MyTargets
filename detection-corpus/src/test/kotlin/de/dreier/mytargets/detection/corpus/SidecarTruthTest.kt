@@ -79,7 +79,9 @@ class SidecarTruthTest {
 
         assertThat(r.imageToTarget).hasSize(9)
         assertThat(r.imageToTarget[0]).isWithin(1e-12).of(0.0009)
+        assertThat(r.imageToTarget[2]).isWithin(1e-12).of(-1.03)
         assertThat(r.imageToTarget[3]).isWithin(1e-12).of(0.0)
+        assertThat(r.imageToTarget[6]).isWithin(1e-12).of(0.00012)
         assertThat(r.imageToTarget[8]).isWithin(1e-12).of(1.0)
         assertThat(r.imagedCentre!!.x).isWithin(1e-6).of(1145.77)
     }

@@ -479,6 +479,12 @@ fest, ob die Geometrie die Zählung von 2017 bestätigt. Drei Fotos tun das
 nicht (`a6_998887_dark`, `a6_x98887`, `a6_x99999_multiple_targets`); die
 Sidecars begründen es, und `RealCorpusTest` pinnt diese Liste.
 
+Eine Kehrseite: Seit jeder gelistete Treffer im Umfang eine Position trägt,
+läuft die Zuordnung über den gedruckten Wert (`FilenameTruth`, `PrintedScore`,
+`pairsMatchedByScore` = 0) im echten Korpus nirgends mehr; nur synthetische
+Testfälle üben sie aus. Die Fähigkeit bleibt, weil ein neues Foto ohne Sidecar
+ankommen kann — aber der Korpus würde nicht bemerken, wenn sie bräche.
+
 **Zwei Arten von Ringwert.** Die Dateinamen nennen **gedruckte
 Ringwert-Zeichen** (`X`, `9`, `M`), die Sidecars **Zonenindizes**. Der
 Vergleich verlangt auf beiden Seiten dieselbe Art von Ringwert (siehe
@@ -526,6 +532,19 @@ liegt die Ringtreue bei 100 %, während die Erkennungsrate bei 1,1 % liegt — e
 Erkenner, der einen von zweiundneunzig Pfeilen gefunden und richtig geringt hat. **Die Ringtreue ist ohne ihren Nenner
 und ohne die Erkennungsrate daneben bedeutungslos und darf nie ohne beide
 zitiert oder abgebildet werden.**
+
+Dasselbe gilt für den Positionsfehler, aus einem zweiten Grund: Die Zuordnung
+nimmt je Erkennung den nächsten gelisteten Treffer innerhalb des Budgets. Wird
+eine Erkennung um mehr als den Abstand zwischen zwei Pfeilen verschoben, landet
+sie im Budget des *Nachbarn* und gilt als zugeordnet — mit kleinem Fehler zum
+falschen Pfeil. Gemessen am Korpus (2026-09-10): Ein um 0,20 Radien
+verschobener Erkenner meldet über sechs zugeordnete Treffer einen Median von
+0,054, und alle sechs sind solche Fehlzuordnungen; die 86 auf Distanz
+verworfenen Erkennungen mit ihrem Median von 0,195 zeigen den wahren Versatz.
+Ein Positionsfehler ist deshalb nur zusammen mit der Erkennungsrate und der
+Zeile `detectionsRejectedOnDistance` zu lesen. Plan 3 begegnet derselben
+Eigenschaft der Nächster-Nachbar-Zuordnung wieder, sobald Pfeile enger stecken
+als das Budget.
 
 Der Positionsfehler ist in Spot-Radien angegeben, und ein Spot-Radius ist auf
 jeder Auflage eine andere Zahl Millimeter: 61 cm auf der 122er-Vollauflage,

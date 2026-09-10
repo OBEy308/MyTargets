@@ -470,19 +470,20 @@ schon für Debug-Builds nötig machte.
 
 **Zwei Arten von Ringwert, und eine bindende Anforderung an Plan 3.** Die 16
 geerbten Fotos tragen ihre Wahrheit als **gedruckte Ringwert-Zeichen** (`X`,
-`9`, `M`, aus dem Dateinamen). Die 4 bisher annotierten Fotos tragen ihre
+`9`, `M`, aus dem Dateinamen); eines davon liegt außerhalb des Umfangs, es
+bleiben 94 geerbte Treffer im Umfang. Die 4 bisher annotierten Fotos tragen ihre
 Wahrheit als **Zonenindex**. Der Vergleich verlangt auf beiden Seiten dieselbe
 Art von Ringwert (siehe *Kennzahlen*). Ein Erkenner, der nur Zonenindizes
-ausgibt, kann deshalb gegen die 100 geerbten Treffer nie zugeordnet werden:
-Erkennungsrate ist auf 16,7 % gedeckelt, Falsch-Positiv-Rate auf 83 % nach
-unten begrenzt — dauerhaft, unabhängig davon, wie gut der Erkenner ist. Die
+ausgibt, kann deshalb gegen diese 94 Treffer nie zugeordnet werden:
+Erkennungsrate ist auf 17,5 % gedeckelt (20 von 114), Falsch-Positiv-Rate auf
+82,5 % nach unten begrenzt — dauerhaft, unabhängig davon, wie gut der Erkenner ist. Die
 Umrechnung von Zonenindex auf gedruckten Wert ist bewusst nicht Teil dieser
 Spec, weil sie die Zonentabellen aus `:shared` braucht, die erst Plan 3
 bereitstellt. Das ist eine **bindende Anforderung an den Plan-3-Runner**: Jeder
 erkannte Treffer muss den gedruckten Wert zusätzlich zum Zonenindex tragen,
 umgerechnet über das Zielscheibenmodell des Eintrags — sonst lassen sich die
-geerbten Fotos nicht zuordnen. Wer auf eine Erkennungsrate von 16,7 % oder eine
-Falsch-Positiv-Rate von 83 % stößt, sollte hier nachsehen, bevor er den
+geerbten Fotos nicht zuordnen. Wer auf eine Erkennungsrate um 17 % oder eine
+Falsch-Positiv-Rate um 82 % stößt, sollte hier nachsehen, bevor er den
 Erkenner verdächtigt.
 
 Abzudecken sind die Fälle, an denen die Pipeline realistisch scheitert:
@@ -507,7 +508,7 @@ bei denen überhaupt etwas zugeordnet wurde und bei denen Wahrheit und Erkennung
 vergleichbar sind — alles andere hieße, einen übersehenen Pfeil als falschen
 Ring zu zählen, was eine Lüge wäre. Der Nenner kann dadurch sehr klein werden:
 Gemessen am jetzigen Korpus liegt die Ringtreue bei 100 %, während die
-Erkennungsrate bei 0,8 % liegt — ein Erkenner, der einen von hundertzwanzig
+Erkennungsrate bei 0,9 % liegt — ein Erkenner, der einen von hundertvierzehn
 Pfeilen gefunden und richtig geringt hat. **Die Ringtreue ist ohne ihren Nenner
 und ohne die Erkennungsrate daneben bedeutungslos und darf nie ohne beide
 zitiert oder abgebildet werden.**

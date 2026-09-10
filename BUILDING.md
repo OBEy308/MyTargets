@@ -97,8 +97,21 @@ described in the corpus's own `README.md`.
 
 The corpus is read by `:detection-corpus`. Without the property its tests skip
 themselves, so a fresh clone builds green. The 16 photographs under
-`inherited-249/` come from the 2017 prototype branch and carry their ground
-truth in their file names; see the design document for the scheme.
+`inherited-249/` come from the 2017 prototype branch; since 2026-09-10 each has
+a sidecar like the others, and the scores in their file names remain as a
+cross-check.
+
+The registration run measures how well `:detection` finds the face in each
+photograph of the corpus:
+
+```
+./gradlew :detection:testDevDebugUnitTest --tests '*RegistrationCorpusRun'
+```
+
+It writes `detection/build/reports/detection/registration.md`, and beside it
+one folder of stage images per photograph. The run fails only when the
+photograph with three faces is not reported as a face mismatch; everything
+else is measured, not judged.
 
 ## Build
 

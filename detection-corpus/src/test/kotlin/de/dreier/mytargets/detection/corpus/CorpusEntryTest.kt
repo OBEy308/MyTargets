@@ -185,4 +185,22 @@ class CorpusEntryTest {
             // A homography has nine values.
         }
     }
+
+    @Test
+    fun orientationSixMatchesTheSwappedDecodedSize() {
+        // The sidecar records the raw size; a decoder that applies the EXIF
+        // orientation turns 4000 x 2252 at orientation 6 into 2252 x 4000.
+        val info = ImageInfo("t.jpg", 4000, 2252, 6)
+
+        assertThat(info.matchesDecodedSize(2252, 4000)).isTrue()
+        assertThat(info.matchesDecodedSize(4000, 2252)).isFalse()
+    }
+
+    @Test
+    fun anImageWithoutOrientationMatchesItsRecordedSize() {
+        val info = ImageInfo("t.jpg", 3120, 4160, null)
+
+        assertThat(info.matchesDecodedSize(3120, 4160)).isTrue()
+        assertThat(info.matchesDecodedSize(4160, 3120)).isFalse()
+    }
 }

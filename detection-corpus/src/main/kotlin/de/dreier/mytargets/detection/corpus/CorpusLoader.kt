@@ -15,6 +15,7 @@
 
 package de.dreier.mytargets.detection.corpus
 
+import com.google.gson.Gson
 import java.io.File
 
 /**
@@ -31,10 +32,18 @@ import java.io.File
  * metrics. A sidecar with no matching image is reported in
  * [LoadResult.orphanSidecars] — it is almost always a misspelt name, and
  * silently ignoring it would make a hand annotation have no effect at all.
+ *
+ * `out-of-scope.json` at the root names photographs that stay in the corpus
+ * but out of the metrics — see [CorpusEntry.outOfScope]. It lives at the root
+ * rather than beside an image because it also has to cover the inherited
+ * photographs, which carry no sidecar at all.
  */
 object CorpusLoader {
 
     private val IMAGE_EXTENSIONS = setOf("jpg", "jpeg", "png")
+    private const val OUT_OF_SCOPE_FILE = "out-of-scope.json"
+
+    private val gson = Gson()
 
     class LoadResult(
         val entries: List<CorpusEntry>,
@@ -46,26 +55,66 @@ object CorpusLoader {
         if (!root.isDirectory) {
             return LoadResult(emptyList(), emptyList(), emptyList())
         }
+        val outOfScope = readOutOfScope(root)
         val entries = mutableListOf<CorpusEntry>()
         val ignored = mutableListOf<String>()
         val orphans = mutableListOf<String>()
-        loadDirectory(root, entries, ignored, orphans)
+        loadDirectory(
+            root, entries, ignored, orphans,
+            exemptFromOrphanCheck = setOf(OUT_OF_SCOPE_FILE)
+        )
+
+        val matchedNames = mutableSetOf<String>()
+        val markedEntries = entries.map { entry ->
+            val reason = outOfScope[entry.imageName] ?: return@map entry
+            matchedNames.add(entry.imageName)
+            entry.copy(outOfScope = reason)
+        }
+        val unmatched = (outOfScope.keys - matchedNames).sorted()
+        require(unmatched.isEmpty()) {
+            "$OUT_OF_SCOPE_FILE: lists ${unmatched.joinToString()} with no matching image"
+        }
+
         return LoadResult(
-            entries.sortedBy { it.imageName },
+            markedEntries.sortedBy { it.imageName },
             ignored.sorted(),
             orphans.sorted()
         )
+    }
+
+    /**
+     * Reads `out-of-scope.json` from [root], if it exists. Its value maps an
+     * image file name to the reason it is excluded from the metrics.
+     */
+    private fun readOutOfScope(root: File): Map<String, String> {
+        val file = File(root, OUT_OF_SCOPE_FILE)
+        if (!file.isFile) return emptyMap()
+
+        val parsed = try {
+            gson.fromJson(file.readText(), Map::class.java)
+        } catch (e: RuntimeException) {
+            throw IllegalArgumentException("$OUT_OF_SCOPE_FILE: cannot read JSON", e)
+        } ?: throw IllegalArgumentException("$OUT_OF_SCOPE_FILE: empty JSON")
+
+        return parsed.entries.associate { (key, value) ->
+            require(key is String && value is String) {
+                "$OUT_OF_SCOPE_FILE: expected a name-to-reason mapping of strings"
+            }
+            key to value
+        }
     }
 
     private fun loadDirectory(
         directory: File,
         entries: MutableList<CorpusEntry>,
         ignored: MutableList<String>,
-        orphans: MutableList<String>
+        orphans: MutableList<String>,
+        exemptFromOrphanCheck: Set<String> = emptySet()
     ) {
         val children = directory.listFiles() ?: return
         val images = children.filter { it.isFile && it.isImage() }
         val usedSidecars = mutableSetOf<String>()
+        usedSidecars.addAll(exemptFromOrphanCheck)
 
         for (child in children.sortedBy { it.name }) {
             if (child.isDirectory) {

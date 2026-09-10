@@ -119,6 +119,12 @@ data class TruthShot(
  * @param unresolvedArrows arrows visible in the photograph whose entry point
  *        could not be determined. A detection matching no listed hit only
  *        counts as a false positive when this is zero.
+ * @param outOfScope the reason this photograph is excluded from the metrics,
+ *        or null when it is in scope. Set by [CorpusLoader] from the
+ *        corpus's `out-of-scope.json`, never by a sidecar or a file name: an
+ *        entry marked here still loads and still counts as a photograph --
+ *        it stays available for registration tests -- but contributes to no
+ *        hit metric at all.
  */
 data class CorpusEntry(
     val imageName: String,
@@ -129,7 +135,8 @@ data class CorpusEntry(
     val shotsPerEnd: Int?,
     val shots: List<TruthShot>,
     val unresolvedArrows: Int,
-    val registration: Registration?
+    val registration: Registration?,
+    val outOfScope: String? = null
 ) {
     init {
         require(imageName.isNotBlank()) { "an entry needs an image name" }

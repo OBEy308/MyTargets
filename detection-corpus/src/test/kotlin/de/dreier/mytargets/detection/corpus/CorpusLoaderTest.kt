@@ -205,6 +205,99 @@ class CorpusLoaderTest {
     }
 
     @Test
+    fun anEntryListedInOutOfScopeIsMarkedWithItsReason() {
+        write("a6_998877.jpg")
+        write(
+            "out-of-scope.json",
+            """{ "a6_998877.jpg": "Drei Auflagen nebeneinander." }"""
+        )
+
+        val entry = CorpusLoader.load(folder.root).entries.single()
+
+        assertThat(entry.outOfScope).isEqualTo("Drei Auflagen nebeneinander.")
+    }
+
+    @Test
+    fun anEntryNotListedInOutOfScopeIsNotMarked() {
+        write("a6_998877.jpg")
+        write("out-of-scope.json", """{}""")
+
+        val entry = CorpusLoader.load(folder.root).entries.single()
+
+        assertThat(entry.outOfScope).isNull()
+    }
+
+    @Test
+    fun outOfScopeStillLoadsAsAPhotograph() {
+        write("a6_998877.jpg")
+        write(
+            "out-of-scope.json",
+            """{ "a6_998877.jpg": "not covered by v1" }"""
+        )
+
+        val result = CorpusLoader.load(folder.root)
+
+        assertThat(result.entries.map { it.imageName }).containsExactly("a6_998877.jpg")
+        assertThat(result.ignored).isEmpty()
+    }
+
+    @Test
+    fun outOfScopeJsonIsNotReportedAsAnOrphanSidecar() {
+        // out-of-scope.json is a .json at the root with no image beside it --
+        // exactly the shape the orphan check looks for -- but it is the
+        // mechanism itself, not a mistake.
+        write("a6_998877.jpg")
+        write(
+            "out-of-scope.json",
+            """{ "a6_998877.jpg": "not covered by v1" }"""
+        )
+
+        val result = CorpusLoader.load(folder.root)
+
+        assertThat(result.orphanSidecars).isEmpty()
+    }
+
+    @Test
+    fun anOutOfScopeEntryWithNoMatchingImageIsAnError() {
+        write("a6_998877.jpg")
+        write(
+            "out-of-scope.json",
+            """{ "typo-name.jpg": "not covered by v1" }"""
+        )
+
+        val error = runCatching { CorpusLoader.load(folder.root) }.exceptionOrNull()
+
+        assertThat(error).isInstanceOf(IllegalArgumentException::class.java)
+        assertThat(error!!).hasMessageThat().contains("typo-name.jpg")
+        assertThat(error).hasMessageThat().contains("out-of-scope.json")
+    }
+
+    @Test
+    fun aBrokenOutOfScopeFileNamesItself() {
+        write("a6_998877.jpg")
+        write("out-of-scope.json", "{ not json")
+
+        val error = runCatching { CorpusLoader.load(folder.root) }.exceptionOrNull()
+
+        assertThat(error).isInstanceOf(IllegalArgumentException::class.java)
+        assertThat(error!!).hasMessageThat().contains("out-of-scope.json")
+    }
+
+    @Test
+    fun aSubdirectorysOutOfScopeNamedFileIsStillAnOrdinarySidecarCheck() {
+        // The mechanism lives at the corpus ROOT only. A file that happens to
+        // be named the same inside a subdirectory is an ordinary sidecar, and
+        // an ordinary one with no image beside it is still an orphan.
+        write("wa-full/a6_998877.jpg")
+        write("wa-full/out-of-scope.json", """{ "a6_998877.jpg": "x" }""")
+
+        val error = runCatching { CorpusLoader.load(folder.root) }.exceptionOrNull()
+        assertThat(error).isNull()
+        val result = CorpusLoader.load(folder.root)
+        assertThat(result.orphanSidecars).containsExactly("out-of-scope.json")
+    }
+
+    @Test
     fun everyListComesBackInAStableOrder() {
         write("a6_x99976.jpg")
         write("a6_998877.jpg")

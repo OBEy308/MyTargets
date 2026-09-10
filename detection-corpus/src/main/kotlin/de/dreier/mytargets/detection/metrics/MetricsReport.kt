@@ -143,27 +143,27 @@ object MetricsReport {
             }
         }
 
-        // scoreAccuracy is null for every entry with no comparable matched
-        // pair -- every registration-only entry, and every entry measured
-        // against a detector it cannot be scored against. compareBy would
-        // put those first (null sorts before any Double), filling the table
-        // with entries that measured nothing and pushing out the ones that
-        // measured badly, which is the opposite of this table's purpose.
-        // Sort entries that measured nothing last instead.
+        // Ranked by detection rate first, then by ring accuracy. An entry
+        // where the detector found nothing has no matched pair and therefore
+        // no ring accuracy at all; ranking by ring accuracy alone once sorted
+        // exactly that entry, the worst there is, last. Among entries with the
+        // same detection rate, one whose ring accuracy could not be measured
+        // sorts after one where it could.
         //
-        // Out-of-scope entries are excluded before that sort entirely: they
-        // are already named, and explained, in the "Out of scope" section
-        // above, and Metrics.over reports zero for every one of their
-        // numbers -- listing one here would read as a flawless zero-arrow
-        // entry rather than as what it is, a photograph nothing was measured
-        // against on purpose.
+        // Two kinds of entry are not listed at all. A registration-only entry
+        // lists no hits, so nothing about it was measured. An out-of-scope
+        // entry is already named, and explained, in the "Out of scope"
+        // section above, and Metrics.over reports zero for every one of its
+        // numbers. A row of zeros for either would read as a result.
         val worst = outcomes
-            .filter { it.entry.outOfScope == null }
+            .filter { it.entry.outOfScope == null && it.entry.isAnnotated }
+            .map { it to Metrics.over(listOf(it)) }
             .sortedWith(
                 compareBy(
-                    { scoreAccuracyOf(it) == null },
-                    { scoreAccuracyOf(it) ?: Double.MAX_VALUE },
-                    { it.entry.imageName }
+                    { (_, m) -> m.detectionRate },
+                    { (_, m) -> m.scoreAccuracy == null },
+                    { (_, m) -> m.scoreAccuracy },
+                    { (outcome, _) -> outcome.entry.imageName }
                 )
             )
             .take(WORST_ENTRIES)
@@ -179,8 +179,7 @@ object MetricsReport {
             // Metrics.boundaryShots.
             sb.appendLine("| Photograph | Arrows | Found | Correct | Invented |")
             sb.appendLine("|---|---|---|---|---|")
-            for (outcome in worst) {
-                val m = Metrics.over(listOf(outcome))
+            for ((outcome, m) in worst) {
                 sb.appendLine(
                     "| ${outcome.entry.imageName} | ${m.expectedShots} | " +
                         "${m.matchedShots} | ${m.correctScores}/${m.scoreComparableShots} | " +
@@ -191,9 +190,6 @@ object MetricsReport {
 
         return sb.toString()
     }
-
-    private fun scoreAccuracyOf(outcome: EntryOutcome): Double? =
-        Metrics.over(listOf(outcome)).scoreAccuracy
 
     private fun plural(count: Int, one: String, many: String) = if (count == 1) one else many
 

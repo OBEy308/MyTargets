@@ -735,4 +735,47 @@ class MetricsReportTest {
 
         assertThat(report).contains("0 pairs matched by score rather than by position.")
     }
+
+    // --- Review of PR 1: an entry that found nothing is the worst, not the best
+
+    @Test
+    fun anEntryWhereNothingWasFoundIsNotPushedOutByPerfectOnes() {
+        // Five perfect entries and one where the detector found none of six
+        // listed hits, against a cap of five. Finding nothing leaves no matched
+        // pair and therefore no ring accuracy at all -- the same null a
+        // registration-only entry has. Ranking by ring accuracy alone sorts
+        // that null last and cuts the worst photograph from the table.
+        val perfect = (0 until 5).map { i ->
+            outcome(
+                entry("perfect$i.jpg", shots = arrayOf(truth(9, 0.0, 0.0))),
+                listOf(found(9, 0.0, 0.0))
+            )
+        }
+        val missedShots = (0 until 6).map { i -> truth(5, 0.1 * i, 0.0) }.toTypedArray()
+        val missed = outcome(entry("missed.jpg", shots = missedShots), emptyList())
+
+        val report = MetricsReport.render(perfect + missed, title = "Worst")
+
+        assertThat(report).contains("| missed.jpg | 6 | 0 | 0/0 | 0 |")
+    }
+
+    @Test
+    fun aRegistrationOnlyEntryIsNotListedAmongTheWorst() {
+        // A registration-only entry lists no hits, so nothing about it was
+        // measured, and a row of zeros for it would read as a result.
+        val registrationOnly = outcome(
+            CorpusEntry(
+                imageName = "reg.jpg", image = null, camera = null, capture = null,
+                target = null, shotsPerEnd = 6, shots = emptyList(),
+                unresolvedArrows = 0, registration = null
+            ),
+            emptyList()
+        )
+        val bad = outcome(entry("bad.jpg", shots = arrayOf(truth(9, 0.0, 0.0))), emptyList())
+
+        val report = MetricsReport.render(listOf(registrationOnly, bad), title = "Worst")
+
+        assertThat(report).contains("| bad.jpg | 1 | 0 | 0/0 | 0 |")
+        assertThat(report).doesNotContain("| reg.jpg |")
+    }
 }

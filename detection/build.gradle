@@ -52,6 +52,29 @@ android {
 dependencies {
     implementation libs.kotlin.stdlib.jdk7
 
+    // The Java bindings of the desktop build. The app ships
+    // org.opencv:opencv 4.14.0; compiling against 4.9 means an API that 4.9
+    // lacks fails here rather than in a test (registration design,
+    // "OpenCV-Version"). Only org.opencv.core and org.opencv.imgproc may be
+    // imported: this jar has modules the Android AAR does not.
+    compileOnly libs.opencv.desktop
+
+    testImplementation libs.opencv.desktop
+    testImplementation project(':detection-corpus')
     testImplementation libs.junit4
     testImplementation libs.truth
+}
+
+// The corpus run and its report are wired into one variant only; otherwise
+// ./gradlew test would measure the corpus in all six.
+tasks.withType(Test).configureEach { task ->
+    if (task.name == 'testDevDebugUnitTest') {
+        def corpusDir = rootProject.findProperty('DETECTION_CORPUS_DIR')
+        if (corpusDir != null) {
+            task.systemProperty 'detection.corpus.dir',
+                rootProject.file(corpusDir).absolutePath
+        }
+        task.systemProperty 'detection.report.dir',
+            layout.buildDirectory.dir('reports/detection').get().asFile.absolutePath
+    }
 }

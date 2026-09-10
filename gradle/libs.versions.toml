@@ -65,6 +65,7 @@ mockito = "5.22.0"
 espresso = "3.7.0"
 
 multidex = "2.0.1"
+opencv-desktop = "4.9.0-0"
 threetenabp = "1.4.9"
 timber = "5.0.1"
 
@@ -150,6 +151,7 @@ kotlin-stdlib-jdk7 = { module = "org.jetbrains.kotlin:kotlin-stdlib-jdk7", versi
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 kotlin-test-junit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }
 multidex = { module = "androidx.multidex:multidex", version.ref = "multidex" }
+opencv-desktop = { module = "org.openpnp:opencv", version.ref = "opencv-desktop" }
 threetenabp = { module = "com.jakewharton.threetenabp:threetenabp", version.ref = "threetenabp" }
 timber = { module = "com.jakewharton.timber:timber", version.ref = "timber" }
 [plugins]

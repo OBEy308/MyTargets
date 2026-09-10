@@ -47,9 +47,15 @@ object Orientation {
     /**
      * Whether [mapping] reverses orientation at [at].
      *
-     * The rest of a rectification constrains rotation but not handedness, and
-     * no assertion phrased in radii, dot products or distances can see a
-     * reflection, because all of those are reflection invariant.
+     * Neither a rectification nor a refinement constrains handedness. In
+     * [Rectification] the metric step's 2x2 block is diag(sqrt(lambda)) V^T,
+     * and the sign of det(V) is whatever the Jacobi sweeps left on the
+     * eigenvectors: without this check the face comes out mirrored in about
+     * half of all views. The registration's Levenberg-Marquardt refinement
+     * fits a radial residual that a reflection leaves unchanged, so its result
+     * can be mirrored just as well. No assertion phrased in radii, dot products
+     * or distances can see a reflection, because all of those are reflection
+     * invariant.
      *
      * Target coordinates share the image's handedness -- x right, y downwards,
      * up on the face being negative y -- so a correct map has a positive

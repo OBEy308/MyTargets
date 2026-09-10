@@ -36,13 +36,18 @@ class RingAttempt(
 
 /**
  * register.py's ring loop: each transition in turn, outward from the disc,
- * the search window following the conic of the last accepted ring.
+ * the search window following the conic of the last accepted ring. Until a
+ * ring is accepted, the window is the disc's, scaled by the transition's
+ * radius over the first transition's. register.py leaves it unscaled, so
+ * there a rejected first ring puts every later one outside the window.
  */
 object RingSearch {
 
     const val RAYS = 720
     const val MIN_POINTS = 40
     const val MIN_INLIERS = 60
+    private const val DISC_LO = 0.6
+    private const val DISC_HI = 1.7
     private const val MAX_MEDIAN_AT_2000 = 3.0
     private const val FLOOR_AT_2000 = 0.5
     private const val GAP_AT_2000 = 12.0
@@ -55,13 +60,22 @@ object RingSearch {
     ): List<RingAttempt> {
         var centre = disc.centre
         var innerRadius: (Double) -> Double? = { disc.radius }
-        var lo = 0.6
-        var hi = 1.7
         var lastAccepted: RingAttempt? = null
         val attempts = ArrayList<RingAttempt>()
 
         for (transition in transitions) {
-            lastAccepted?.let { previous ->
+            val lo: Double
+            val hi: Double
+            val previous = lastAccepted
+            if (previous == null) {
+                // The disc is the first transition's ring, and this one lies
+                // further out by the table's radius ratio. Unscaled, a rejected
+                // first ring would leave the next one outside the window, and
+                // every later one with it.
+                val k = transition.radius / transitions.first().radius
+                lo = DISC_LO * k
+                hi = DISC_HI * k
+            } else {
                 val conic = previous.fit!!.conic
                 val conicCentre = conic.centre() ?: centre
                 innerRadius = { angle -> radiusAlong(conic, conicCentre, angle) }

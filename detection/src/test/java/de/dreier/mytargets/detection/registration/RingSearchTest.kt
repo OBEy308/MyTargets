@@ -74,6 +74,25 @@ class RingSearchTest {
     }
 
     @Test
+    fun aRejectedFirstRingDoesNotHideTheNextOne() {
+        // Yellow and red are 15 px apart except within 5 degrees of the x
+        // axis, so 0.2 has too few points. 0.4 must still be found: with no
+        // ring accepted, its window is the disc's scaled by 0.4 / 0.2. The
+        // disc's window unscaled, as in register.py, would end at 136 px,
+        // short of 160.
+        val attempts = RingSearch.find(
+            face { d, angle ->
+                if (d >= 80 && d < 95 && abs(angle) > Math.toRadians(5.0)) ColourClass.OTHER else null
+            },
+            disc, RingTransitions.WA_FULL, f = 0.8
+        )
+
+        assertThat(attempts.map { it.accepted }).containsExactly(false, true, true, true).inOrder()
+        assertThat(RingSearch.radiusAlong(attempts[1].fit!!.conic, centre, 0.0)!!)
+            .isWithin(1.0).of(160.0)
+    }
+
+    @Test
     fun theRadiusAlongARayOfACircleIsItsDistanceToTheEdge() {
         val circle = Conic.circle(Vec2(0.0, 0.0), 100.0)
 

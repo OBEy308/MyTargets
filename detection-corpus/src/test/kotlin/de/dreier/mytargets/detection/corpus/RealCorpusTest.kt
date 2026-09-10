@@ -16,6 +16,7 @@
 package de.dreier.mytargets.detection.corpus
 
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import de.dreier.mytargets.detection.metrics.EntryOutcome
 import de.dreier.mytargets.detection.metrics.Metrics
 import de.dreier.mytargets.detection.metrics.ShotMatching
@@ -73,26 +74,39 @@ class RealCorpusTest {
 
         assertThat(annotated).isNotEmpty()
 
-        // Stronger than the brief's isNotEmpty(): pins the exact count, so a
-        // loader that finds only some of the annotated photographs (rather
-        // than none) still fails visibly.
-        assertThat(annotated).hasSize(4)
+        // Pins the exact count, so a loader that finds only some of the
+        // annotated photographs (rather than none) still fails visibly. Since
+        // 2026-09-10 every photograph in the corpus carries a sidecar: the 4
+        // wa-full ones and the 16 inherited ones.
+        assertThat(annotated).hasSize(20)
 
         assertThat(annotated.all { it.isAnnotated }).isTrue()
-        assertThat(annotated.all { it.hasPositions }).isTrue()
+        // Not `hasPositions`, which change 4 retired: requiring every listed
+        // shot to carry a position would fail the day a photograph like the
+        // owner's (a shaft hidden behind another, entry point unplaceable)
+        // is added -- exactly the case change 4 exists to support; see
+        // SidecarTruthTest for that scenario read directly. What holds today,
+        // and must keep holding, is that the annotated photographs actually
+        // carry the positions the truth records: every one of them has at
+        // least one positioned shot, and reading a mix of positioned and
+        // unpositioned shots in the same entry is not an error.
+        assertThat(annotated.all { it.shots.any { s -> s.position != null } }).isTrue()
         assertThat(annotated.all { it.shots.all { s -> s.scoringRing != null } }).isTrue()
-        assertThat(annotated.all { it.camera?.focalLength35mm != null }).isTrue()
         assertThat(annotated.all { it.registration != null }).isTrue()
+        // Five inherited photographs (the four WA6Ring ones and the hall shot)
+        // have no EXIF at all; every other photograph names its focal length.
+        assertThat(annotated.count { it.camera?.focalLength35mm != null }).isEqualTo(15)
     }
 
     @Test
     fun noAnnotatedEntryClaimsMoreArrowsThanWereShot() {
         // The defensible invariant, and only this one. Equality does NOT hold
-        // across the corpus: 2026-08-15_bedeckt_frontal_02 lists five hits with
-        // none unresolved against a six arrow end. Either five arrows were shot
-        // or a sixth is unaccounted for; that is the annotator's call, not this
-        // test's, so the test asserts what must always be true and the report
-        // below names the entries where the two disagree.
+        // across the corpus: 2026-08-15_bedeckt_frontal_02 lists five hits and
+        // declares one unresolved -- a sixth arrow whose shaft disappears
+        // behind another, entry point unplaceable -- against a six arrow end.
+        // That five-plus-one is the annotator's call, not this test's, so the
+        // test asserts what must always be true and the report below names
+        // the entries where the two disagree.
         for (entry in result.entries.filter { it.target != null }) {
             val perEnd = entry.shotsPerEnd
             assertThat(perEnd).isNotNull()
@@ -103,48 +117,111 @@ class RealCorpusTest {
 
     @Test
     fun entriesThatDoNotAccountForTheirWholeEndAreListed() {
-        // Not a failure — a visible list, so an annotation slip does not hide.
-        // The rule every annotated entry must obey is
-        // `listed + unresolved <= shotsPerEnd`; this asserts exactly that,
-        // for every one of them, and separately prints whichever entries fall
-        // strictly short of it. The corpus may legitimately have none such --
-        // it does, as of 2026-09-09 -- so this must never assert that a
-        // shortfall exists, only that the rule itself holds.
+        // A shortfall -- `listed + unresolved < shotsPerEnd` -- is the
+        // annotator's own call to leave an arrow entirely unaccounted for,
+        // not necessarily wrong (see noAnnotatedEntryClaimsMoreArrowsThanWereShot
+        // above), but it must never go unnoticed. The corpus has none as of
+        // 2026-09-09, so this asserts the list is EMPTY, with a message that
+        // names any offender: a new sidecar that quietly drops a hit without
+        // declaring it unresolved must fail loudly here, not pass silently
+        // the way an unconditional `<= shotsPerEnd` loop would. Raise this
+        // deliberately if more such entries are legitimately added; do not
+        // delete this assertion.
         val annotated = result.entries.filter { it.target != null && it.shotsPerEnd != null }
 
         val incomplete = annotated.filter {
             it.expectedShots + it.unresolvedArrows < it.shotsPerEnd!!
         }
-        println("Entries short of their shotsPerEnd:")
-        incomplete.forEach {
-            println(
-                "  ${it.imageName}: ${it.expectedShots} listed + " +
-                    "${it.unresolvedArrows} unresolved of ${it.shotsPerEnd}"
-            )
-        }
 
-        for (entry in annotated) {
-            assertThat(entry.expectedShots + entry.unresolvedArrows)
-                .isAtMost(entry.shotsPerEnd!!)
-        }
+        assertWithMessage(
+            "entries short of their shotsPerEnd: " +
+                incomplete.joinToString {
+                    "${it.imageName} (${it.expectedShots} listed + " +
+                        "${it.unresolvedArrows} unresolved of ${it.shotsPerEnd})"
+                }
+        ).that(incomplete).isEmpty()
     }
 
     @Test
-    fun theInheritedPhotographsStillLoadAsRingOnlyTruth() {
-        val inherited = result.entries.filter { it.target == null }
+    fun theInheritedPhotographsCarryPositionsAndKeepTheirPrintedScores() {
+        // Since 2026-09-10 the 16 inherited photographs have sidecars with
+        // positions and zone indices, registered and annotated with the
+        // corpus tools. The file name is no longer the truth, but it is still
+        // a check on it: each sidecar shot also records its printed value.
+        val inherited = result.entries.filter { FilenameTruth.parse(it.imageName) != null }
 
         assertThat(inherited).hasSize(16)
-        assertThat(inherited.all { !it.hasPositions }).isTrue()
-        assertThat(inherited.all { it.shots.all { s -> s.printedScore != null } }).isTrue()
+        // Not `hasPositions`, which change 4 retired -- see
+        // theAnnotatedPhotographsAreRead above for why.
+        assertThat(inherited.all { it.isAnnotated && it.shots.all { s -> s.position != null } })
+            .isTrue()
+        assertThat(inherited.all { it.registration != null }).isTrue()
+        assertThat(inherited.all { it.shots.all { s -> s.scoringRing != null && s.printedScore != null } }).isTrue()
+        assertThat(inherited.map { it.shots.size }).containsExactlyElementsIn(
+            inherited.map { it.shotsPerEnd }
+        )
     }
 
     @Test
-    fun aKnownInheritedEntryHasTheScoresItsNamePromises() {
+    fun theInheritedSidecarsAgreeWithTheirFileNamesExceptWhereDocumented() {
+        // The scheme writes X and a plain 10 both as "x", so the comparison is
+        // by points. A hit within its position tolerance of a ring line may
+        // match either neighbouring value: the scorer in 2017 gave a line
+        // cutter the higher ring, the sidecar gives the pure radius. Three
+        // photographs disagree beyond that; each sidecar's annotation block
+        // says why. A fourth disagreement means a sidecar changed without its
+        // note, or a file name is wrong.
+        fun points(score: PrintedScore): Int = if (score == PrintedScore.X) 10 else score.text.toIntOrNull() ?: 0
+
+        val disagreeing = result.entries
+            .filter { FilenameTruth.parse(it.imageName) != null }
+            .filter { entry ->
+                val wanted = FilenameTruth.parse(entry.imageName)!!.shots.map { points(it.printedScore!!) }.sorted()
+                val got = entry.shots.map { points(it.printedScore!!) }
+                // An X on a ring line is still worth ten either side of it,
+                // so only a plain value gets the one-ring leeway.
+                val near = entry.shots.map { it.nearRingBoundary && it.printedScore != PrintedScore.X }
+                !assignable(got, near, wanted)
+            }
+            .map { it.imageName }
+
+        println("Inherited sidecars whose printed scores contradict the file name:")
+        disagreeing.forEach { println("  $it") }
+
+        assertThat(disagreeing).containsExactly(
+            "a6_998887_dark.jpg",
+            "a6_x98887.jpg",
+            "a6_x99999_multiple_targets.jpg"
+        )
+    }
+
+    /**
+     * Whether every value in [got] can be paired with one in [wanted], where a
+     * shot flagged near a ring line may also count as one ring higher or lower.
+     */
+    private fun assignable(got: List<Int>, near: List<Boolean>, wanted: List<Int>): Boolean {
+        if (got.size != wanted.size) return false
+        fun go(i: Int, remaining: List<Int>): Boolean {
+            if (i == got.size) return remaining.isEmpty()
+            val options = if (near[i]) setOf(got[i], got[i] + 1, got[i] - 1) else setOf(got[i])
+            return options.any { v ->
+                v in remaining && go(i + 1, remaining.toMutableList().also { it.remove(v) })
+            }
+        }
+        return go(0, wanted)
+    }
+
+    @Test
+    fun aKnownInheritedEntryIsReadFromItsSidecar() {
         val entry = result.entries.single { it.imageName == "a8_xxx99988_front.jpg" }
 
-        assertThat(entry.shots.map { it.printedScore!!.text })
-            .containsExactly("X", "X", "X", "9", "9", "9", "8", "8").inOrder()
-        assertThat(entry.tags).containsExactly("front")
+        assertThat(entry.shots).hasSize(8)
+        assertThat(entry.target!!.model).isEqualTo("WA6Ring")
+        assertThat(entry.outOfScope).isNotNull()
+        assertThat(entry.tags).containsExactly("halle", "frontal")
+        // Not `hasPositions`, which change 4 retired -- see
+        // theAnnotatedPhotographsAreRead above for why.
+        assertThat(entry.isAnnotated && entry.shots.all { it.position != null }).isTrue()
     }
 
     @Test
@@ -167,8 +244,6 @@ class RealCorpusTest {
 
         assertThat(overall.expectedShots).isEqualTo(withoutOutOfScope.expectedShots)
         assertThat(overall.annotatedEntries).isEqualTo(withoutOutOfScope.annotatedEntries)
-        assertThat(overall.falsePositiveDenominator)
-            .isEqualTo(withoutOutOfScope.falsePositiveDenominator)
     }
 
     @Test

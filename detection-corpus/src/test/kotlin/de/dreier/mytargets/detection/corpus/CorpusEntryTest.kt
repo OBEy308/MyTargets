@@ -40,13 +40,6 @@ class CorpusEntryTest {
 
     private fun ringShot(ring: Int) = TruthShot(scoringRing = ring)
 
-    private fun placedShot(ring: Int, x: Double, y: Double, tolerance: Double? = null) =
-        TruthShot(
-            scoringRing = ring,
-            position = SpotPosition(0, x, y),
-            positionTolerance = tolerance
-        )
-
     @Test
     fun printedScoreCharactersMapToPrintedValues() {
         assertThat(PrintedScore.parseFilenameChar('x')).isEqualTo(PrintedScore.X)
@@ -160,16 +153,6 @@ class CorpusEntryTest {
         val e = entry(emptyList())
         assertThat(e.isAnnotated).isFalse()
         assertThat(e.expectedShots).isEqualTo(0)
-        assertThat(e.hasPositions).isFalse()
-    }
-
-    @Test
-    fun anEntryKnowsWhetherEveryShotCarriesAPosition() {
-        assertThat(entry(listOf(placedShot(0, 0.1, 0.1), placedShot(2, 0.3, 0.0))).hasPositions)
-            .isTrue()
-        assertThat(entry(listOf(placedShot(0, 0.1, 0.1), ringShot(2))).hasPositions)
-            .isFalse()
-        assertThat(entry(listOf(ringShot(0))).hasPositions).isFalse()
     }
 
     @Test

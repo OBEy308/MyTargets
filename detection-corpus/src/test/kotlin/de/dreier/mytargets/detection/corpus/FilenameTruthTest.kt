@@ -30,7 +30,6 @@ class FilenameTruthTest {
         assertThat(entry.expectedShots).isEqualTo(6)
         assertThat(scoresOf(entry)).containsExactly("9", "9", "8", "8", "7", "7").inOrder()
         assertThat(entry.tags).isEmpty()
-        assertThat(entry.hasPositions).isFalse()
         assertThat(entry.target).isNull()
     }
 
@@ -47,7 +46,6 @@ class FilenameTruthTest {
         assertThat(entry.image).isNull()
         assertThat(entry.tags).isEmpty()
         assertThat(entry.unresolvedArrows).isEqualTo(0)
-        assertThat(entry.hasPositions).isFalse()
     }
 
     @Test

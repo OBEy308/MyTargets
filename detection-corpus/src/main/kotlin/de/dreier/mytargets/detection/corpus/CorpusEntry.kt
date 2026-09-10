@@ -157,14 +157,6 @@ data class CorpusEntry(
     val isAnnotated: Boolean
         get() = shots.isNotEmpty()
 
-    /**
-     * Whether every listed shot carries a position. Partial annotation counts
-     * as none: otherwise the position error would depend on which arrows
-     * happened to be placed.
-     */
-    val hasPositions: Boolean
-        get() = isAnnotated && shots.all { it.position != null }
-
     /** The capture conditions, used to break the metrics down by difficulty. */
     val tags: Set<String>
         get() = setOfNotNull(capture?.lighting, capture?.angle)

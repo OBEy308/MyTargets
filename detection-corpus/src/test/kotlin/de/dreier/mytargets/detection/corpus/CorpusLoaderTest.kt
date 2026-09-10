@@ -310,4 +310,55 @@ class CorpusLoaderTest {
         assertThat(result.ignored).isInOrder()
         assertThat(result.ignored).containsExactly("aaa.jpg", "zzz.jpg").inOrder()
     }
+
+    @Test
+    fun anOutOfScopePhotographThatCannotBeReadIsNotReportedAsMissing() {
+        // A photograph of an unsupported face, listed before anyone wrote its
+        // sidecar: it exists, it merely cannot be read, and covering such a
+        // photograph is what out-of-scope.json is for. It stays in ignored and
+        // the load goes on.
+        write("unsupported-face.jpg")
+        write("out-of-scope.json", """{ "unsupported-face.jpg": "not covered by v1" }""")
+
+        val result = CorpusLoader.load(folder.root)
+
+        assertThat(result.ignored).containsExactly("unsupported-face.jpg")
+    }
+
+    @Test
+    fun theSameImageNameInTwoFoldersIsAnError() {
+        // The naming scheme carries no face type, so a WAFull and a 3-spot
+        // photograph taken on the same day under the same light and angle get
+        // the same name. Entries, out-of-scope.json and the report identify a
+        // photograph by that name alone, so the two could not be told apart.
+        write("wa-full/2026-10-01_halle_frontal_01.jpg")
+        write("wa-full/2026-10-01_halle_frontal_01.json", sidecar())
+        write("wa-3spot-vertikal/2026-10-01_halle_frontal_01.jpg")
+        write("wa-3spot-vertikal/2026-10-01_halle_frontal_01.json", sidecar())
+
+        val error = runCatching { CorpusLoader.load(folder.root) }.exceptionOrNull()
+
+        assertThat(error).isInstanceOf(IllegalArgumentException::class.java)
+        assertThat(error!!).hasMessageThat().contains("2026-10-01_halle_frontal_01.jpg")
+        assertThat(error).hasMessageThat().contains("wa-full")
+        assertThat(error).hasMessageThat().contains("wa-3spot-vertikal")
+    }
+
+    @Test
+    fun aSidecarMustMatchItsImageNameExactlyIncludingCase() {
+        // Windows finds photo.json for Photo.jpg and Linux does not. Matching
+        // the name exactly makes both behave like Linux: the photograph has no
+        // sidecar, and the sidecar is reported as the misspelling it is.
+        write("Photo.jpg")
+        write(
+            "photo.json",
+            sidecar(shots = """[ { "faceIndex": 0, "x": 0.0, "y": 0.0, "scoringRing": 0 } ]""")
+        )
+
+        val result = CorpusLoader.load(folder.root)
+
+        assertThat(result.entries).isEmpty()
+        assertThat(result.ignored).containsExactly("Photo.jpg")
+        assertThat(result.orphanSidecars).containsExactly("photo.json")
+    }
 }

@@ -36,7 +36,13 @@ import java.io.File
  * `out-of-scope.json` at the root names photographs that stay in the corpus
  * but out of the metrics — see [CorpusEntry.outOfScope]. It lives at the root
  * rather than beside an image because it also has to cover the inherited
- * photographs, which carry no sidecar at all.
+ * photographs, which carry no sidecar at all. A listed photograph that cannot
+ * be read stays in [LoadResult.ignored]; only a name with no image behind it
+ * is an error.
+ *
+ * An image name has to be unique across all folders, because entries,
+ * `out-of-scope.json` and the report identify a photograph by its name alone.
+ * A second image of the same name is fatal.
  */
 object CorpusLoader {
 
@@ -60,7 +66,7 @@ object CorpusLoader {
         val ignored = mutableListOf<String>()
         val orphans = mutableListOf<String>()
         loadDirectory(
-            root, entries, ignored, orphans,
+            root, entries, ignored, orphans, folderOfImage = mutableMapOf(),
             exemptFromOrphanCheck = setOf(OUT_OF_SCOPE_FILE)
         )
 
@@ -70,7 +76,7 @@ object CorpusLoader {
             matchedNames.add(entry.imageName)
             entry.copy(outOfScope = reason)
         }
-        val unmatched = (outOfScope.keys - matchedNames).sorted()
+        val unmatched = (outOfScope.keys - matchedNames - ignored.toSet()).sorted()
         require(unmatched.isEmpty()) {
             "$OUT_OF_SCOPE_FILE: lists ${unmatched.joinToString()} with no matching image"
         }
@@ -109,6 +115,7 @@ object CorpusLoader {
         entries: MutableList<CorpusEntry>,
         ignored: MutableList<String>,
         orphans: MutableList<String>,
+        folderOfImage: MutableMap<String, File>,
         exemptFromOrphanCheck: Set<String> = emptySet()
     ) {
         val children = directory.listFiles() ?: return
@@ -118,13 +125,23 @@ object CorpusLoader {
 
         for (child in children.sortedBy { it.name }) {
             if (child.isDirectory) {
-                loadDirectory(child, entries, ignored, orphans)
+                loadDirectory(child, entries, ignored, orphans, folderOfImage)
             }
         }
 
         for (image in images.sortedBy { it.name }) {
-            val sidecar = File(directory, image.nameWithoutExtension + ".json")
-            val entry = if (sidecar.isFile) {
+            val earlier = folderOfImage.putIfAbsent(image.name, directory)
+            require(earlier == null) {
+                "${image.name} appears in both ${earlier!!.path} and ${directory.path}; " +
+                    "an image name has to be unique across the corpus"
+            }
+
+            // Found by exact name rather than by File.isFile, which ignores
+            // case on Windows: it would pair photo.json with Photo.jpg there
+            // and not on Linux.
+            val sidecarName = image.nameWithoutExtension + ".json"
+            val sidecar = children.firstOrNull { it.isFile && it.name == sidecarName }
+            val entry = if (sidecar != null) {
                 usedSidecars.add(sidecar.name)
                 SidecarTruth.parse(image.name, sidecar.readText())
             } else {

@@ -28,6 +28,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 /** A yellow disc with red around it, measured on its yellow-to-red transition. */
 class Disc(val centre: Vec2, val radius: Double, val transitionPoints: Int)
@@ -50,12 +51,17 @@ object YellowDiscs {
     private const val MIN_DENSITY = 0.6f
     private const val MIN_RED_DENSITY = 0.08f
     private const val RAYS = 72
+    private const val RAY_LO = 0.3
+    private const val RAY_HI = 4.0
     private const val MIN_TRANSITIONS = 36
     private const val MIN_RADIUS_AT_2000 = 4.0
     private const val GAP_AT_2000 = 12.0
     private const val MIN_YELLOW_INSIDE = 0.7
     private const val MAX_ROUNDS = 20
     private const val CONVERGED_PX = 0.1
+
+    /** The red ring around the yellow disc ends at twice its radius. */
+    private const val RED_RING_END = 2.0
 
     fun find(classes: ClassImage, f: Double): DiscSearch {
         val width = classes.width
@@ -147,6 +153,14 @@ object YellowDiscs {
      * reached. register.py's three fixed rounds stop short of convergence:
      * each mean update only about halves the remaining offset from the true
      * centre, so a candidate seeded far off keeps a lingering bias.
+     *
+     * A disc the frame cuts shows its transition only on the arc inside the
+     * image. The mean of that arc lies away from the frame, and the rounds
+     * would settle on a smaller disc within the visible part. So once a ray
+     * leaves the image on yellow, centre and radius come from the circle
+     * through the transitions instead, fitted to those within twice their
+     * median distance, where the red ring ends: a transition farther out
+     * belongs to something else.
      */
     private fun measure(classes: ClassImage, start: Vec2, window: Double, f: Double): Disc? {
         var centre = start
@@ -157,11 +171,21 @@ object YellowDiscs {
             val r = radius
             points = RayTransitions.find(
                 classes, centre, { r }, ColourClass.YELLOW, ColourClass.RED,
-                RAYS, lo = 0.3, hi = 4.0, maxGapPx = GAP_AT_2000 * f
+                RAYS, lo = RAY_LO, hi = RAY_HI, maxGapPx = GAP_AT_2000 * f
             )
             if (points.size < MIN_TRANSITIONS) break
-            radius = RobustConic.median(points.map { it.distanceTo(centre) })
-            val next = Vec2(points.sumOf { it.x } / points.size, points.sumOf { it.y } / points.size)
+            val distances = points.map { it.distanceTo(centre) }
+            val median = RobustConic.median(distances)
+            val next: Vec2
+            if (cutByTheFrame(classes, centre, (RAY_HI * r).toInt())) {
+                val near = points.filterIndexed { i, _ -> distances[i] <= RED_RING_END * median }
+                val circle = circleThrough(near, centre) ?: return null
+                next = circle.centre
+                radius = circle.radius
+            } else {
+                radius = median
+                next = Vec2(points.sumOf { it.x } / points.size, points.sumOf { it.y } / points.size)
+            }
             measuredOnce = true
             val moved = next.distanceTo(centre)
             centre = next
@@ -185,6 +209,57 @@ object YellowDiscs {
         }
         if (inside <= RAYS / 2 || yellow.toDouble() / inside <= MIN_YELLOW_INSIDE) return null
         return Disc(centre, radius, points.size)
+    }
+
+    /**
+     * Whether a ray from [centre] leaves the image on yellow before [reach].
+     * That ray cannot show a transition, and the disc is taken to be cut by
+     * the frame.
+     */
+    private fun cutByTheFrame(classes: ClassImage, centre: Vec2, reach: Int): Boolean {
+        for (k in 0 until RAYS) {
+            val a = 2.0 * PI * k / RAYS
+            val c = cos(a)
+            val s = sin(a)
+            var last: ColourClass? = null
+            for (r in 0 until reach) {
+                val x = (centre.x + r * c).roundToInt()
+                val y = (centre.y + r * s).roundToInt()
+                if (classes.isInside(x, y)) {
+                    last = classes[x, y]
+                } else if (last != null) {
+                    if (last == ColourClass.YELLOW) return true
+                    break
+                }
+            }
+        }
+        return false
+    }
+
+    private class Circle(val centre: Vec2, val radius: Double)
+
+    /**
+     * The circle x^2 + y^2 + d x + e y + g = 0 nearest to [points] by least
+     * squares (Kasa's fit), solved around [origin] to keep the sums small.
+     * Null when the points do not determine a circle.
+     */
+    private fun circleThrough(points: List<Vec2>, origin: Vec2): Circle? {
+        val a = Array(3) { DoubleArray(3) }
+        val b = DoubleArray(3)
+        for (p in points) {
+            val row = doubleArrayOf(p.x - origin.x, p.y - origin.y, 1.0)
+            val z = row[0] * row[0] + row[1] * row[1]
+            for (i in 0 until 3) {
+                for (j in 0 until 3) {
+                    a[i][j] += row[i] * row[j]
+                }
+                b[i] -= row[i] * z
+            }
+        }
+        val (d, e, g) = LinearSystem.solve(a, b) ?: return null
+        val squared = 0.25 * (d * d + e * e) - g
+        if (squared <= 0.0) return null
+        return Circle(Vec2(origin.x - 0.5 * d, origin.y - 0.5 * e), sqrt(squared))
     }
 
     private fun argmax(values: FloatArray): Int {

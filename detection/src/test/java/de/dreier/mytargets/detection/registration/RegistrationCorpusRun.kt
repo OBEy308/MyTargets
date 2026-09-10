@@ -97,7 +97,7 @@ class RegistrationCorpusRun {
                 outcomes[entry.imageName] = outcome
                 val reference = referenceFor(entry)
                 if (outcome is RegistrationOutcome.Registered && reference != null) {
-                    writeRectified(image, outcome, reference, File(folder, "4-entzerrt.png"))
+                    writeRectified(image, outcome, reference, entry.imageName, File(folder, "4-entzerrt.png"))
                 }
                 rows += rowFor(entry, outcome, reference, image.cols(), image.rows())
             } finally {
@@ -173,6 +173,7 @@ class RegistrationCorpusRun {
         image: Mat,
         outcome: RegistrationOutcome.Registered,
         reference: List<Double>,
+        imageName: String,
         file: File
     ) {
         val edge = FaceWarp.edgeFor(outcome.imageToTarget)
@@ -181,7 +182,7 @@ class RegistrationCorpusRun {
             val k = edge / (2.0 * FaceWarp.EXTENT)
             val centre = FaceWarp.pixelOf(Vec2(0.0, 0.0), edge)
             val toImage = checkNotNull(Homography.inverse(reference.toDoubleArray())) {
-                "the reference of ${file.parentFile.name} is singular"
+                "the reference of $imageName is singular"
             }
             for (r in RegistrationError.RING_RADII) {
                 Imgproc.circle(warped, Point(centre.x, centre.y), (r * k).roundToInt(), GREEN, 2)

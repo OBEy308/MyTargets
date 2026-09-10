@@ -69,6 +69,34 @@ class YellowDiscsTest {
     }
 
     @Test
+    fun aDiscTheFrameCutsIsMeasuredOnWhatTheImageShows() {
+        // The frame cuts the right disc a quarter radius beyond its centre, so
+        // its transitions lie on the visible arc only. Their mean lies on that
+        // side, away from the frame, and would shrink the disc below half the
+        // size of the whole one.
+        val search = YellowDiscs.find(
+            faces(800, 400, Vec2(200.0, 200.0) to 40.0, Vec2(790.0, 200.0) to 40.0), f = 1.0
+        )
+
+        assertThat(search.counted).hasSize(2)
+        val cut = search.counted.maxBy { it.centre.x }
+        assertThat(cut.centre.distanceTo(Vec2(790.0, 200.0))).isLessThan(1.5)
+        assertThat(cut.radius).isWithin(1.5).of(40.0)
+    }
+
+    @Test
+    fun aSliverOfADiscAtTheFrameDoesNotCount() {
+        // The right disc's centre lies three quarters of a radius beyond the
+        // frame: a quarter radius of its yellow is in the image.
+        val search = YellowDiscs.find(
+            faces(800, 400, Vec2(200.0, 200.0) to 40.0, Vec2(829.0, 200.0) to 40.0), f = 1.0
+        )
+
+        assertThat(search.counted).hasSize(1)
+        assertThat(search.counted.single().centre.distanceTo(Vec2(200.0, 200.0))).isLessThan(1.0)
+    }
+
+    @Test
     fun aDiscLessThanHalfAsLargeAsTheLargestDoesNotCount() {
         val search = YellowDiscs.find(
             faces(800, 400, Vec2(200.0, 200.0) to 40.0, Vec2(600.0, 200.0) to 15.0), f = 1.0

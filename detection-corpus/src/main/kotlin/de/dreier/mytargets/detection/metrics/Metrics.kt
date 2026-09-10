@@ -192,7 +192,13 @@ class Metrics(
                     falsePositiveDenominator += entry.expectedShots
                 }
 
-                if (entry.hasPositions) {
+                // Per-shot, matching ShotMatching's own decision: an entry
+                // counts here as soon as ANY of its shots carries a position,
+                // not only when EVERY shot does. The old all-or-nothing
+                // `entry.hasPositions` flag would silently exclude an entry
+                // that still contributes a real, measured position error for
+                // its positioned shots.
+                if (entry.shots.any { it.position != null }) {
                     withPositions++
                 }
 

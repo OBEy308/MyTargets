@@ -383,6 +383,99 @@ class ShotMatchingTest {
     }
 
     @Test
+    fun aMixedEntryMatchesPositionedShotsByPositionAndUnpositionedShotsByScore() {
+        // Truth 0 carries a position and must be matched by distance; truth 1
+        // carries none and must fall back to score. Per-shot, not per-entry --
+        // this is exactly the split the whole-entry `hasPositions` switch used
+        // to collapse into one all-or-nothing choice, which let one missing
+        // position push an entire, otherwise fully positioned entry into
+        // score-only matching.
+        val e = CorpusEntry(
+            imageName = "t.jpg", image = null, camera = null, capture = null,
+            target = null, shotsPerEnd = 2,
+            shots = listOf(
+                truth(ringX, 0.0, 0.0),        // positioned
+                TruthShot(scoringRing = ring7) // no position
+            ),
+            unresolvedArrows = 0, registration = null
+        )
+        val detected = listOf(
+            found(ringX, 0.01, 0.0), // close to truth 0's position
+            found(ring7, 9.0, 9.0)   // nowhere near anything, but the right score for truth 1
+        )
+
+        val result = ShotMatching.match(e, detected)
+
+        assertThat(result.pairs).hasSize(2)
+        val byTruth = result.pairs.associateBy { it.truthIndex }
+        assertThat(byTruth[0]!!.detectedIndex).isEqualTo(0)
+        assertThat(byTruth[0]!!.distance).isNotNull()
+        assertThat(byTruth[1]!!.detectedIndex).isEqualTo(1)
+        // Strengthens the assertion above: a pair made by score carries no
+        // distance, so this also confirms truth 1 was matched by SCORE and
+        // not accidentally admitted by a position gate wide enough to reach
+        // clear across the photograph to (9.0, 9.0).
+        assertThat(byTruth[1]!!.distance).isNull()
+        assertThat(result.unmatchedTruth).isEmpty()
+        assertThat(result.unmatchedDetected).isEmpty()
+    }
+
+    @Test
+    fun aPositionedTruthShotThatFailsTheGateIsNotRescuedByScoreMatching() {
+        // If a positioned shot's own gate rejects its nearest detection, it
+        // must stay unmatched -- it must not fall through to score matching
+        // just because a score-agreeing detection happens to be sitting
+        // elsewhere in the same photograph. Only shots with NO position at
+        // all use score; this is what stops one missing position elsewhere in
+        // the entry from silently improving THIS shot's result.
+        val e = entry(truth(ringX, 0.0, 0.0))
+        val detected = listOf(found(ringX, 5.0, 5.0)) // same ring, nowhere near the position
+
+        val result = ShotMatching.match(e, detected)
+
+        assertThat(result.pairs).isEmpty()
+        assertThat(result.unmatchedTruth).containsExactly(0)
+        assertThat(result.unmatchedDetected).containsExactly(0)
+    }
+
+    @Test
+    fun removingOnePositionFromAnEntryDoesNotRescueItsSiblingsByScore() {
+        // The whole-branch review's reproduction, at the ShotMatching level:
+        // an entry where every position is badly off (0.3, far outside any
+        // gate) but every ring value is correct. Under the old, entry-level
+        // `hasPositions` switch, dropping ONE shot's position flipped the
+        // WHOLE entry to score-only matching -- which ignores position
+        // entirely -- so all six shots would suddenly "match". Per-shot
+        // matching must not let that happen: the five shots that still carry
+        // a position must still fail to match by position.
+        val shots = (0 until 6).map { i ->
+            TruthShot(
+                scoringRing = i,
+                position = if (i == 0) null else SpotPosition(0, 0.1 * i, 0.0)
+            )
+        }
+        val e = CorpusEntry(
+            imageName = "t.jpg", image = null, camera = null, capture = null,
+            target = null, shotsPerEnd = 6, shots = shots,
+            unresolvedArrows = 0, registration = null
+        )
+        // Offset in y, not x: an x offset of 0.3 landing on a 0.1 grid would
+        // put detection i exactly on top of truth i + 3 and accidentally
+        // match it, which is not what this test is about.
+        val detected = shots.mapIndexed { i, shot ->
+            DetectedShotRecord(shot.scoringRing, null, SpotPosition(0, 0.1 * i, 0.3), 0.9)
+        }
+
+        val result = ShotMatching.match(e, detected)
+
+        // Only truth 0 (the one with no position) can be found, by score.
+        assertThat(result.pairs).hasSize(1)
+        assertThat(result.pairs[0].truthIndex).isEqualTo(0)
+        assertThat(result.pairs[0].distance).isNull()
+        assertThat(result.unmatchedTruth).containsExactly(1, 2, 3, 4, 5).inOrder()
+    }
+
+    @Test
     fun anUnmatchedDetectionRecordsItsDistanceToTheNearestUnmatchedTruthOnItsFace() {
         // Truth A is close enough to be matched by position. Truth B is not:
         // no detection comes near enough, so it stays unmatched, and the

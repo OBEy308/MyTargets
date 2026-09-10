@@ -32,8 +32,8 @@ data class DetectedShotRecord(
     val confidence: Double
 )
 
-/** A truth shot and the detection assigned to it. [distance] is null for
- *  ring only truth, where no position is known to compare against. */
+/** A truth shot and the detection assigned to it. [distance] stays null for a
+ *  pair made by score match, where no position comparison applies. */
 data class MatchedPair(
     val truthIndex: Int,
     val detectedIndex: Int,
@@ -59,6 +59,17 @@ class MatchResult(
  * Assigns detected arrows to true ones, which is what makes "found" mean
  * anything at all.
  *
+ * The decision between the two strategies below is made per SHOT, not per
+ * entry: a truth shot that carries a position is always matched by position,
+ * and a truth shot with no position is matched by score against whatever
+ * detections position matching left unclaimed. Position matching runs first,
+ * globally nearest pair first, so the tightest pairs claim their partners
+ * before score matching sees the remainder. A positioned shot that fails its
+ * own gate stays unmatched; it is never retried against score, because a
+ * shot the corpus placed in space is not the same claim as one it did not,
+ * and rescuing it by score would let a bare ring number stand in for a
+ * position the annotator could have recorded but did not.
+ *
  * With positions the assignment is greedy over globally nearest pairs: sort
  * every admissible pair by distance and take them while both sides are still
  * free. That is the usual choice in detection benchmarks and it is
@@ -67,10 +78,10 @@ class MatchResult(
  * assignment needs two arrows closer to each other than to their own truth,
  * which is already a detection failure.
  *
- * Without positions, matching falls back to the score as a multiset, taking the
- * most confident detection for each true score. Such an entry can support the
- * detection rate, the false positive count and the ring accuracy, but not the
- * position error.
+ * Without a position, matching falls back to the score as a multiset, taking
+ * the most confident detection for each true score. Such a shot can support
+ * the detection rate, the false positive count and the ring accuracy, but not
+ * the position error.
  */
 object ShotMatching {
 
@@ -89,19 +100,25 @@ object ShotMatching {
         detected: List<DetectedShotRecord>,
         defaultPositionTolerance: Double = DEFAULT_POSITION_TOLERANCE
     ): MatchResult {
-        val result = if (entry.hasPositions) {
-            matchByPosition(entry, detected, defaultPositionTolerance)
-        } else {
-            matchByScore(entry, detected)
-        }
+        val positioned = matchByPosition(entry, detected, defaultPositionTolerance)
+
+        // Only a truth shot with NO position of its own falls back to score;
+        // a positioned shot that failed its gate stays unmatched rather than
+        // being retried here.
+        val scoreTruth = positioned.unmatchedTruth.filter { entry.shots[it].position == null }
+        val scored = matchByScore(entry, scoreTruth, positioned.unmatchedDetected, detected)
+
+        val pairs = (positioned.pairs + scored.pairs).sortedBy { it.truthIndex }
+        val unmatchedTruth = (positioned.unmatchedTruth - scoreTruth.toSet() + scored.unmatchedTruth)
+            .sorted()
+        val unmatchedDetected = scored.unmatchedDetected.sorted()
 
         return MatchResult(
-            pairs = result.pairs,
-            unmatchedTruth = result.unmatchedTruth,
-            unmatchedDetected = result.unmatchedDetected,
-            detectionsRejectedOnDistance = rejectedOnDistance(
-                entry, detected, result.unmatchedTruth, result.unmatchedDetected
-            )
+            pairs = pairs,
+            unmatchedTruth = unmatchedTruth,
+            unmatchedDetected = unmatchedDetected,
+            detectionsRejectedOnDistance =
+                rejectedOnDistance(entry, detected, unmatchedTruth, unmatchedDetected)
         )
     }
 
@@ -133,8 +150,8 @@ object ShotMatching {
     ): MatchResult {
         val candidates = mutableListOf<MatchedPair>()
         entry.shots.forEachIndexed { truthIndex, truth ->
-            // hasPositions guarantees this, so the elvis can never fire; kept
-            // null safe rather than asserted.
+            // A shot with no position of its own contributes no candidate
+            // here at all; it is matched by score instead, in match() above.
             val truthPosition = truth.position ?: return@forEachIndexed
             val tolerance = defaultPositionTolerance + (truth.positionTolerance ?: 0.0)
             detected.forEachIndexed { detectedIndex, record ->
@@ -154,15 +171,22 @@ object ShotMatching {
         return takeGreedily(candidates, entry.shots.size, detected.size)
     }
 
+    /**
+     * Matches by score as a multiset, over only [truthIndices] and
+     * [detectedIndices] — the truth shots with no position, and the
+     * detections position matching left unclaimed.
+     */
     private fun matchByScore(
         entry: CorpusEntry,
+        truthIndices: List<Int>,
+        detectedIndices: List<Int>,
         detected: List<DetectedShotRecord>
     ): MatchResult {
-        val byConfidence = detected.indices.sortedWith(
+        val byConfidence = detectedIndices.sortedWith(
             compareByDescending<Int> { detected[it].confidence }.thenBy { it }
         )
 
-        val remainingTruth = entry.shots.indices.toMutableList()
+        val remainingTruth = truthIndices.toMutableList()
         val pairs = mutableListOf<MatchedPair>()
 
         for (detectedIndex in byConfidence) {
@@ -178,7 +202,7 @@ object ShotMatching {
         return MatchResult(
             pairs = pairs.sortedBy { it.truthIndex },
             unmatchedTruth = remainingTruth.sorted(),
-            unmatchedDetected = detected.indices.filterNot { it in matchedDetected }
+            unmatchedDetected = detectedIndices.filterNot { it in matchedDetected }
         )
     }
 

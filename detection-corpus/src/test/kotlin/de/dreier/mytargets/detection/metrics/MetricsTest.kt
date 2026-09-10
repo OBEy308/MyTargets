@@ -425,6 +425,88 @@ class MetricsTest {
     }
 
     @Test
+    fun entriesWithPositionsCountsAnEntryThatHasSomePositionedShotsEvenIfNotAll() {
+        // Under the old entry-level `hasPositions` flag, a single unpositioned
+        // shot excluded the WHOLE entry from this count, even though it still
+        // contributes a real, measured position error for its other shot.
+        // entriesWithPositions must follow the same per-shot logic as
+        // matching itself now does, not the old all-or-nothing flag.
+        val mixed = entry(
+            "mixed.jpg",
+            shots = arrayOf(truth(2, 0.0, 0.0), TruthShot(scoringRing = 3))
+        )
+        val m = Metrics.over(
+            listOf(outcome(mixed, listOf(found(2, 0.0, 0.0), found(3, 5.0, 5.0))))
+        )
+
+        assertThat(m.entriesWithPositions).isEqualTo(1)
+    }
+
+    @Test
+    fun positionErrorInAMixedEntryOnlyCountsThePositionedPair() {
+        // The unpositioned shot's pair is made by score and carries no
+        // distance; only the positioned shot's real distance may enter
+        // positionErrors.
+        val mixed = entry(
+            "mixed.jpg",
+            shots = arrayOf(truth(2, 0.0, 0.0), TruthShot(scoringRing = 3))
+        )
+        val detected = listOf(found(2, 0.03, 0.0), found(3, 9.0, 9.0))
+        val m = Metrics.over(listOf(outcome(mixed, detected)))
+
+        assertThat(m.positionErrors).containsExactly(0.03)
+    }
+
+    @Test
+    fun removingOnePositionFromAnEntryDoesNotInflateItsDetectionRate() {
+        // The whole-branch review's reproduction: an entry where every
+        // position is badly off (0.3, far outside any position gate) but
+        // every ring value is correct. Fully positioned, every shot fails
+        // position matching and the entry finds nothing. The old,
+        // entry-level `hasPositions` switch fell back to matching every shot
+        // by score -- which ignores position entirely -- the moment even ONE
+        // shot lost its position, so removing a single position used to flip
+        // this entry from a detection rate of 0.0 to 1.0. Per-shot matching
+        // must not let that happen: the shots that still carry a position
+        // must still fail to match by position, and must not be rescued by
+        // score matching just because a sibling shot's position was dropped.
+        fun shotsWithout(dropIndex: Int?) = (0 until 6).map { i ->
+            TruthShot(
+                scoringRing = i,
+                position = if (i == dropIndex) null else SpotPosition(0, 0.1 * i, 0.0)
+            )
+        }
+        fun entryWith(name: String, shots: List<TruthShot>) = CorpusEntry(
+            imageName = name, image = null, camera = null, capture = null,
+            target = null, shotsPerEnd = 6, shots = shots,
+            unresolvedArrows = 0, registration = null
+        )
+        // Offset in y, not x: an x offset of 0.3 landing on a 0.1 grid would
+        // put detection i exactly on top of truth i + 3 and accidentally
+        // match it, which is not what this test is about.
+        fun detectedFor(shots: List<TruthShot>) = shots.mapIndexed { i, shot ->
+            DetectedShotRecord(shot.scoringRing, null, SpotPosition(0, 0.1 * i, 0.3), 0.9)
+        }
+
+        val fullyPositioned = entryWith("full.jpg", shotsWithout(dropIndex = null))
+        val onePositionRemoved = entryWith("partial.jpg", shotsWithout(dropIndex = 0))
+
+        val fullRate = Metrics.over(
+            listOf(outcome(fullyPositioned, detectedFor(fullyPositioned.shots)))
+        ).detectionRate!!
+        val partialRate = Metrics.over(
+            listOf(outcome(onePositionRemoved, detectedFor(onePositionRemoved.shots)))
+        ).detectionRate!!
+
+        assertThat(fullRate).isWithin(1e-9).of(0.0)
+        // Only the one shot that lost its position can now be found -- by
+        // score, since it no longer has a position to be judged by -- and
+        // none of the other five are rescued.
+        assertThat(partialRate).isWithin(1e-9).of(1.0 / 6.0)
+        assertThat(partialRate).isLessThan(0.5)
+    }
+
+    @Test
     fun detectionsRejectedOnDistanceAggregatesTheCountAndTheMedian() {
         // Two entries, each with one detection that missed only on distance:
         // 0.10 and 0.20 away from the nearest unmatched truth. The metric

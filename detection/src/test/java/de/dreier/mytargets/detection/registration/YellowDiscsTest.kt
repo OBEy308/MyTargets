@@ -95,4 +95,12 @@ class YellowDiscsTest {
 
         assertThat(YellowDiscs.merge(listOf(a, b, c))).containsExactly(b, c).inOrder()
     }
+
+    @Test
+    fun onEqualTransitionPointsMergingKeepsTheLargerDisc() {
+        val a = Disc(Vec2(100.0, 100.0), 37.5, 72)
+        val b = Disc(Vec2(101.0, 100.0), 39.5, 72)
+
+        assertThat(YellowDiscs.merge(listOf(a, b))).containsExactly(b)
+    }
 }

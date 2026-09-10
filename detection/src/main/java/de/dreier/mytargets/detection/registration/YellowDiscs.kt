@@ -54,6 +54,8 @@ object YellowDiscs {
     private const val MIN_RADIUS_AT_2000 = 4.0
     private const val GAP_AT_2000 = 12.0
     private const val MIN_YELLOW_INSIDE = 0.7
+    private const val MAX_ROUNDS = 20
+    private const val CONVERGED_PX = 0.1
 
     fun find(classes: ClassImage, f: Double): DiscSearch {
         val width = classes.width
@@ -124,11 +126,14 @@ object YellowDiscs {
 
     /**
      * The same disc found at several scales: two discs whose centres are
-     * closer than the smaller radius. The one with more transition points stays.
+     * closer than the smaller radius. The one with more transition points
+     * stays; ties go to the larger radius, as register.py keeps the largest
+     * valid disc.
      */
     internal fun merge(discs: List<Disc>): List<Disc> {
         val kept = ArrayList<Disc>()
-        for (disc in discs.sortedByDescending { it.transitionPoints }) {
+        val order = compareByDescending<Disc> { it.transitionPoints }.thenByDescending { it.radius }
+        for (disc in discs.sortedWith(order)) {
             if (kept.none { it.centre.distanceTo(disc.centre) < min(it.radius, disc.radius) }) {
                 kept += disc
             }
@@ -136,13 +141,19 @@ object YellowDiscs {
         return kept
     }
 
-    /** Three rounds of: transitions on 72 rays, radius from their median distance, centre from their mean. */
+    /**
+     * Rounds of: transitions on 72 rays, radius from their median distance,
+     * centre from their mean -- until the centre settles or [MAX_ROUNDS] is
+     * reached. register.py's three fixed rounds stop short of convergence:
+     * each mean update only about halves the remaining offset from the true
+     * centre, so a candidate seeded far off keeps a lingering bias.
+     */
     private fun measure(classes: ClassImage, start: Vec2, window: Double, f: Double): Disc? {
         var centre = start
         var radius = window
         var points: List<Vec2> = emptyList()
         var measuredOnce = false
-        for (round in 0 until 3) {
+        for (round in 0 until MAX_ROUNDS) {
             val r = radius
             points = RayTransitions.find(
                 classes, centre, { r }, ColourClass.YELLOW, ColourClass.RED,
@@ -150,8 +161,11 @@ object YellowDiscs {
             )
             if (points.size < MIN_TRANSITIONS) break
             radius = RobustConic.median(points.map { it.distanceTo(centre) })
-            centre = Vec2(points.sumOf { it.x } / points.size, points.sumOf { it.y } / points.size)
+            val next = Vec2(points.sumOf { it.x } / points.size, points.sumOf { it.y } / points.size)
             measuredOnce = true
+            val moved = next.distanceTo(centre)
+            centre = next
+            if (moved < CONVERGED_PX) break
         }
         if (!measuredOnce || radius < MIN_RADIUS_AT_2000 * f || points.size < MIN_TRANSITIONS) {
             return null

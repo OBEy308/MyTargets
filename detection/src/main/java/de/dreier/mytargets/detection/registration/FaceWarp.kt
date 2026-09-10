@@ -37,13 +37,18 @@ object FaceWarp {
     const val EXTENT = 1.1
     const val MAX_EDGE = 3000
 
+    // EXTENT is not exact in binary, so a product that is mathematically an
+    // exact integer (e.g. 2 * EXTENT * 400 = 880) comes out a hair above it;
+    // subtracting this before ceil keeps that noise from gaining a pixel.
+    private const val EDGE_EPSILON = 1e-9
+
     fun edgeFor(imageToTarget: Mat3): Int {
         val targetToImage = requireNotNull(imageToTarget.inverse()) { "the homography is singular" }
         val centre = Vec2(0.0, 0.0)
         val alongX = targetToImage.mapDirection(centre, Vec2(1.0, 0.0))?.length ?: 0.0
         val alongY = targetToImage.mapDirection(centre, Vec2(0.0, 1.0))?.length ?: 0.0
         val pxPerUnit = max(alongX, alongY)
-        return min(MAX_EDGE, ceil(2.0 * EXTENT * pxPerUnit).toInt()).coerceAtLeast(1)
+        return min(MAX_EDGE, ceil(2.0 * EXTENT * pxPerUnit - EDGE_EPSILON).toInt()).coerceAtLeast(1)
     }
 
     /** Pixel of [target] in a warped image of [edge] px; pixel centres at integers. */

@@ -449,6 +449,14 @@ nicht für den Positionsfehler. Ohne diese Regel wären die geerbten Fotos unten
 erst nach vollständiger Nachannotation brauchbar, und die drei Kennzahlen, die
 sie schon jetzt tragen können, blieben ungemessen.
 
+**`positionTolerance` ist Annotationsunsicherheit, kein Erkennerbudget.** Der
+Wert je Treffer gibt an, wie genau die Annotation den Einschusspunkt platzieren
+konnte — nicht, wie ungenau der Erkenner sein darf. Das Zuordnungskriterium im
+Modul ist deshalb das eigene Budget des Erkenners (0,05 Spot-Radien) **zuzüglich**
+dieser Annotationstoleranz des jeweiligen Treffers, nicht die Toleranz allein.
+Eine Vermischung beider Werte hat schon einmal eine Erkennungsrate von 2,5 %
+für einen auf vier Millimeter genauen Erkenner erzeugt.
+
 **16 geerbte Fotos.** Der Branch `feature/249_auto_detect_arrows` (Florian
 Dreier, Dezember 2017, nie gemergt) enthält einen OpenCV-Prototyp derselben
 Funktion samt 16 Testfotos, rund 40 MB. Die Wahrheit steckt im Dateinamen:
@@ -459,6 +467,23 @@ mit drei X, frontal. Die Marker `dark`, `noise`, `overlap`, `front` und
 Sie liegen unter `<DETECTION_CORPUS_DIR>/inherited-249/`, nicht im Repo — im
 Prototyp lagen sie in `res/drawable-nodpi` und damit im APK, was dort ProGuard
 schon für Debug-Builds nötig machte.
+
+**Zwei Arten von Ringwert, und eine bindende Anforderung an Plan 3.** Die 16
+geerbten Fotos tragen ihre Wahrheit als **gedruckte Ringwert-Zeichen** (`X`,
+`9`, `M`, aus dem Dateinamen). Die 4 bisher annotierten Fotos tragen ihre
+Wahrheit als **Zonenindex**. Der Vergleich verlangt auf beiden Seiten dieselbe
+Art von Ringwert (siehe *Kennzahlen*). Ein Erkenner, der nur Zonenindizes
+ausgibt, kann deshalb gegen die 100 geerbten Treffer nie zugeordnet werden:
+Erkennungsrate ist auf 16,7 % gedeckelt, Falsch-Positiv-Rate auf 83 % nach
+unten begrenzt — dauerhaft, unabhängig davon, wie gut der Erkenner ist. Die
+Umrechnung von Zonenindex auf gedruckten Wert ist bewusst nicht Teil dieser
+Spec, weil sie die Zonentabellen aus `:shared` braucht, die erst Plan 3
+bereitstellt. Das ist eine **bindende Anforderung an den Plan-3-Runner**: Jeder
+erkannte Treffer muss den gedruckten Wert zusätzlich zum Zonenindex tragen,
+umgerechnet über das Zielscheibenmodell des Eintrags — sonst lassen sich die
+geerbten Fotos nicht zuordnen. Wer auf eine Erkennungsrate von 16,7 % oder eine
+Falsch-Positiv-Rate von 83 % stößt, sollte hier nachsehen, bevor er den
+Erkenner verdächtigt.
 
 Abzudecken sind die Fälle, an denen die Pipeline realistisch scheitert:
 Hallenlicht und Sonne mit harten Schatten, frontale und schräge Winkel,
@@ -474,8 +499,18 @@ und 3-Spot Triangel (`WAVegas3Spot`, `WA3Ring3Spot`).
 |---|---|
 | Erkennungsrate | Anteil der Pfeile, die gefunden wurden |
 | Falsch-Positive | Erfundene Treffer — teurer als übersehene |
-| Ringtreue | Anteil der Treffer mit korrektem Spot **und** `scoringRing`. **Die entscheidende Zahl** |
+| Ringtreue | Anteil der **zugeordneten** Treffer mit korrektem Spot **und** `scoringRing`, gemessen unter den zugeordneten Treffern, deren Wahrheit und Erkennung eine vergleichbare Art von Ringwert tragen (siehe oben, *Zwei Arten von Ringwert*). **Die entscheidende Zahl** |
 | Positionsfehler | Median und 95. Perzentil in Spot-Radien |
+
+Ringtreue zählt damit nicht über alle geschossenen Pfeile, sondern nur über die,
+bei denen überhaupt etwas zugeordnet wurde und bei denen Wahrheit und Erkennung
+vergleichbar sind — alles andere hieße, einen übersehenen Pfeil als falschen
+Ring zu zählen, was eine Lüge wäre. Der Nenner kann dadurch sehr klein werden:
+Gemessen am jetzigen Korpus liegt die Ringtreue bei 100 %, während die
+Erkennungsrate bei 0,8 % liegt — ein Erkenner, der einen von hundertzwanzig
+Pfeilen gefunden und richtig geringt hat. **Die Ringtreue ist ohne ihren Nenner
+und ohne die Erkennungsrate daneben bedeutungslos und darf nie ohne beide
+zitiert oder abgebildet werden.**
 
 Diese Werte werden als Regressionsschranke festgeschrieben, **nachdem** sie das
 erste Mal gemessen wurden. Eine Zielgenauigkeit vorab festzulegen wäre geraten.
@@ -585,6 +620,14 @@ Und mindestens eines zeigt eine **FITA 80 cm 6-Ring**-Auflage (`WA6Ring`), die
 v1 nicht abdeckt. Welche Auflage je Foto zu sehen ist, klärt sich bei der
 Annotation; Fotos außerhalb des Umfangs bleiben im Korpus, aber außerhalb der
 Kennzahlen.
+
+Dafür gibt es inzwischen einen Mechanismus: `out-of-scope.json` im
+Korpus-Wurzelverzeichnis führt solche Fotos auf, Dateiname auf Begründung
+(siehe die `README.md` des Korpus, Abschnitt *Fotos außerhalb des Umfangs*).
+Ein dort eingetragenes Foto wird weiterhin geladen und bleibt für
+Registrierungstests verfügbar; es zählt nur für keine Trefferkennzahl.
+`multiple_targets` lässt sich so bereits eintragen. Der `WA6Ring`-Fall lässt
+sich erst eintragen, wenn die Annotation geklärt hat, welches Foto es ist.
 
 **APK-Größe.** OpenCV bringt native Bibliotheken mit. Vor der Integration ist zu
 messen, wie viel je ABI dazukommt, und zu entscheiden, ob ABI-Splits genügen

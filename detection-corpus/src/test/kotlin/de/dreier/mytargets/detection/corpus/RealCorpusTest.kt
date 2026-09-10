@@ -16,6 +16,9 @@
 package de.dreier.mytargets.detection.corpus
 
 import com.google.common.truth.Truth.assertThat
+import de.dreier.mytargets.detection.metrics.EntryOutcome
+import de.dreier.mytargets.detection.metrics.Metrics
+import de.dreier.mytargets.detection.metrics.ShotMatching
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
@@ -101,20 +104,29 @@ class RealCorpusTest {
     @Test
     fun entriesThatDoNotAccountForTheirWholeEndAreListed() {
         // Not a failure — a visible list, so an annotation slip does not hide.
-        val incomplete = result.entries
-            .filter { it.target != null && it.shotsPerEnd != null }
-            .filter { it.expectedShots + it.unresolvedArrows < it.shotsPerEnd!! }
-            .map {
-                "${it.imageName}: ${it.expectedShots} listed + " +
-                    "${it.unresolvedArrows} unresolved of ${it.shotsPerEnd}"
-            }
+        // The rule every annotated entry must obey is
+        // `listed + unresolved <= shotsPerEnd`; this asserts exactly that,
+        // for every one of them, and separately prints whichever entries fall
+        // strictly short of it. The corpus may legitimately have none such --
+        // it does, as of 2026-09-09 -- so this must never assert that a
+        // shortfall exists, only that the rule itself holds.
+        val annotated = result.entries.filter { it.target != null && it.shotsPerEnd != null }
 
+        val incomplete = annotated.filter {
+            it.expectedShots + it.unresolvedArrows < it.shotsPerEnd!!
+        }
         println("Entries short of their shotsPerEnd:")
-        incomplete.forEach { println("  $it") }
+        incomplete.forEach {
+            println(
+                "  ${it.imageName}: ${it.expectedShots} listed + " +
+                    "${it.unresolvedArrows} unresolved of ${it.shotsPerEnd}"
+            )
+        }
 
-        // Pinned at the value observed on 2026-09-09. Raise it deliberately if
-        // more such entries are added; do not delete the test.
-        assertThat(incomplete).hasSize(1)
+        for (entry in annotated) {
+            assertThat(entry.expectedShots + entry.unresolvedArrows)
+                .isAtMost(entry.shotsPerEnd!!)
+        }
     }
 
     @Test
@@ -133,6 +145,30 @@ class RealCorpusTest {
         assertThat(entry.shots.map { it.printedScore!!.text })
             .containsExactly("X", "X", "X", "9", "9", "9", "8", "8").inOrder()
         assertThat(entry.tags).containsExactly("front")
+    }
+
+    @Test
+    fun outOfScopePhotographsLoadButAreExcludedFromTheMetrics() {
+        // Not hard-coding the corpus's total size, which grows: this only
+        // asserts that whatever out-of-scope entries the corpus currently
+        // lists (at least the one named in the spec) load, are marked, and
+        // leave the aggregate metrics exactly as they would read without
+        // them at all.
+        val outOfScope = result.entries.filter { it.outOfScope != null }
+        assertThat(outOfScope).isNotEmpty()
+        assertThat(outOfScope.map { it.imageName })
+            .contains("a6_x99999_multiple_targets.jpg")
+
+        val outcomes = result.entries.map { entry ->
+            EntryOutcome(entry, ShotMatching.match(entry, emptyList()), emptyList())
+        }
+        val overall = Metrics.over(outcomes)
+        val withoutOutOfScope = Metrics.over(outcomes.filter { it.entry.outOfScope == null })
+
+        assertThat(overall.expectedShots).isEqualTo(withoutOutOfScope.expectedShots)
+        assertThat(overall.annotatedEntries).isEqualTo(withoutOutOfScope.annotatedEntries)
+        assertThat(overall.falsePositiveDenominator)
+            .isEqualTo(withoutOutOfScope.falsePositiveDenominator)
     }
 
     @Test

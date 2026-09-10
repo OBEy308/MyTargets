@@ -161,8 +161,10 @@ class MetricsReportTest {
         assertThat(report).contains("bad.jpg")
         // "bad.jpg" appearing anywhere is not enough -- its row must show
         // that all three of its hits were missed, not some other count that
-        // would still make it sort as the worst entry.
-        assertThat(report).contains("| bad.jpg | 3 | 0 | 0 | 0 |")
+        // would still make it sort as the worst entry. "Correct" is rendered
+        // as correct/comparable (item 7): nothing was detected here, so
+        // both sides of that fraction are zero.
+        assertThat(report).contains("| bad.jpg | 3 | 0 | 0/0 | 0 |")
     }
 
     @Test
@@ -346,9 +348,17 @@ class MetricsReportTest {
         // named the wrong count of entries, or if the false positive rate it
         // is explaining still read as though the forgiven entry's listed hit
         // were part of its denominator. Pin both down.
+        //
+        // Item 1: the old wording said such an entry's surplus was "not
+        // counted as false positives" -- true under the unbounded rule, false
+        // under the bounded one this entry actually exercises (unresolvedArrows
+        // = 2, surplus = 1, so the whole surplus happens to be forgiven here,
+        // but the sentence must still describe the general, bounded rule, not
+        // the unbounded one it replaced).
         assertThat(report).contains(
-            "1 entry declare unresolved arrows, so surplus detections there " +
-                "are not counted as false positives."
+            "1 entry declares unresolved arrows, so surplus detections there " +
+                "are forgiven only up to the number of unresolved arrows -- " +
+                "anything beyond that is still charged as a false positive."
         )
         assertThat(report).contains("False positives | 33.3 % | of 3 listed hits")
     }
@@ -526,7 +536,7 @@ class MetricsReportTest {
             title = "Worst"
         )
 
-        assertThat(report).contains("| bad.jpg | 3 | 0 | 0 | 0 |")
+        assertThat(report).contains("| bad.jpg | 3 | 0 | 0/0 | 0 |")
         assertThat(report).doesNotContain("aaa-out.jpg |")
     }
 
@@ -536,5 +546,193 @@ class MetricsReportTest {
         val report = MetricsReport.render(listOf(outcome(e, listOf(found(9, 0.0, 0.0)))), title = "Perfect")
 
         assertThat(report).doesNotContain("Out of scope")
+    }
+
+    @Test
+    fun theOutOfScopeSectionUsesTheSingularVerbForOnePhotograph() {
+        // Item 10: "1 photograph stay ... but count for no metric" is the
+        // same plural() misuse as the forgiveness sentence -- singular count,
+        // plural verb. Pin subject-verb agreement on both verbs in the
+        // sentence, not just the noun.
+        val e = entry("p.jpg", shots = arrayOf(truth(9, 0.0, 0.0)))
+        val outOfScope = CorpusEntry(
+            imageName = "out.jpg", image = null, camera = null, capture = null,
+            target = null, shotsPerEnd = 1,
+            shots = listOf(truth(5, 0.0, 0.0)),
+            unresolvedArrows = 0, registration = null,
+            outOfScope = "not covered by v1"
+        )
+        val report = MetricsReport.render(
+            listOf(outcome(e, listOf(found(9, 0.0, 0.0))), outcome(outOfScope, emptyList())),
+            title = "Grammar"
+        )
+
+        assertThat(report).contains(
+            "1 photograph stays in the corpus but counts for no metric:"
+        )
+    }
+
+    // --- Item 2: surplus charged despite forgiveness applying --------------
+
+    @Test
+    fun theReportNamesEntriesChargedDespiteForgivenessApplying() {
+        // Forgiveness applies (entryForgiven = unresolvedArrows = 1) but the
+        // surplus (3) goes beyond it, so 2 detections are still charged
+        // despite forgiveness applying to the entry. The brief for change 3
+        // required exactly this to be visible rather than silently charged.
+        val e = CorpusEntry(
+            imageName = "partial.jpg", image = null, camera = null, capture = null,
+            target = null, shotsPerEnd = 6,
+            shots = listOf(TruthShot(scoringRing = 0, position = SpotPosition(0, 0.0, 0.0))),
+            unresolvedArrows = 1, registration = null
+        )
+        val detected = listOf(
+            found(0, 0.0, 0.0),
+            found(2, 5.0, 0.0), found(2, 6.0, 0.0), found(2, 7.0, 0.0)
+        )
+        val report = MetricsReport.render(listOf(outcome(e, detected)), title = "Partial")
+
+        assertThat(report).contains(
+            "1 entry had surplus beyond its unresolved arrows: 2 detections " +
+                "were charged despite forgiveness applying."
+        )
+    }
+
+    @Test
+    fun theReportOmitsTheChargedDespiteForgivenessLineWhenForgivenessCoveredEverything() {
+        val e = CorpusEntry(
+            imageName = "full.jpg", image = null, camera = null, capture = null,
+            target = null, shotsPerEnd = 6,
+            shots = listOf(TruthShot(scoringRing = 0, position = SpotPosition(0, 0.0, 0.0))),
+            unresolvedArrows = 2, registration = null
+        )
+        val detected = listOf(found(0, 0.0, 0.0), found(2, 5.0, 0.0))
+        val report = MetricsReport.render(listOf(outcome(e, detected)), title = "Full")
+
+        assertThat(report).doesNotContain("charged despite forgiveness")
+    }
+
+    // --- Item 6: byTag drops an out-of-scope-only tag from the report ------
+
+    @Test
+    fun theByTagTableOmitsATagThatOnlyAnOutOfScopeEntryCarries() {
+        val outOfScope = CorpusEntry(
+            imageName = "out.jpg", image = null, camera = null,
+            capture = CaptureInfo(lighting = "onlyOutOfScope", angle = null, angleDegrees = null),
+            target = null, shotsPerEnd = 1,
+            shots = listOf(truth(5, 0.0, 0.0)),
+            unresolvedArrows = 0, registration = null,
+            outOfScope = "not covered by v1"
+        )
+        val plain = entry("p.jpg", shots = arrayOf(truth(9, 0.0, 0.0)))
+        val report = MetricsReport.render(
+            listOf(outcome(outOfScope, emptyList()), outcome(plain, listOf(found(9, 0.0, 0.0)))),
+            title = "ByTag"
+        )
+
+        assertThat(report).doesNotContain("onlyOutOfScope")
+    }
+
+    // --- Item 7: the worst-entries table reads a perfect detector as perfect
+
+    @Test
+    fun theWorstEntriesTableReadsAPerfectDetectorAsPerfectDespiteABoundaryHit() {
+        // Change 5's own protection: a boundary hit leaves ring accuracy
+        // entirely, so a flawless detector on an entry with one must not read
+        // as partial credit here. Two shots, one on a ring boundary and one
+        // plain, both matched and (for the plain one) scored correctly --
+        // rendering "Correct" as a bare count against "Found" would show 1
+        // out of 2, a 50% read, even though the detector got everything it
+        // could fairly be judged on right.
+        val e = CorpusEntry(
+            imageName = "boundary.jpg", image = null, camera = null, capture = null,
+            target = null, shotsPerEnd = 2,
+            shots = listOf(
+                TruthShot(scoringRing = 5, position = SpotPosition(0, 0.0, 0.0), nearRingBoundary = true),
+                TruthShot(scoringRing = 7, position = SpotPosition(0, 0.3, 0.0))
+            ),
+            unresolvedArrows = 0, registration = null
+        )
+        val detected = listOf(found(5, 0.0, 0.0), found(7, 0.3, 0.0))
+        val report = MetricsReport.render(listOf(outcome(e, detected)), title = "Boundary")
+
+        // Found 2, Correct 1/1 -- the one comparable hit, correct -- not "1"
+        // read against "Found 2".
+        assertThat(report).contains("| boundary.jpg | 2 | 2 | 1/1 | 0 |")
+    }
+
+    @Test
+    fun theWorstEntriesTableRendersThePerfectDetectorFromTheBrief() {
+        // The reviewer's own reproduction: 5 hits, 3 of them near a ring
+        // boundary. A flawless detector must not render as 40% correct (2 of
+        // 5, the bug) just because change 5 removes the boundary hits from
+        // what can be fairly judged.
+        val shots = (0 until 5).map { i ->
+            TruthShot(
+                scoringRing = i, position = SpotPosition(0, 0.1 * i, 0.0),
+                nearRingBoundary = i < 3
+            )
+        }
+        val e = CorpusEntry(
+            imageName = "2026-08-04_sonne_stark-schraeg_01.jpg", image = null, camera = null,
+            capture = null, target = null, shotsPerEnd = 5, shots = shots,
+            unresolvedArrows = 0, registration = null
+        )
+        val detected = shots.mapIndexed { i, s -> found(s.scoringRing!!, 0.1 * i, 0.0) }
+        val report = MetricsReport.render(listOf(outcome(e, detected)), title = "Perfect")
+
+        assertThat(report).contains(
+            "| 2026-08-04_sonne_stark-schraeg_01.jpg | 5 | 5 | 2/2 | 0 |"
+        )
+    }
+
+    // --- Item 8: the distance-only rejection count binds to the same row ---
+
+    @Test
+    fun thePositionErrorRowNamesTheDistanceOnlyMissesInItsOwnMeasuredOverColumn() {
+        // Change 8: a detector 0.20 off must not read as MORE accurate than
+        // one 0.04 off just because everything beyond the position gate
+        // silently leaves positionErrors. The mitigation must sit in the
+        // SAME cell as the number it corrects, not in a paragraph a reader
+        // can skip.
+        val e = entry("a.jpg", shots = arrayOf(truth(9, 0.0, 0.0)))
+        val detected = listOf(found(9, 0.20, 0.0)) // 0.20 off, well beyond the gate
+        val report = MetricsReport.render(listOf(outcome(e, detected)), title = "Gate")
+
+        assertThat(report).contains(
+            "Position error, median | not measured | of 0 placed hits, 1 detection " +
+                "missed only on distance (median 0.2000 spot radii) |"
+        )
+        assertThat(report).contains(
+            "Position error, 95th pct | not measured | of 0 placed hits, 1 detection " +
+                "missed only on distance (median 0.2000 spot radii) |"
+        )
+    }
+
+    // --- Item 9: pairs matched by score rather than by position ------------
+
+    @Test
+    fun theHeaderNamesPairsMatchedByScoreRatherThanByPosition() {
+        val mixed = entry(
+            "mixed.jpg",
+            shots = arrayOf(truth(2, 0.0, 0.0), TruthShot(scoringRing = 3))
+        )
+        val report = MetricsReport.render(
+            listOf(outcome(mixed, listOf(found(2, 0.0, 0.0), found(3, 5.0, 5.0)))),
+            title = "Score matched"
+        )
+
+        assertThat(report).contains("1 pair matched by score rather than by position.")
+    }
+
+    @Test
+    fun theHeaderNamesZeroPairsMatchedByScoreWhenEveryMatchIsByPosition() {
+        val e = entry("p.jpg", shots = arrayOf(truth(9, 0.0, 0.0)))
+        val report = MetricsReport.render(
+            listOf(outcome(e, listOf(found(9, 0.0, 0.0)))),
+            title = "Positioned"
+        )
+
+        assertThat(report).contains("0 pairs matched by score rather than by position.")
     }
 }

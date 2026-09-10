@@ -53,24 +53,6 @@ class Metrics(
     val expectedShots: Int,
     val matchedShots: Int,
     val falsePositives: Int,
-    /**
-     * The expected shots of the annotated, in-scope entries that were
-     * actually judged for a false positive -- which, since the bounded
-     * forgiveness rule lets every such entry contribute one (see
-     * [falsePositives]), is every annotated entry that Change 6 does not
-     * pull out of scope entirely. An out-of-scope entry's listed hits are
-     * excluded here exactly as they are from [expectedShots], because
-     * [CorpusEntry.outOfScope] takes it out of every hit metric, this rate
-     * included.
-     *
-     * This used to also exclude wholly-forgiven entries, back when
-     * `unresolvedArrows > 0` forgave a surplus without bound and such an
-     * entry's numerator could never move. Under the bounded rule a forgiven
-     * entry can still be charged for the surplus beyond what its unresolved
-     * arrows explain, so it is judged like any other and belongs in this
-     * denominator too.
-     */
-    val falsePositiveDenominator: Int,
     val correctScores: Int,
     val scoreComparableShots: Int,
     val positionErrors: List<Double>,
@@ -83,6 +65,16 @@ class Metrics(
      */
     val rejectedDistances: List<Double>,
     val entriesWithPositions: Int,
+    /**
+     * Matched pairs whose truth shot carried no position of its own and were
+     * therefore matched by score rather than by position -- see
+     * [ShotMatching]. Printed beside [entriesWithPositions] so a corpus
+     * drifting towards score-only annotation shows up in the numbers: each
+     * deleted position turns a hard position test into a much easier score
+     * test, which is the faithful consequence of matching per shot rather
+     * than per entry, not a bug -- but it should not go unnoticed.
+     */
+    val pairsMatchedByScore: Int,
     val annotatedEntries: Int,
     /**
      * Entries where [CorpusEntry.unresolvedArrows] forgave at least one
@@ -92,6 +84,20 @@ class Metrics(
      * here, because forgiveness applied to it too, just not to all of it.
      */
     val forgivenEntries: Int,
+    /**
+     * Entries counted in [forgivenEntries] whose surplus went beyond what
+     * [CorpusEntry.unresolvedArrows] could explain -- the partially forgiven
+     * ones, where forgiveness applied but did not cover everything.
+     */
+    val entriesChargedBeyondForgiveness: Int,
+    /**
+     * Detections charged as false positives on an entry counted in
+     * [entriesChargedBeyondForgiveness] -- the surplus left over once that
+     * entry's unresolved arrows had forgiven as much as they could. Printed
+     * so a partially forgiven entry's charged surplus is visible rather than
+     * silently folded into [falsePositives].
+     */
+    val detectionsChargedDespiteForgiveness: Int,
     /**
      * Matched pairs whose truth shot is [TruthShot.nearRingBoundary]: the
      * ring value there depends on the arrow's diameter, which is not
@@ -119,16 +125,18 @@ class Metrics(
 
     /**
      * Invented arrows per expected arrow. Can exceed one. Null when
-     * [falsePositiveDenominator] is zero -- which, under the bounded
-     * forgiveness rule, happens only when there is no annotated, in-scope
-     * entry at all, not merely because every entry happened to be forgiven.
+     * [expectedShots] is zero -- which, under the bounded forgiveness rule,
+     * happens only when there is no annotated, in-scope entry at all, not
+     * merely because every entry happened to be forgiven.
      *
-     * Measured against [falsePositiveDenominator] rather than [expectedShots]
-     * so this rate and [falsePositiveDenominator] always describe the same
-     * entries; see [falsePositiveDenominator] for which those are.
+     * Measured against the same [expectedShots] as [detectionRate]: the
+     * bounded forgiveness rule (change 3) and out-of-scope exclusion
+     * (change 6) both apply to the same set of entries for every hit metric,
+     * so there is no longer a separate denominator to keep in step with this
+     * one.
      */
     val falsePositiveRate: Double?
-        get() = ratio(falsePositives, falsePositiveDenominator)
+        get() = ratio(falsePositives, expectedShots)
 
     /**
      * Measured against the shots whose truth is comparable with what the
@@ -183,12 +191,14 @@ class Metrics(
             var expected = 0
             var matched = 0
             var falsePositives = 0
-            var falsePositiveDenominator = 0
             var correct = 0
             var comparable = 0
             var withPositions = 0
+            var matchedByScore = 0
             var annotated = 0
             var forgiven = 0
+            var chargedBeyondForgiveness = 0
+            var chargedDespiteForgiveness = 0
             var boundaryShots = 0
             var uncertainExcluded = 0
             val errors = mutableListOf<Double>()
@@ -229,15 +239,21 @@ class Metrics(
                 if (entryForgiven > 0) {
                     forgiven++
                 }
+                if (entry.unresolvedArrows > 0 && surplus > entry.unresolvedArrows) {
+                    // Forgiveness applied -- entryForgiven equals
+                    // unresolvedArrows here -- but did not cover the whole
+                    // surplus, so the rest is charged despite it.
+                    chargedBeyondForgiveness++
+                    chargedDespiteForgiveness += surplus - entry.unresolvedArrows
+                }
                 falsePositives += surplus - entryForgiven
-                falsePositiveDenominator += entry.expectedShots
 
                 // Per-shot, matching ShotMatching's own decision: an entry
                 // counts here as soon as ANY of its shots carries a position,
-                // not only when EVERY shot does. The old all-or-nothing
-                // `entry.hasPositions` flag would silently exclude an entry
-                // that still contributes a real, measured position error for
-                // its positioned shots.
+                // not only when EVERY shot does. The old, all-or-nothing
+                // entry-level flag this replaced would silently exclude an
+                // entry that still contributes a real, measured position
+                // error for its positioned shots.
                 if (entry.shots.any { it.position != null }) {
                     withPositions++
                 }
@@ -270,6 +286,10 @@ class Metrics(
                         } else {
                             errors.add(distance)
                         }
+                    } else {
+                        // A pair made by score carries no distance -- see
+                        // MatchedPair.distance.
+                        matchedByScore++
                     }
                 }
                 rejectedOnDistance.addAll(outcome.match.detectionsRejectedOnDistance)
@@ -279,14 +299,16 @@ class Metrics(
                 expectedShots = expected,
                 matchedShots = matched,
                 falsePositives = falsePositives,
-                falsePositiveDenominator = falsePositiveDenominator,
                 correctScores = correct,
                 scoreComparableShots = comparable,
                 positionErrors = errors,
                 rejectedDistances = rejectedOnDistance,
                 entriesWithPositions = withPositions,
+                pairsMatchedByScore = matchedByScore,
                 annotatedEntries = annotated,
                 forgivenEntries = forgiven,
+                entriesChargedBeyondForgiveness = chargedBeyondForgiveness,
+                detectionsChargedDespiteForgiveness = chargedDespiteForgiveness,
                 boundaryShots = boundaryShots,
                 uncertainPositionsExcluded = uncertainExcluded
             )
@@ -304,10 +326,18 @@ class Metrics(
          * The same numbers per tag, so "dark" and "overlap" can be compared
          * against the rest. An entry with several tags counts in each of them;
          * an entry with none lands under [UNTAGGED].
+         *
+         * Out-of-scope entries are dropped before grouping, not merely zeroed
+         * afterwards: [over] already excludes them from every number, but an
+         * out-of-scope entry that is the only one under some tag would still
+         * leave that tag's row in the map with nothing measured for it.
+         * Change 6 says such an entry contributes to no metric -- including
+         * the existence of a row it alone would produce.
          */
         fun byTag(outcomes: List<EntryOutcome>): Map<String, Metrics> {
+            val inScope = outcomes.filter { it.entry.outOfScope == null }
             val groups = mutableMapOf<String, MutableList<EntryOutcome>>()
-            for (outcome in outcomes) {
+            for (outcome in inScope) {
                 val keys = outcome.entry.tags.ifEmpty { setOf(UNTAGGED) }
                 for (key in keys) {
                     groups.getOrPut(key) { mutableListOf() }.add(outcome)

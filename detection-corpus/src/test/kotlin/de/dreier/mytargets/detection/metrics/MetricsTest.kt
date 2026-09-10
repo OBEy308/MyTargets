@@ -313,10 +313,10 @@ class MetricsTest {
         assertThat(m.matchedShots).isEqualTo(4)
         assertThat(m.falsePositives).isEqualTo(0)
         // Under the bounded rule every annotated, in-scope entry is judged,
-        // forgiven or not -- this entry's four listed hits sit in the
-        // denominator, giving a real, measured rate of zero rather than an
-        // unmeasured null.
-        assertThat(m.falsePositiveDenominator).isEqualTo(4)
+        // forgiven or not -- this entry's four listed hits sit in
+        // expectedShots, the false positive rate's own denominator, giving a
+        // real, measured rate of zero rather than an unmeasured null.
+        assertThat(m.expectedShots).isEqualTo(4)
         assertThat(m.falsePositiveRate!!).isWithin(1e-9).of(0.0)
         assertThat(m.forgivenEntries).isEqualTo(1)
     }
@@ -363,18 +363,20 @@ class MetricsTest {
     }
 
     @Test
-    fun theFalsePositiveDenominatorIncludesEveryAnnotatedInScopeEntryEvenAForgivenOne() {
+    fun theFalsePositiveRateIsMeasuredAgainstExpectedShotsIncludingAForgivenEntry() {
         // Under the bounded rule every annotated, in-scope entry can
         // contribute a false positive -- a forgiven entry's listed hits are
-        // no longer excluded from the denominator, because forgiveness is no
-        // longer all-or-nothing. A forgiven five-hit entry takes 50
-        // fabricated detections but its single unresolved arrow forgives only
-        // one of them, charging 49; a strict one-hit entry takes one
-        // fabrication and is charged for it. Against every listed hit that
-        // was actually judged (5 + 1 = 6) that is 50 / 6 -- if the forgiven
-        // entry's hits were still excluded from the denominator (the old
-        // rule) it would read as 1 / 1 = 100% instead, hiding the 49 charged
-        // false positives entirely.
+        // no longer excluded from expectedShots, the false positive rate's
+        // own denominator (item 3: falsePositiveDenominator was deleted
+        // because it was provably identical to expectedShots), because
+        // forgiveness is no longer all-or-nothing. A forgiven five-hit entry
+        // takes 50 fabricated detections but its single unresolved arrow
+        // forgives only one of them, charging 49; a strict one-hit entry
+        // takes one fabrication and is charged for it. Against every listed
+        // hit that was actually judged (5 + 1 = 6) that is 50 / 6 -- if the
+        // forgiven entry's hits were still excluded from the denominator
+        // (the old rule) it would read as 1 / 1 = 100% instead, hiding the
+        // 49 charged false positives entirely.
         val forgiven = CorpusEntry(
             imageName = "forgiven.jpg", image = null, camera = null, capture = null,
             target = null, shotsPerEnd = 6,
@@ -391,7 +393,7 @@ class MetricsTest {
         )
 
         assertThat(m.falsePositives).isEqualTo(50)
-        assertThat(m.falsePositiveDenominator).isEqualTo(6)
+        assertThat(m.expectedShots).isEqualTo(6)
         assertThat(m.falsePositiveRate!!).isWithin(1e-9).of(50.0 / 6.0)
         assertThat(m.forgivenEntries).isEqualTo(1)
     }
@@ -693,8 +695,6 @@ class MetricsTest {
         assertThat(withOutOfScope.expectedShots).isEqualTo(withoutOutOfScope.expectedShots)
         assertThat(withOutOfScope.matchedShots).isEqualTo(withoutOutOfScope.matchedShots)
         assertThat(withOutOfScope.falsePositives).isEqualTo(withoutOutOfScope.falsePositives)
-        assertThat(withOutOfScope.falsePositiveDenominator)
-            .isEqualTo(withoutOutOfScope.falsePositiveDenominator)
         assertThat(withOutOfScope.scoreComparableShots).isEqualTo(withoutOutOfScope.scoreComparableShots)
         assertThat(withOutOfScope.correctScores).isEqualTo(withoutOutOfScope.correctScores)
         assertThat(withOutOfScope.annotatedEntries).isEqualTo(withoutOutOfScope.annotatedEntries)
@@ -721,9 +721,164 @@ class MetricsTest {
         )
         val m = Metrics.over(listOf(outcome(outOfScope, listOf(found(9, 9.0, 9.0)))))
 
-        assertThat(m.falsePositiveDenominator).isEqualTo(0)
         assertThat(m.falsePositiveRate).isNull()
         assertThat(m.expectedShots).isEqualTo(0)
         assertThat(m.annotatedEntries).isEqualTo(0)
+    }
+
+    // --- Item 2: surplus charged beyond forgiveness ------------------------
+
+    @Test
+    fun entriesChargedBeyondForgivenessCountsThePartiallyForgivenEntrySeparately() {
+        // One unresolved arrow forgives one surplus detection; three are
+        // fabricated, so two are still charged despite forgiveness applying.
+        // forgivenEntries alone cannot tell this apart from a fully forgiven
+        // entry (see forgivenessIsBoundedByUnresolvedArrowsNotUnlimited) -- it
+        // counts the entry either way. entriesChargedBeyondForgiveness and
+        // detectionsChargedDespiteForgiveness exist to surface the partial
+        // case specifically.
+        val e = entryWithUnresolved(unresolved = 1)
+        val detected = listOf(
+            found(0, 0.0, 0.0), found(2, 0.3, 0.0),
+            found(3, 0.6, 0.0), found(3, 0.9, 0.0),
+            found(2, 2.0, 0.0), found(2, 3.0, 0.0), found(2, 4.0, 0.0)
+        )
+        val m = Metrics.over(listOf(outcome(e, detected)))
+
+        assertThat(m.forgivenEntries).isEqualTo(1)
+        assertThat(m.entriesChargedBeyondForgiveness).isEqualTo(1)
+        assertThat(m.detectionsChargedDespiteForgiveness).isEqualTo(2)
+    }
+
+    @Test
+    fun entriesChargedBeyondForgivenessIsZeroWhenForgivenessCoversTheWholeSurplus() {
+        val e = entryWithUnresolved(unresolved = 2)
+        val detected = listOf(
+            found(0, 0.0, 0.0), found(2, 0.3, 0.0),
+            found(3, 0.6, 0.0), found(3, 0.9, 0.0),
+            found(2, 0.05, 0.05), found(2, 0.06, 0.06)
+        )
+        val m = Metrics.over(listOf(outcome(e, detected)))
+
+        assertThat(m.forgivenEntries).isEqualTo(1)
+        assertThat(m.entriesChargedBeyondForgiveness).isEqualTo(0)
+        assertThat(m.detectionsChargedDespiteForgiveness).isEqualTo(0)
+    }
+
+    // --- Item 6: byTag drops out-of-scope entries entirely -----------------
+
+    @Test
+    fun byTagOmitsATagThatOnlyAnOutOfScopeEntryCarries() {
+        // Change 6: an out-of-scope entry contributes to no metric --
+        // including the existence of a byTag row that only it would produce.
+        // Metrics.over already zeroes such a row's numbers; this checks the
+        // row itself is gone, not merely empty.
+        val outOfScope = CorpusEntry(
+            imageName = "out.jpg", image = null, camera = null,
+            capture = CaptureInfo(lighting = "onlyOutOfScope", angle = null, angleDegrees = null),
+            target = null, shotsPerEnd = 1,
+            shots = listOf(truth(5, 0.0, 0.0)),
+            unresolvedArrows = 0, registration = null,
+            outOfScope = "not covered by v1"
+        )
+        val plain = entry("p.jpg", shots = arrayOf(truth(2, 0.0, 0.0)))
+
+        val byTag = Metrics.byTag(
+            listOf(outcome(outOfScope, emptyList()), outcome(plain, listOf(found(2, 0.0, 0.0))))
+        )
+
+        assertThat(byTag.keys).containsExactly("untagged")
+    }
+
+    @Test
+    fun byTagKeepsATagSharedByAnInScopeAndAnOutOfScopeEntry() {
+        // Dropping the out-of-scope entry from a group must not drop the
+        // group when an in-scope entry still carries the same tag.
+        val outOfScope = CorpusEntry(
+            imageName = "out.jpg", image = null, camera = null,
+            capture = CaptureInfo(lighting = "dark", angle = null, angleDegrees = null),
+            target = null, shotsPerEnd = 1,
+            shots = listOf(truth(5, 0.0, 0.0)),
+            unresolvedArrows = 0, registration = null,
+            outOfScope = "not covered by v1"
+        )
+        val dark = entry("d.jpg", tags = setOf("dark"), shots = arrayOf(truth(2, 0.0, 0.0)))
+
+        val byTag = Metrics.byTag(
+            listOf(outcome(outOfScope, emptyList()), outcome(dark, listOf(found(2, 0.0, 0.0))))
+        )
+
+        assertThat(byTag.keys).containsExactly("dark")
+        assertThat(byTag["dark"]!!.detectionRate!!).isWithin(1e-9).of(1.0)
+    }
+
+    // --- Item 9: pairs matched by score rather than by position ------------
+
+    @Test
+    fun pairsMatchedByScoreCountsPairsWithoutAPositionOfTheirOwn() {
+        // Truth 0 is positioned and matched by position (distance non-null);
+        // truth 1 has no position and is matched by score (distance null) --
+        // see ShotMatching. Only the second contributes here.
+        val mixed = entry(
+            "mixed.jpg",
+            shots = arrayOf(truth(2, 0.0, 0.0), TruthShot(scoringRing = 3))
+        )
+        val m = Metrics.over(
+            listOf(outcome(mixed, listOf(found(2, 0.0, 0.0), found(3, 5.0, 5.0))))
+        )
+
+        assertThat(m.pairsMatchedByScore).isEqualTo(1)
+    }
+
+    @Test
+    fun pairsMatchedByScoreIsZeroWhenEveryMatchedPairCarriesAPosition() {
+        val e = entry("p.jpg", shots = arrayOf(truth(2, 0.0, 0.0)))
+        val m = Metrics.over(listOf(outcome(e, listOf(found(2, 0.0, 0.0)))))
+
+        assertThat(m.pairsMatchedByScore).isEqualTo(0)
+    }
+
+    // --- Item 10: boundaryShots and detectionsRejectedOnDistance -----------
+
+    @Test
+    fun boundaryShotsCountsEvenWhenTheMatchedPairIsNotOtherwiseScoreComparable() {
+        // The reviewer's caught mutation: restricting boundaryShots to pairs
+        // that would also have been score-comparable. A boundary shot is
+        // excluded from ring accuracy precisely BECAUSE its ring value cannot
+        // be fairly judged -- whether the detection happens to carry a
+        // comparable kind of score at all is beside the point, and must not
+        // gate whether the pair is counted here.
+        val e = CorpusEntry(
+            imageName = "boundary3.jpg", image = null, camera = null, capture = null,
+            target = null, shotsPerEnd = 1,
+            shots = listOf(
+                TruthShot(scoringRing = 5, position = SpotPosition(0, 0.0, 0.0), nearRingBoundary = true)
+            ),
+            unresolvedArrows = 0, registration = null
+        )
+        // Reports only a printed value, no zone index -- NOT score-comparable
+        // with the truth's zone index at all (see Metrics.isScoreComparable).
+        val detected = listOf(DetectedShotRecord(null, PrintedScore.of("5"), SpotPosition(0, 0.0, 0.0), 0.9))
+        val m = Metrics.over(listOf(outcome(e, detected)))
+
+        assertThat(m.matchedShots).isEqualTo(1)
+        assertThat(m.boundaryShots).isEqualTo(1)
+        assertThat(m.scoreComparableShots).isEqualTo(0)
+    }
+
+    @Test
+    fun detectionsRejectedOnDistanceHasNoCap() {
+        // The reviewer's caught mutation: capping rejected-on-distance
+        // entries at 0.25 spot radii. A detection can be arbitrarily far from
+        // the nearest unmatched, positioned truth shot and still be reported
+        // here -- the metric's whole point is to show how bad the detector's
+        // distances get, not to hide the worst of them behind an
+        // undocumented cap.
+        val e = entry("far.jpg", shots = arrayOf(truth(2, 0.0, 0.0)))
+        val detected = listOf(found(2, 0.9, 0.0)) // 0.9 spot radii from the truth
+        val m = Metrics.over(listOf(outcome(e, detected)))
+
+        assertThat(m.detectionsRejectedOnDistance).isEqualTo(1)
+        assertThat(m.rejectedDistances.single()).isWithin(1e-9).of(0.9)
     }
 }

@@ -15,6 +15,13 @@
 
 package de.dreier.mytargets.detection.corpus
 
+/**
+ * A point in pixels of the EXIF-rotated original, x to the right and y
+ * downwards. Not a [SpotPosition]: that one is spot-local, with the outermost
+ * ring at radius one, and the two must not be compared by accident.
+ */
+data class ImagePoint(val x: Double, val y: Double)
+
 /** The photograph itself, as the sidecar records it. */
 data class ImageInfo(
     val fileName: String,
@@ -60,11 +67,12 @@ data class TargetInfo(val model: String, val diameterCm: Double?, val faceCount:
  * arrows.
  *
  * [imageToTarget] holds the nine values of a 3x3 homography row by row, mapping
- * pixels of the EXIF-rotated original into target coordinates.
+ * pixels of the EXIF-rotated original into target coordinates. [imagedCentre] is
+ * where the face's centre lies in that image.
  */
 data class Registration(
     val imageToTarget: List<Double>,
-    val imagedCentre: SpotPosition?
+    val imagedCentre: ImagePoint?
 ) {
     init {
         require(imageToTarget.size == 9) {

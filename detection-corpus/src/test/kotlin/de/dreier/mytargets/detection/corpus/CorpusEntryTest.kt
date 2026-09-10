@@ -170,7 +170,7 @@ class CorpusEntryTest {
                 -3.186e-05, 0.00086714, -1.50279171,
                 0.00011846, -7.073e-05, 1.0
             ),
-            imagedCentre = SpotPosition(0, 1145.77, 1775.66)
+            imagedCentre = ImagePoint(1145.77, 1775.66)
         )
         assertThat(r.imageToTarget).hasSize(9)
         assertThat(r.imageToTarget[8]).isWithin(1e-12).of(1.0)

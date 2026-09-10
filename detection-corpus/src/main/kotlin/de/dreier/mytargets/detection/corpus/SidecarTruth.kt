@@ -72,9 +72,11 @@ object SidecarTruth {
         var unresolvedArrows: Int? = null
     }
 
+    // The list elements are nullable because gson reads leniently: a trailing
+    // comma in a hand edited list, [a, b,], comes back as [a, b, null].
     private class RegistrationJson {
-        var imageToTarget: List<List<Double>>? = null
-        var imagedCentre: List<Double>? = null
+        var imageToTarget: List<List<Double?>?>? = null
+        var imagedCentre: List<Double?>? = null
     }
 
     private class SidecarJson {
@@ -83,7 +85,7 @@ object SidecarTruth {
         var capture: CaptureJson? = null
         var target: TargetJson? = null
         var end: EndJson? = null
-        var shots: List<ShotJson>? = null
+        var shots: List<ShotJson?>? = null
         var annotation: AnnotationJson? = null
         var registration: RegistrationJson? = null
     }
@@ -104,20 +106,42 @@ object SidecarTruth {
         val shotsJson = parsed.shots
             ?: throw IllegalArgumentException("$imageName: sidecar has no shots array")
 
-        val shots = shotsJson.mapIndexed { index, shot -> readShot(imageName, index, shot) }
+        val shots = shotsJson.mapIndexed { index, shot ->
+            require(shot != null) {
+                "$imageName: shot $index is empty, is there a trailing comma?"
+            }
+            readShot(imageName, index, shot)
+        }
+        val image = parsed.image?.let { readImage(imageName, it) }
+        val target = parsed.target?.let { readTarget(imageName, it) }
+        val registration = parsed.registration?.let { readRegistration(imageName, it) }
 
-        return CorpusEntry(
-            imageName = imageName,
-            image = parsed.image?.let { readImage(imageName, it) },
-            camera = parsed.camera?.let { CameraInfo(it.model, it.focalLength35mm) },
-            capture = parsed.capture?.let { CaptureInfo(it.lighting, it.angle, it.angleDegrees) },
-            target = parsed.target?.let { readTarget(imageName, it) },
-            shotsPerEnd = parsed.end?.shotsPerEnd,
-            shots = shots,
-            unresolvedArrows = parsed.annotation?.unresolvedArrows ?: 0,
-            registration = parsed.registration?.let { readRegistration(imageName, it) }
-        )
+        return naming(imageName) {
+            CorpusEntry(
+                imageName = imageName,
+                image = image,
+                camera = parsed.camera?.let { CameraInfo(it.model, it.focalLength35mm) },
+                capture = parsed.capture?.let { CaptureInfo(it.lighting, it.angle, it.angleDegrees) },
+                target = target,
+                shotsPerEnd = parsed.end?.shotsPerEnd,
+                shots = shots,
+                unresolvedArrows = parsed.annotation?.unresolvedArrows ?: 0,
+                registration = registration
+            )
+        }
     }
+
+    /**
+     * Builds one of the data types. Their own invariant checks cannot know
+     * which photograph a value came from, so a failure is rethrown with
+     * [context] in front.
+     */
+    private inline fun <T> naming(context: String, build: () -> T): T =
+        try {
+            build()
+        } catch (e: IllegalArgumentException) {
+            throw IllegalArgumentException("$context: ${e.message}", e)
+        }
 
     private fun readShot(imageName: String, index: Int, shot: ShotJson): TruthShot {
         val hasX = shot.x != null
@@ -134,17 +158,19 @@ object SidecarTruth {
             "$imageName: shot $index gives faceIndex without x and y"
         }
 
-        return TruthShot(
-            scoringRing = shot.scoringRing,
-            // Optional. The annotated inherited photographs carry it so the
-            // printed value can be checked against the file name; a detector
-            // is matched on the zone index.
-            printedScore = shot.printedScore?.let { PrintedScore.of(it) },
-            position = position,
-            positionTolerance = shot.positionTolerance,
-            nearRingBoundary = shot.nearRingBoundary ?: false,
-            uncertain = shot.uncertain ?: false
-        )
+        return naming("$imageName: shot $index") {
+            TruthShot(
+                scoringRing = shot.scoringRing,
+                // Optional. The annotated inherited photographs carry it so the
+                // printed value can be checked against the file name; a detector
+                // is matched on the zone index.
+                printedScore = shot.printedScore?.let { PrintedScore.of(it) },
+                position = position,
+                positionTolerance = shot.positionTolerance,
+                nearRingBoundary = shot.nearRingBoundary ?: false,
+                uncertain = shot.uncertain ?: false
+            )
+        }
     }
 
     private fun readImage(imageName: String, image: ImageJson): ImageInfo {
@@ -152,13 +178,13 @@ object SidecarTruth {
             ?: throw IllegalArgumentException("$imageName: image block has no width")
         val height = image.height
             ?: throw IllegalArgumentException("$imageName: image block has no height")
-        return ImageInfo(imageName, width, height, image.exifOrientation)
+        return naming(imageName) { ImageInfo(imageName, width, height, image.exifOrientation) }
     }
 
     private fun readTarget(imageName: String, target: TargetJson): TargetInfo {
         val model = target.model
             ?: throw IllegalArgumentException("$imageName: target block has no model")
-        return TargetInfo(model, target.diameterCm, target.faceCount ?: 1)
+        return naming(imageName) { TargetInfo(model, target.diameterCm, target.faceCount ?: 1) }
     }
 
     private fun readRegistration(
@@ -166,17 +192,17 @@ object SidecarTruth {
         registration: RegistrationJson
     ): Registration? {
         val rows = registration.imageToTarget ?: return null
-        require(rows.size == 3 && rows.all { it.size == 3 }) {
-            "$imageName: imageToTarget must be three rows of three, got " +
-                "${rows.size} rows of ${rows.map { it.size }}"
+        require(rows.size == 3 && rows.all { it != null && it.size == 3 && null !in it }) {
+            "$imageName: imageToTarget must be three rows of three numbers, got $rows"
         }
         val centre = registration.imagedCentre
-        require(centre == null || centre.size == 2) {
-            "$imageName: imagedCentre must be two values, got ${centre?.size}"
+        require(centre == null || (centre.size == 2 && null !in centre)) {
+            "$imageName: imagedCentre must be two numbers, got $centre"
         }
+        // Neither requireNoNulls() can throw any more; they only narrow the type.
         return Registration(
-            imageToTarget = rows.flatten(),
-            imagedCentre = centre?.let { SpotPosition(0, it[0], it[1]) }
+            imageToTarget = rows.requireNoNulls().flatMap { it.requireNoNulls() },
+            imagedCentre = centre?.requireNoNulls()?.let { ImagePoint(it[0], it[1]) }
         )
     }
 }

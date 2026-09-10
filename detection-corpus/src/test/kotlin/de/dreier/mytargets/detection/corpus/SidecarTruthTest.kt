@@ -16,6 +16,7 @@
 package de.dreier.mytargets.detection.corpus
 
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Test
 
 class SidecarTruthTest {
@@ -98,7 +99,9 @@ class SidecarTruthTest {
         assertThat(r.imageToTarget[3]).isWithin(1e-12).of(0.0)
         assertThat(r.imageToTarget[6]).isWithin(1e-12).of(0.00012)
         assertThat(r.imageToTarget[8]).isWithin(1e-12).of(1.0)
-        assertThat(r.imagedCentre!!.x).isWithin(1e-6).of(1145.77)
+        // Image pixels, not spot-local coordinates: a type of its own, so it
+        // cannot be compared with a hit by accident.
+        assertThat(r.imagedCentre).isEqualTo(ImagePoint(1145.77, 1775.66))
     }
 
     @Test
@@ -244,5 +247,57 @@ class SidecarTruthTest {
         val error = runCatching { SidecarTruth.parse("w.jpg", json) }.exceptionOrNull()
         assertThat(error).isInstanceOf(IllegalArgumentException::class.java)
         assertThat(error!!).hasMessageThat().contains("w.jpg")
+    }
+
+    @Test
+    fun aValueTheDataTypesRejectNamesTheImage() {
+        // The data types check their own invariants, and their messages cannot
+        // know which photograph the value came from. One mistyped value in one
+        // of twenty sidecars must still say which file it is in.
+        val cases = mapOf(
+            "zero positionTolerance" to
+                """{ "shots": [ { "x": 0.0, "y": 0.0, "scoringRing": 0, "positionTolerance": 0 } ] }""",
+            "blank printedScore" to
+                """{ "shots": [ { "x": 0.0, "y": 0.0, "scoringRing": 0, "printedScore": "" } ] }""",
+            "negative scoringRing" to
+                """{ "shots": [ { "x": 0.0, "y": 0.0, "scoringRing": -1 } ] }""",
+            "zero width" to
+                """{ "image": { "width": 0, "height": 100 }, "shots": [] }""",
+            "zero faceCount" to
+                """{ "target": { "model": "WAFull", "faceCount": 0 }, "shots": [] }""",
+            "negative unresolvedArrows" to
+                """{ "shots": [], "annotation": { "unresolvedArrows": -1 } }"""
+        )
+
+        for ((case, json) in cases) {
+            val error = runCatching { SidecarTruth.parse("t.jpg", json) }.exceptionOrNull()
+            assertWithMessage(case).that(error).isInstanceOf(IllegalArgumentException::class.java)
+            assertWithMessage(case).that(error!!.message).contains("t.jpg")
+        }
+    }
+
+    @Test
+    fun aTrailingCommaNamesTheImageRatherThanPassingANull() {
+        // Gson reads leniently: [a, b,] comes back as [a, b, null]. A hand
+        // edited list with a trailing comma must be rejected with the image
+        // name, not end in a bare NullPointerException or a null smuggled
+        // into the registration.
+        val identityRows = "[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]"
+        val cases = mapOf(
+            "shots" to
+                """{ "shots": [ { "x": 0.0, "y": 0.0, "scoringRing": 0 }, ] }""",
+            "imageToTarget" to
+                """{ "shots": [], "registration": { "imageToTarget": [$identityRows,] } }""",
+            "imageToTarget row" to
+                """{ "shots": [], "registration": { "imageToTarget": [[1.0, 0.0,], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]] } }""",
+            "imagedCentre" to
+                """{ "shots": [], "registration": { "imageToTarget": [$identityRows], "imagedCentre": [1.0,] } }"""
+        )
+
+        for ((case, json) in cases) {
+            val error = runCatching { SidecarTruth.parse("t.jpg", json) }.exceptionOrNull()
+            assertWithMessage(case).that(error).isInstanceOf(IllegalArgumentException::class.java)
+            assertWithMessage(case).that(error!!.message).contains("t.jpg")
+        }
     }
 }

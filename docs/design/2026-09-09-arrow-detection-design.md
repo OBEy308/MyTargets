@@ -701,11 +701,10 @@ ab, und das AAR bringt alle vier ABIs mit. Fast alles davon ist
 **Entscheidung:** OpenCV 4.14.0 aus Maven. 5.0.0 ist je ABI rund 4 MB größer
 und bringt der Pipeline nichts. Das Release packt nur `arm64-v8a` und
 `armeabi-v7a`; x86 und x86_64 betreffen im Wesentlichen Emulatoren und
-Chromebooks mit Intel-Prozessor. Der Debug-Build behält `x86_64`, weil die
-Wahrnehmungsstufen als Instrumentierungstests auch im Emulator laufen.
-Gerechnet, nicht gebaut: Ein Universal-APK mit diesen zwei ABIs läge bei rund
-50 MB, mit komprimiert abgelegten Bibliotheken (`useLegacyPackaging`) bei rund
-26 MB.
+Chromebooks mit Intel-Prozessor. Der Debug-Build behält `x86_64`, damit die
+App mit der Erkennung auch im Emulator läuft. Gerechnet, nicht gebaut: Ein
+Universal-APK mit diesen zwei ABIs läge bei rund 50 MB, mit komprimiert
+abgelegten Bibliotheken (`useLegacyPackaging`) bei rund 26 MB.
 
 Offen bleibt zweierlei. Erstens ein eigener OpenCV-Build nur mit `core` und
 `imgproc`; seine Größe ist nicht gemessen. Zweitens, ob F-Droid das vorgebaute

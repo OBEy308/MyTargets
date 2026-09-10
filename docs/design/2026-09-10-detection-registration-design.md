@@ -217,9 +217,10 @@ Radien skalieren nicht.
    großem Radius wie die größte.
 4. **Randpunkte.** 720 Strahlen vom Scheibenzentrum, für jeden Übergang der
    Tabelle nach außen fortschreitend; das Suchfenster folgt aus dem
-   Kegelschnitt des vorigen Übergangs. Liegen auf einem Strahl mehr als
-   12 px · `f` zwischen Innen- und Außenklasse, gilt er als verdeckt und
-   liefert keinen Punkt.
+   Kegelschnitt des vorigen Übergangs, vor dem ersten angenommenen aus der
+   Scheibe, skaliert mit dem Radienverhältnis der Tabelle. Liegen auf einem
+   Strahl mehr als 12 px · `f` zwischen Innen- und Außenklasse, gilt er als
+   verdeckt und liefert keinen Punkt.
 5. **Robuster Fit.** Ab 40 Randpunkten: `Conic.fit`, dann schrittweises
    Entfernen von Ausreißern nach dem Sampson-Abstand, vier Durchgänge, mit der
    Schwelle 2,5 · max(1,4826 · Median, 0,5 px · `f`). Der Boden stammt aus
@@ -409,6 +410,34 @@ Mit diesem Dokument geändert:
   Prototyp“, nicht nur „nahe an der Wahrheit“. Die Sidecars wurden am Bild
   geprüft, aber eine gemeinsame Schwäche beider Verfahren sähe diese Messung
   nicht.
+
+  Außerdem hat die Referenz einen eigenen Boden. Er ist hergeleitet, nicht
+  gemessen. `register.py` schneidet seine Strahlproben ab, was jeden
+  Ringpunkt um 0,5 px des Arbeitsbilds in x und in y verschiebt, und rechnet
+  mit `S = diag(s, s, 1)` ohne den Term für Pixelmitten. Zusammen versetzt
+  das jede Referenz um (0,5, 0,5) px des Originals, gleich welches `s`. 3a
+  rundet auf das nächste Pixel und nimmt die Pixelmitten in `S` auf. Von der
+  Abweichung zwischen 3a und Referenz stammen damit rund 0,71 px geteilt
+  durch die Pixel je Spot-Radius allein aus der Referenz. Als Median über die
+  Messpunkte sind das 0,0003 bis 0,0004 Radien auf elf der zwölf geerbten
+  Fotos (1680 bis 2420 px je Radius am Scheibenzentrum), 0,0005 bis 0,0008
+  auf den vier eigenen (790 bis 1720 px) und 0,0011 auf
+  `a6_x99765_noise.jpg` (570 bis 710 px). Der erste Bericht passt in der
+  Größe dazu: Auf zehn der elf geerbten Fotos misst er einen Median von
+  0,0003 bis 0,0006, auf `a6_x99765_noise.jpg` 0,0010. Die Richtung ist
+  nicht geprüft, weil 3a seine Homographien nicht speichert. Schranken, die
+  an diesem Bericht festgelegt werden, dürfen deshalb nicht unter diesem
+  Boden liegen.
+- **Eine angeschnittene Nachbarscheibe zählt.** Seit eine vom Bildrand
+  angeschnittene Scheibe auf dem vermessen wird, was das Bild zeigt
+  (Schritt 3), meldet ein Foto mit einer Auflage `FACE_MISMATCH`, wenn es am
+  Rand mehr als etwa die Hälfte der gelben Scheibe einer Nachbarauflage
+  zeigt. Das verlangt die Haupt-Spec, wenn mehrere Auflagen im Bild sind.
+  Vorher hat die verzerrte Messung eine solche Scheibe unter die Größenregel
+  geschrumpft. Auf dem Foto mit drei Auflagen hat die angeschnittene Scheibe
+  39 bis 40 Übergänge, bei einer Mindestzahl von 36. Eine Abstimmung, die
+  dort ein paar Übergänge kostet, kippt deshalb die harte Prüfung; der
+  Korpuslauf fängt das ab.
 - **Verkantete Aufnahmen.** Referenz und Pipeline setzen oben im Bild mit oben
   auf der Scheibe gleich. Ein Drehfehler durch ein verkantetes Handy bleibt
   deshalb unsichtbar, bis der Korpus verkantete Fotos mit eigener Bezugslinie

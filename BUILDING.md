@@ -105,13 +105,17 @@ The registration run measures how well `:detection` finds the face in each
 photograph of the corpus:
 
 ```
-./gradlew :detection:testDevDebugUnitTest --tests '*RegistrationCorpusRun'
+./gradlew :detection:testDevDebugUnitTest --tests '*RegistrationCorpusRun' --rerun
 ```
 
 It writes `detection/build/reports/detection/registration.md`, and beside it
 one folder of stage images per photograph. The run fails only when the
 photograph with three faces is not reported as a face mismatch; everything
 else is measured, not judged.
+
+The corpus is not a declared input of the test task, so without `--rerun`
+Gradle reports the task up to date after a photograph or sidecar changes, and
+nothing is written.
 
 ## Build
 

@@ -182,8 +182,10 @@ nicht.
 
 **Stufe 2 — Auflage lokalisieren.** Gelbe Blobs segmentieren; ihre Anzahl muss zu
 `facePositions.size` passen, sonst `FACE_MISMATCH`. An den Farbübergängen mit
-bekannten Radien Kegelschnitte fitten (RANSAC gegen Ausreißer durch Schäfte und
-Schatten). Die Farbübergänge je Modell:
+bekannten Radien Kegelschnitte fitten, robust gegen Ausreißer durch Schäfte
+und Schatten; das Verfahren steht im Registrierungsdesign
+(`docs/design/2026-09-10-detection-registration-design.md`). Die
+Farbübergänge je Modell:
 
 | Modell | Übergänge (Radius, spot-lokal) |
 |---|---|
@@ -577,12 +579,13 @@ liegt in der App.
 
 **Wahrnehmungsstufen** — Segmentierung, Farbabgleich, Residuum, Schaftfindung.
 Diese lassen sich nicht sinnvoll rot-grün treiben; sie werden am Korpus
-gemessen. OpenCV braucht dafür native Bibliotheken, also laufen diese Messungen
-als Instrumentierungstests auf dem Gerät oder Emulator, nicht als
-JVM-Unit-Tests. Ein eigenes JVM-Werkzeug dafür gibt es im Projekt nicht;
-`tools/` enthält nur Gradle-Skripte. Ob sich ein solches Modul lohnt,
-entscheidet Plan 2. Das wird hier festgehalten, damit später niemand rot-grün
-erwartet, wo es nicht hingehört.
+gemessen. Sie laufen trotzdem als JVM-Tests: `org.openpnp:opencv` bringt die
+OpenCV-Java-API mit nativen Bibliotheken für den Desktop mit, in Version 4.9.0,
+während die App 4.14.0 ausliefert. Eine Probe am 2026-09-10 lud ein
+12-MP-Korpusfoto in 0,1 s; ein Korpuslauf dauert damit Sekunden statt Minuten
+im Emulator. Wie das eingebunden ist, steht im Registrierungsdesign
+(`docs/design/2026-09-10-detection-registration-design.md`). Das wird hier
+festgehalten, damit später niemand rot-grün erwartet, wo es nicht hingehört.
 
 ### Debug-Ansicht
 
@@ -590,9 +593,12 @@ Ein Bildschirm im Debug-Build, erreichbar aus der Galerie, der ein Foto durch
 die Pipeline schickt und jede Stufe als Bild zeigt: Segmentierung, gefittete
 Kegelschnitte, entzerrtes Bild, Farbklassenmaske, Residuum, Schaftkandidaten,
 gerechneter Fluchtpunkt samt Streifenrichtungen, gewählte Einschusspunkte mit
-Spot. Das ist
-**Pflicht, kein Extra** — ohne die Ansicht lässt sich ein Fehler nicht
-lokalisieren, nur erraten.
+Spot. Das ist **Pflicht, kein Extra** — ohne die Ansicht lässt sich ein
+Fehler nicht lokalisieren, nur erraten.
+
+Bis zur Integration übernimmt der Korpuslauf diese Aufgabe: Er schreibt für
+jedes Foto ein Bild je Stufe (siehe Registrierungsdesign). Der Bildschirm in
+der App entsteht mit der Integration, weil er sie voraussetzt.
 
 ## Reihenfolge der Umsetzung
 
@@ -612,10 +618,13 @@ lokalisieren, nur erraten.
 5. Geometrie testgetrieben: Kegelschnittfit, Zentrum und Fluchtlinie,
    Rektifizierung, Fluchtpunkt, Spot-Zuordnung, Umrechnung, Auswahl. Plan:
    `docs/plans/2026-09-09-detection-geometry-core.md`.
-6. Debug-Ansicht, sobald Stufe 3 ein Bild liefert.
-7. Wahrnehmungsstufen gegen den Korpus, Kennzahlen festschreiben.
+6. Plan 3a: Registrierung aus dem Bild (Stufen 1 bis 3), gegen den Korpus
+   gemessen, mit Debug-Bildern aus dem Korpuslauf. Design:
+   `docs/design/2026-09-10-detection-registration-design.md`.
+7. Plan 3b: Pfeilfindung (Stufen 4 bis 6) gegen den Korpus, Kennzahlen
+   festschreiben.
 8. Integration in `InputActivity` und `GalleryActivity` samt Fotoablage,
-   pending scan und Fehlerfällen.
+   pending scan, Fehlerfällen und Debug-Bildschirm.
 
 ## Offene Risiken
 

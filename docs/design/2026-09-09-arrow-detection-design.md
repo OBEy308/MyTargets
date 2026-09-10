@@ -529,22 +529,24 @@ vergleichbar sind — alles andere hieße, einen übersehenen Pfeil als falschen
 Ring zu zählen, was eine Lüge wäre. Der Nenner kann dadurch sehr klein werden:
 Gemessen am jetzigen Korpus (92 gelistete Treffer im Umfang, Stand 2026-09-10)
 liegt die Ringtreue bei 100 %, während die Erkennungsrate bei 1,1 % liegt — ein
-Erkenner, der einen von zweiundneunzig Pfeilen gefunden und richtig geringt hat. **Die Ringtreue ist ohne ihren Nenner
-und ohne die Erkennungsrate daneben bedeutungslos und darf nie ohne beide
-zitiert oder abgebildet werden.**
+Erkenner, der einen von zweiundneunzig Pfeilen gefunden und richtig geringt
+hat. **Die Ringtreue ist ohne ihren Nenner und ohne die Erkennungsrate daneben
+bedeutungslos und darf nie ohne beide zitiert oder abgebildet werden.**
 
 Dasselbe gilt für den Positionsfehler, aus einem zweiten Grund: Die Zuordnung
-nimmt je Erkennung den nächsten gelisteten Treffer innerhalb des Budgets. Wird
-eine Erkennung um eine Strecke in der Größenordnung des Pfeilabstands
-verschoben, kann sie im Budget des *Nachbarn* landen und gilt als zugeordnet —
-mit kleinem Fehler zum falschen Pfeil. Gemessen am Korpus (2026-09-10): Ein um 0,20 Radien
+sortiert alle Paare aus Erkennung und gelistetem Treffer, die ins Budget
+passen, nach Abstand und vergibt sie gierig, das nächste Paar zuerst. Wird eine
+Erkennung um eine Strecke in der Größenordnung des Pfeilabstands verschoben,
+kann sie im Budget des *Nachbarn* landen und wird ihm zugeordnet, sofern kein
+näheres Paar einen der beiden schon belegt hat — mit kleinem Fehler zum
+falschen Pfeil. Gemessen am Korpus (2026-09-10): Ein um 0,20 Radien
 verschobener Erkenner meldet über sechs zugeordnete Treffer einen Median von
 0,054, und alle sechs sind solche Fehlzuordnungen; die 86 auf Distanz
 verworfenen Erkennungen mit ihrem Median von 0,195 zeigen den wahren Versatz.
 Ein Positionsfehler ist deshalb nur zusammen mit der Erkennungsrate und der
 Zeile `detectionsRejectedOnDistance` zu lesen. Plan 3 begegnet derselben
-Eigenschaft der Nächster-Nachbar-Zuordnung wieder, sobald Pfeilabstand und
-Versatz in dieselbe Größenordnung geraten.
+Eigenschaft der gierigen Zuordnung nach Abstand wieder, sobald Pfeilabstand
+und Versatz in dieselbe Größenordnung geraten.
 
 Der Positionsfehler ist in Spot-Radien angegeben, und ein Spot-Radius ist auf
 jeder Auflage eine andere Zahl Millimeter: 61 cm auf der 122er-Vollauflage,

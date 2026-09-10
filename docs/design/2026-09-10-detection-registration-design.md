@@ -201,7 +201,13 @@ Radien skalieren nicht.
 3. **Gelbe Scheiben.** Dichtespitzen der Gelbklasse auf mehreren Maßstäben
    (`boxFilter` mit Fenstern 6 bis 160 px · `f`), nur wo Rot in der Nähe ist.
    Jede Kandidatin wird über 72 Strahlen am Übergang Gelb→Rot vermessen und
-   erhält daraus Zentrum und Radius. **Dann wird dedupliziert:** `register.py`
+   erhält daraus Zentrum und Radius: das Mittel der Übergangspunkte und ihren
+   Median-Abstand. Verlässt ein Strahl das Bild noch auf Gelb, gilt die Scheibe
+   als vom Bildrand angeschnitten; die Übergangspunkte liegen dann nur auf dem
+   sichtbaren Bogen, und ihr Mittel rückt vom Rand weg. Zentrum und Radius
+   kommen in diesem Fall aus dem Kreis, der am besten durch die
+   Übergangspunkte bis zum doppelten Median-Abstand passt, dem Ende des
+   roten Rings. **Dann wird dedupliziert:** `register.py`
    unterdrückt Spitzen nur innerhalb eines Maßstabs, dieselbe Scheibe steht
    deshalb für mehrere Fenster in der Liste. Zwei vermessene Kandidatinnen sind
    dieselbe Scheibe, wenn ihr Zentrumsabstand kleiner ist als der kleinere der

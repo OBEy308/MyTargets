@@ -305,9 +305,10 @@ class MetricsReportTest {
     @Test
     fun forgivenEntriesAreCalledOutSoTheFalsePositiveRateIsReadable() {
         // A forgiven entry (f.jpg) sits alongside a strict one (s.jpg) with a
-        // genuine fabrication. The forgiven entry's listed hit must not sit
-        // in the false positive rate's denominator -- only s.jpg's two listed
-        // hits do -- so the rate here is 1 / 2, not 1 / 3.
+        // genuine fabrication. Under the bounded rule every annotated,
+        // in-scope entry is judged, so f.jpg's one listed hit DOES sit in the
+        // false positive rate's denominator alongside s.jpg's two -- the
+        // rate here is 1 / 3, not 1 / 2.
         val forgiven = CorpusEntry(
             imageName = "f.jpg", image = null, camera = null, capture = null,
             target = null, shotsPerEnd = 6,
@@ -349,7 +350,7 @@ class MetricsReportTest {
             "1 entry declare unresolved arrows, so surplus detections there " +
                 "are not counted as false positives."
         )
-        assertThat(report).contains("False positives | 50.0 % | of 2 listed hits")
+        assertThat(report).contains("False positives | 33.3 % | of 3 listed hits")
     }
 
     @Test
@@ -414,5 +415,126 @@ class MetricsReportTest {
         )
 
         assertThat(report).doesNotContain("missed only on distance")
+    }
+
+    @Test
+    fun theReportNamesHitsExcludedForSittingNearARingBoundary() {
+        val e = CorpusEntry(
+            imageName = "boundary.jpg", image = null, camera = null, capture = null,
+            target = null, shotsPerEnd = 1,
+            shots = listOf(
+                TruthShot(scoringRing = 5, position = SpotPosition(0, 0.0, 0.0), nearRingBoundary = true)
+            ),
+            unresolvedArrows = 0, registration = null
+        )
+        val report = MetricsReport.render(
+            listOf(outcome(e, listOf(found(5, 0.0, 0.0)))),
+            title = "Boundary"
+        )
+
+        assertThat(report).contains("ring boundary")
+        assertThat(report).contains("1 hit")
+    }
+
+    @Test
+    fun theReportOmitsTheRingBoundaryLineWhenThereIsNothingToReport() {
+        val report = MetricsReport.render(
+            listOf(outcome(entry("p.jpg", shots = arrayOf(truth(9, 0.0, 0.0))), listOf(found(9, 0.0, 0.0)))),
+            title = "Perfect"
+        )
+
+        assertThat(report).doesNotContain("ring boundary")
+    }
+
+    @Test
+    fun theReportNamesPositionsExcludedForBeingUncertain() {
+        val e = CorpusEntry(
+            imageName = "uncertain.jpg", image = null, camera = null, capture = null,
+            target = null, shotsPerEnd = 1,
+            shots = listOf(
+                TruthShot(scoringRing = 2, position = SpotPosition(0, 0.0, 0.0), uncertain = true)
+            ),
+            unresolvedArrows = 0, registration = null
+        )
+        val report = MetricsReport.render(
+            listOf(outcome(e, listOf(found(2, 0.0, 0.0)))),
+            title = "Uncertain"
+        )
+
+        assertThat(report).contains("uncertain")
+        assertThat(report).contains("1 position")
+    }
+
+    @Test
+    fun theReportOmitsTheUncertainLineWhenThereIsNothingToReport() {
+        val report = MetricsReport.render(
+            listOf(outcome(entry("p.jpg", shots = arrayOf(truth(9, 0.0, 0.0))), listOf(found(9, 0.0, 0.0)))),
+            title = "Perfect"
+        )
+
+        assertThat(report).doesNotContain("uncertain")
+    }
+
+    @Test
+    fun theReportNamesOutOfScopePhotographsAndWhy() {
+        // Change 6: an out-of-scope photograph stays in the corpus but must
+        // never move a hit metric silently -- the report has to say which
+        // photographs were left out and why, not just quietly compute a
+        // smaller corpus.
+        val inScope = entry("in.jpg", shots = arrayOf(truth(9, 0.0, 0.0)))
+        val outOfScope = CorpusEntry(
+            imageName = "out.jpg", image = null, camera = null, capture = null,
+            target = null, shotsPerEnd = 3,
+            shots = listOf(truth(5, 0.0, 0.0), truth(6, 0.3, 0.0)),
+            unresolvedArrows = 0, registration = null,
+            outOfScope = "Drei Auflagen nebeneinander."
+        )
+        val report = MetricsReport.render(
+            listOf(
+                outcome(inScope, listOf(found(9, 0.0, 0.0))),
+                outcome(outOfScope, listOf(found(9, 0.0, 0.0), found(9, 0.3, 0.0)))
+            ),
+            title = "OutOfScope"
+        )
+
+        assertThat(report).contains("out.jpg")
+        assertThat(report).contains("Drei Auflagen nebeneinander.")
+    }
+
+    @Test
+    fun theWorstEntriesTableExcludesOutOfScopePhotographs() {
+        // Metrics.over reports zero for everything about an out-of-scope
+        // entry -- if it were not filtered out before the sort, it would
+        // read as a flawless zero-arrow entry and could even displace a
+        // genuinely badly-measured one from the five-row cap.
+        val outOfScope = CorpusEntry(
+            imageName = "aaa-out.jpg", image = null, camera = null, capture = null,
+            target = null, shotsPerEnd = 3,
+            shots = listOf(truth(5, 0.0, 0.0), truth(6, 0.3, 0.0)),
+            unresolvedArrows = 0, registration = null,
+            outOfScope = "not covered by v1"
+        )
+        val bad = entry(
+            "bad.jpg",
+            shots = arrayOf(truth(9, 0.0, 0.0), truth(8, 0.1, 0.0), truth(7, 0.2, 0.0))
+        )
+        val report = MetricsReport.render(
+            listOf(
+                outcome(outOfScope, listOf(found(9, 0.0, 0.0), found(9, 0.3, 0.0))),
+                outcome(bad, emptyList())
+            ),
+            title = "Worst"
+        )
+
+        assertThat(report).contains("| bad.jpg | 3 | 0 | 0 | 0 |")
+        assertThat(report).doesNotContain("aaa-out.jpg |")
+    }
+
+    @Test
+    fun theReportOmitsTheOutOfScopeSectionWhenNothingIsOutOfScope() {
+        val e = entry("p.jpg", shots = arrayOf(truth(9, 0.0, 0.0)))
+        val report = MetricsReport.render(listOf(outcome(e, listOf(found(9, 0.0, 0.0)))), title = "Perfect")
+
+        assertThat(report).doesNotContain("Out of scope")
     }
 }

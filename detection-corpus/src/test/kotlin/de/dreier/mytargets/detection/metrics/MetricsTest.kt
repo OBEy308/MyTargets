@@ -299,7 +299,9 @@ class MetricsTest {
     fun unresolvedArrowsForgiveUnmatchedDetections() {
         // Six arrows are in the photograph, four could be annotated. A detector
         // finding all six must not be charged two inventions for the two the
-        // annotator could not place.
+        // annotator could not place: surplus (2) equals unresolvedArrows (2),
+        // so the bounded rule forgives all of it, same as the literal rule
+        // would have.
         val e = entryWithUnresolved(unresolved = 2)
         val detected = listOf(
             found(0, 0.0, 0.0), found(2, 0.3, 0.0),
@@ -310,12 +312,12 @@ class MetricsTest {
 
         assertThat(m.matchedShots).isEqualTo(4)
         assertThat(m.falsePositives).isEqualTo(0)
-        // The only entry here is forgiven, so falsePositiveDenominator is
-        // zero -- there is nothing left in the corpus that could ever be
-        // charged a false positive -- and the rate must read as unmeasured,
-        // not as a real zero.
-        assertThat(m.falsePositiveDenominator).isEqualTo(0)
-        assertThat(m.falsePositiveRate).isNull()
+        // Under the bounded rule every annotated, in-scope entry is judged,
+        // forgiven or not -- this entry's four listed hits sit in the
+        // denominator, giving a real, measured rate of zero rather than an
+        // unmeasured null.
+        assertThat(m.falsePositiveDenominator).isEqualTo(4)
+        assertThat(m.falsePositiveRate!!).isWithin(1e-9).of(0.0)
         assertThat(m.forgivenEntries).isEqualTo(1)
     }
 
@@ -335,12 +337,13 @@ class MetricsTest {
     }
 
     @Test
-    fun unresolvedArrowsForgiveEveryUnmatchedDetectionNotJustAsManyAsAreUnresolved() {
-        // This is the case that actually tells the literal README rule apart
-        // from the tighter "forgive only min(surplus, unresolvedArrows)"
-        // reading: one unresolved arrow but THREE surplus detections. The
-        // literal rule forgives all three; the tighter rule would still
-        // charge two of them as false positives. The other two tests in this
+    fun forgivenessIsBoundedByUnresolvedArrowsNotUnlimited() {
+        // This is the case that actually tells the bounded rule apart from
+        // the literal, unbounded README reading: one unresolved arrow but
+        // THREE surplus detections. The literal rule forgives all three,
+        // charging zero false positives; the bounded rule forgives only one
+        // -- the one hidden arrow can explain one unexplained detection, not
+        // three -- and charges max(0, 3 - 1) = 2. The other two tests in this
         // file (unresolved = 2 with exactly 2 surplus detections) cannot
         // distinguish the two rules, because they happen to agree whenever
         // surplus <= unresolvedArrows.
@@ -353,20 +356,25 @@ class MetricsTest {
         val m = Metrics.over(listOf(outcome(e, detected)))
 
         assertThat(m.matchedShots).isEqualTo(4)
-        assertThat(m.falsePositives).isEqualTo(0)
+        assertThat(m.falsePositives).isEqualTo(2)
+        // Forgiveness still applied -- just not to the full surplus -- so the
+        // entry still counts as forgiven.
         assertThat(m.forgivenEntries).isEqualTo(1)
     }
 
     @Test
-    fun theFalsePositiveDenominatorExcludesForgivenEntries() {
-        // A forgiven entry's surplus detections can never become a false
-        // positive, so its listed hits must not sit in the rate's
-        // denominator either. A forgiven five-hit entry takes 50 fabricated
-        // detections at no cost; a strict one-hit entry takes one
-        // fabrication and is charged for it. Against the entries that were
-        // actually judged (the strict one, one listed hit) that is 100%; if
-        // the denominator reverted to expectedShots (5 + 1 = 6) it would
-        // read as 1/6 = 16.7% instead.
+    fun theFalsePositiveDenominatorIncludesEveryAnnotatedInScopeEntryEvenAForgivenOne() {
+        // Under the bounded rule every annotated, in-scope entry can
+        // contribute a false positive -- a forgiven entry's listed hits are
+        // no longer excluded from the denominator, because forgiveness is no
+        // longer all-or-nothing. A forgiven five-hit entry takes 50
+        // fabricated detections but its single unresolved arrow forgives only
+        // one of them, charging 49; a strict one-hit entry takes one
+        // fabrication and is charged for it. Against every listed hit that
+        // was actually judged (5 + 1 = 6) that is 50 / 6 -- if the forgiven
+        // entry's hits were still excluded from the denominator (the old
+        // rule) it would read as 1 / 1 = 100% instead, hiding the 49 charged
+        // false positives entirely.
         val forgiven = CorpusEntry(
             imageName = "forgiven.jpg", image = null, camera = null, capture = null,
             target = null, shotsPerEnd = 6,
@@ -382,28 +390,10 @@ class MetricsTest {
             listOf(outcome(forgiven, forgivenDetected), outcome(strict, strictDetected))
         )
 
-        assertThat(m.falsePositives).isEqualTo(1)
-        assertThat(m.falsePositiveDenominator).isEqualTo(1)
-        assertThat(m.falsePositiveRate!!).isWithin(1e-9).of(1.0)
-    }
-
-    @Test
-    fun falsePositiveRateIsNullWhenEveryEntryIsForgiven() {
-        // If every entry in the corpus is forgiven, the false positive
-        // denominator is zero -- not because nothing was found, but because
-        // nothing here could ever be charged. That must read as "not
-        // measured", never as a rate of zero.
-        val forgiven = CorpusEntry(
-            imageName = "forgiven.jpg", image = null, camera = null, capture = null,
-            target = null, shotsPerEnd = 6,
-            shots = listOf(truth(2, 0.0, 0.0)),
-            unresolvedArrows = 1, registration = null
-        )
-        val detected = listOf(found(2, 0.0, 0.0), found(2, 9.0, 0.0))
-        val m = Metrics.over(listOf(outcome(forgiven, detected)))
-
-        assertThat(m.falsePositiveDenominator).isEqualTo(0)
-        assertThat(m.falsePositiveRate).isNull()
+        assertThat(m.falsePositives).isEqualTo(50)
+        assertThat(m.falsePositiveDenominator).isEqualTo(6)
+        assertThat(m.falsePositiveRate!!).isWithin(1e-9).of(50.0 / 6.0)
+        assertThat(m.forgivenEntries).isEqualTo(1)
     }
 
     @Test
@@ -580,5 +570,160 @@ class MetricsTest {
         assertThat(byTag.keys).containsExactly("dark", "untagged")
         assertThat(byTag["dark"]!!.detectionRate!!).isWithin(1e-9).of(0.0)
         assertThat(byTag["untagged"]!!.detectionRate!!).isWithin(1e-9).of(1.0)
+    }
+
+    @Test
+    fun nearRingBoundaryHitsLeaveRingAccuracyEntirely() {
+        // Both shots match by position. The boundary shot (scoringRing 5) is
+        // matched by a detection that reports a DIFFERENT ring (9) -- wrong,
+        // if it were counted. The plain shot (scoringRing 7) is matched
+        // correctly. Including the boundary shot in ring accuracy would give
+        // 1/2 = 50%; excluding it entirely -- out of the numerator AND the
+        // denominator -- gives 1/1 = 100%. An implementation that counted it
+        // as a normal comparable pair would get a materially different,
+        // provably wrong number here, not just a differently-labelled one.
+        val e = CorpusEntry(
+            imageName = "boundary.jpg", image = null, camera = null, capture = null,
+            target = null, shotsPerEnd = 2,
+            shots = listOf(
+                TruthShot(scoringRing = 5, position = SpotPosition(0, 0.0, 0.0), nearRingBoundary = true),
+                TruthShot(scoringRing = 7, position = SpotPosition(0, 0.3, 0.0))
+            ),
+            unresolvedArrows = 0, registration = null
+        )
+        val detected = listOf(found(9, 0.0, 0.0), found(7, 0.3, 0.0))
+        val m = Metrics.over(listOf(outcome(e, detected)))
+
+        assertThat(m.matchedShots).isEqualTo(2)
+        assertThat(m.boundaryShots).isEqualTo(1)
+        assertThat(m.scoreComparableShots).isEqualTo(1)
+        assertThat(m.scoreAccuracy!!).isWithin(1e-9).of(1.0)
+    }
+
+    @Test
+    fun aNearRingBoundaryHitStillCountsForDetectionRate() {
+        // Leaving ring accuracy is not the same as leaving detection: the
+        // pair was still found, so it still counts as matched.
+        val e = CorpusEntry(
+            imageName = "boundary2.jpg", image = null, camera = null, capture = null,
+            target = null, shotsPerEnd = 1,
+            shots = listOf(
+                TruthShot(scoringRing = 5, position = SpotPosition(0, 0.0, 0.0), nearRingBoundary = true)
+            ),
+            unresolvedArrows = 0, registration = null
+        )
+        val m = Metrics.over(listOf(outcome(e, listOf(found(5, 0.0, 0.0)))))
+
+        assertThat(m.detectionRate!!).isWithin(1e-9).of(1.0)
+        assertThat(m.boundaryShots).isEqualTo(1)
+        assertThat(m.scoreComparableShots).isEqualTo(0)
+    }
+
+    @Test
+    fun uncertainHitsAreExcludedFromThePositionErrorButStillCountAsMatched() {
+        // Two matched, positioned pairs: the uncertain one at distance 0.01,
+        // the plain one at 0.04. Excluding the uncertain one leaves
+        // positionErrors = [0.04] -- median 0.04. Including it (the wrong
+        // behaviour) would give [0.01, 0.04] -- median 0.025. The two answers
+        // differ, so this actually discriminates the rule rather than
+        // merely restating it.
+        val e = CorpusEntry(
+            imageName = "uncertain.jpg", image = null, camera = null, capture = null,
+            target = null, shotsPerEnd = 2,
+            shots = listOf(
+                TruthShot(scoringRing = 2, position = SpotPosition(0, 0.0, 0.0), uncertain = true),
+                TruthShot(scoringRing = 3, position = SpotPosition(0, 0.5, 0.0))
+            ),
+            unresolvedArrows = 0, registration = null
+        )
+        val detected = listOf(found(2, 0.01, 0.0), found(3, 0.54, 0.0))
+        val m = Metrics.over(listOf(outcome(e, detected)))
+
+        assertThat(m.matchedShots).isEqualTo(2)
+        assertThat(m.detectionRate!!).isWithin(1e-9).of(1.0)
+        assertThat(m.uncertainPositionsExcluded).isEqualTo(1)
+        assertThat(m.positionErrors).hasSize(1)
+        assertThat(m.positionErrors.single()).isWithin(1e-9).of(0.04)
+        assertThat(m.medianPositionError!!).isWithin(1e-9).of(0.04)
+    }
+
+    @Test
+    fun anUncertainHitWithNoComparableTruthStillCountsForScoreAccuracyNormally() {
+        // uncertain only concerns position; it must not silently also
+        // exclude the pair from ring accuracy.
+        val e = CorpusEntry(
+            imageName = "uncertain2.jpg", image = null, camera = null, capture = null,
+            target = null, shotsPerEnd = 1,
+            shots = listOf(
+                TruthShot(scoringRing = 2, position = SpotPosition(0, 0.0, 0.0), uncertain = true)
+            ),
+            unresolvedArrows = 0, registration = null
+        )
+        val m = Metrics.over(listOf(outcome(e, listOf(found(2, 0.01, 0.0)))))
+
+        assertThat(m.scoreComparableShots).isEqualTo(1)
+        assertThat(m.scoreAccuracy!!).isWithin(1e-9).of(1.0)
+    }
+
+    @Test
+    fun outOfScopeEntryContributesToNoMetric() {
+        // The out-of-scope entry alone, if counted, would contribute 2
+        // expected shots, up to 2 matches (its positions align with the
+        // detections), a surplus detection, and 0 correct scores (every
+        // detected ring is wrong) -- enough to move expectedShots,
+        // matchedShots, falsePositives, scoreComparableShots and
+        // annotatedEntries all at once, not just one number quietly.
+        val inScope = entry("in.jpg", shots = arrayOf(truth(2, 0.0, 0.0)))
+        val inScopeDetected = listOf(found(2, 0.0, 0.0))
+
+        val outOfScope = CorpusEntry(
+            imageName = "out.jpg", image = null, camera = null, capture = null,
+            target = null, shotsPerEnd = 3,
+            shots = listOf(truth(5, 0.0, 0.0), truth(6, 0.3, 0.0)),
+            unresolvedArrows = 0, registration = null,
+            outOfScope = "Drei Auflagen nebeneinander."
+        )
+        val outOfScopeDetected = listOf(found(9, 0.0, 0.0), found(9, 0.3, 0.0), found(9, 5.0, 0.0))
+
+        val withOutOfScope = Metrics.over(
+            listOf(outcome(inScope, inScopeDetected), outcome(outOfScope, outOfScopeDetected))
+        )
+        val withoutOutOfScope = Metrics.over(listOf(outcome(inScope, inScopeDetected)))
+
+        assertThat(withOutOfScope.expectedShots).isEqualTo(withoutOutOfScope.expectedShots)
+        assertThat(withOutOfScope.matchedShots).isEqualTo(withoutOutOfScope.matchedShots)
+        assertThat(withOutOfScope.falsePositives).isEqualTo(withoutOutOfScope.falsePositives)
+        assertThat(withOutOfScope.falsePositiveDenominator)
+            .isEqualTo(withoutOutOfScope.falsePositiveDenominator)
+        assertThat(withOutOfScope.scoreComparableShots).isEqualTo(withoutOutOfScope.scoreComparableShots)
+        assertThat(withOutOfScope.correctScores).isEqualTo(withoutOutOfScope.correctScores)
+        assertThat(withOutOfScope.annotatedEntries).isEqualTo(withoutOutOfScope.annotatedEntries)
+        assertThat(withOutOfScope.positionErrors).isEqualTo(withoutOutOfScope.positionErrors)
+
+        // Pinned absolute values: if the out-of-scope entry leaked through,
+        // expectedShots would read 3 (1 + 2) rather than 1, and
+        // annotatedEntries would read 2 rather than 1.
+        assertThat(withOutOfScope.expectedShots).isEqualTo(1)
+        assertThat(withOutOfScope.annotatedEntries).isEqualTo(1)
+    }
+
+    @Test
+    fun falsePositiveRateIsNullWhenTheOnlyAnnotatedEntryIsOutOfScope() {
+        // A corpus with exactly one annotated entry, and it is out of scope:
+        // nothing here can ever be judged, which must read as "not
+        // measured", not as a rate of zero.
+        val outOfScope = CorpusEntry(
+            imageName = "out.jpg", image = null, camera = null, capture = null,
+            target = null, shotsPerEnd = 1,
+            shots = listOf(truth(2, 0.0, 0.0)),
+            unresolvedArrows = 0, registration = null,
+            outOfScope = "not covered by v1"
+        )
+        val m = Metrics.over(listOf(outcome(outOfScope, listOf(found(9, 9.0, 9.0)))))
+
+        assertThat(m.falsePositiveDenominator).isEqualTo(0)
+        assertThat(m.falsePositiveRate).isNull()
+        assertThat(m.expectedShots).isEqualTo(0)
+        assertThat(m.annotatedEntries).isEqualTo(0)
     }
 }

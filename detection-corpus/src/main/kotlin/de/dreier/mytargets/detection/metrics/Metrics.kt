@@ -54,12 +54,21 @@ class Metrics(
     val matchedShots: Int,
     val falsePositives: Int,
     /**
-     * The expected shots of the entries that were NOT forgiven -- the only
-     * ones whose surplus detections could ever become a false positive. A
-     * forgiven entry's listed hits are excluded here even though they are
-     * counted in [expectedShots], because they can never move
-     * [falsePositives]; leaving them in would dilute [falsePositiveRate]
-     * with a denominator that the numerator can never grow into.
+     * The expected shots of the annotated, in-scope entries that were
+     * actually judged for a false positive -- which, since the bounded
+     * forgiveness rule lets every such entry contribute one (see
+     * [falsePositives]), is every annotated entry that Change 6 does not
+     * pull out of scope entirely. An out-of-scope entry's listed hits are
+     * excluded here exactly as they are from [expectedShots], because
+     * [CorpusEntry.outOfScope] takes it out of every hit metric, this rate
+     * included.
+     *
+     * This used to also exclude wholly-forgiven entries, back when
+     * `unresolvedArrows > 0` forgave a surplus without bound and such an
+     * entry's numerator could never move. Under the bounded rule a forgiven
+     * entry can still be charged for the surplus beyond what its unresolved
+     * arrows explain, so it is judged like any other and belongs in this
+     * denominator too.
      */
     val falsePositiveDenominator: Int,
     val correctScores: Int,
@@ -75,7 +84,33 @@ class Metrics(
     val rejectedDistances: List<Double>,
     val entriesWithPositions: Int,
     val annotatedEntries: Int,
-    val forgivenEntries: Int
+    /**
+     * Entries where [CorpusEntry.unresolvedArrows] forgave at least one
+     * surplus detection -- full or partial. An entry whose surplus never
+     * exceeded its unresolved arrows is forgiven completely; one whose
+     * surplus went beyond that is forgiven only partially and still counts
+     * here, because forgiveness applied to it too, just not to all of it.
+     */
+    val forgivenEntries: Int,
+    /**
+     * Matched pairs whose truth shot is [TruthShot.nearRingBoundary]: the
+     * ring value there depends on the arrow's diameter, which is not
+     * something a detector can be faulted for disagreeing with. Such a pair
+     * leaves ring accuracy entirely -- out of [scoreComparableShots] and out
+     * of [correctScores] -- and is counted only here, so a corpus where many
+     * hits sit on a ring boundary is visible rather than silently folded into
+     * a rate it cannot fairly move.
+     */
+    val boundaryShots: Int,
+    /**
+     * Matched, positioned pairs whose truth shot is [TruthShot.uncertain]:
+     * the annotator estimated the position because the shaft was occluded at
+     * the entry point, so any error there is the annotation's, not the
+     * detector's. Such a pair still counts as matched and still counts for
+     * [detectionRate]; only its distance is left out of [positionErrors],
+     * and therefore out of [medianPositionError] and [p95PositionError].
+     */
+    val uncertainPositionsExcluded: Int
 ) {
 
     /** Null when nothing was measured, never zero -- a zero reads as a result. */
@@ -84,13 +119,13 @@ class Metrics(
 
     /**
      * Invented arrows per expected arrow. Can exceed one. Null when
-     * [falsePositiveDenominator] is zero.
+     * [falsePositiveDenominator] is zero -- which, under the bounded
+     * forgiveness rule, happens only when there is no annotated, in-scope
+     * entry at all, not merely because every entry happened to be forgiven.
      *
-     * Measured against [falsePositiveDenominator], not [expectedShots]: a
-     * forgiven entry's surplus detections can never become a false positive,
-     * so its listed hits must not sit in this rate's denominator either --
-     * doing so would only dilute it with shots that can never move the
-     * numerator.
+     * Measured against [falsePositiveDenominator] rather than [expectedShots]
+     * so this rate and [falsePositiveDenominator] always describe the same
+     * entries; see [falsePositiveDenominator] for which those are.
      */
     val falsePositiveRate: Double?
         get() = ratio(falsePositives, falsePositiveDenominator)
@@ -154,43 +189,48 @@ class Metrics(
             var withPositions = 0
             var annotated = 0
             var forgiven = 0
+            var boundaryShots = 0
+            var uncertainExcluded = 0
             val errors = mutableListOf<Double>()
             val rejectedOnDistance = mutableListOf<Double>()
 
             for (outcome in outcomes) {
                 val entry = outcome.entry
-                if (!entry.isAnnotated) {
+                if (!entry.isAnnotated || entry.outOfScope != null) {
                     // A registration only entry has no hits to be right or
-                    // wrong about. Counting it would dilute every rate.
+                    // wrong about, and an out-of-scope entry belongs in the
+                    // corpus but not in the metrics (Change 6). Counting
+                    // either would dilute every rate.
                     continue
                 }
                 annotated++
                 expected += entry.expectedShots
                 matched += outcome.match.pairs.size
 
-                if (entry.unresolvedArrows > 0) {
-                    // The corpus README, verbatim: a detection matching no
-                    // listed hit counts as a false positive only when
-                    // unresolvedArrows is zero. The arrows are actually in
-                    // the photograph; finding them is not an invention. This
-                    // is the literal, generous reading -- a single
-                    // unresolved arrow forgives any number of surplus
-                    // detections for that entry, not just as many as are
-                    // unresolved.
-                    //
-                    // The tighter alternative -- forgive only min(surplus,
-                    // unresolvedArrows) detections and charge the rest as
-                    // false positives -- was considered and rejected here.
-                    // It is not what the README states, and the README is
-                    // the authority for its own corpus format; inventing a
-                    // stricter rule than the format documents would make
-                    // this code second-guess the corpus rather than measure
-                    // against it.
+                // Bounded forgiveness: unresolvedArrows explains that many
+                // arrows are genuinely in the photograph with an
+                // indeterminate entry point, so that many surplus detections
+                // are not inventions. On
+                // 2026-08-15_bedeckt_frontal_02.jpg six arrows are in the
+                // face and the sixth shaft disappears behind another -- one
+                // hidden arrow, which justifies one unexplained detection,
+                // not fifty. Any surplus beyond unresolvedArrows is still
+                // charged as a false positive.
+                //
+                // The literal, unbounded alternative -- treat
+                // `unresolvedArrows > 0` as blanket amnesty for every
+                // surplus detection on the entry, however many -- was
+                // considered and rejected here. It reads the README's wording
+                // literally, but it lets one hidden arrow excuse an
+                // unlimited number of fabricated detections, which is not
+                // what the field means in practice.
+                val surplus = outcome.match.unmatchedDetected.size
+                val entryForgiven = minOf(surplus, entry.unresolvedArrows)
+                if (entryForgiven > 0) {
                     forgiven++
-                } else {
-                    falsePositives += outcome.match.unmatchedDetected.size
-                    falsePositiveDenominator += entry.expectedShots
                 }
+                falsePositives += surplus - entryForgiven
+                falsePositiveDenominator += entry.expectedShots
 
                 // Per-shot, matching ShotMatching's own decision: an entry
                 // counts here as soon as ANY of its shots carries a position,
@@ -205,13 +245,32 @@ class Metrics(
                 for (pair in outcome.match.pairs) {
                     val truthShot = entry.shots[pair.truthIndex]
                     val detectedShot = outcome.detected[pair.detectedIndex]
-                    if (isScoreComparable(truthShot, detectedShot)) {
+                    if (truthShot.nearRingBoundary) {
+                        // The ring value itself depends on the arrow's
+                        // diameter here; whether the detector agrees says
+                        // nothing about it, so this pair leaves ring
+                        // accuracy's numerator AND denominator entirely.
+                        boundaryShots++
+                    } else if (isScoreComparable(truthShot, detectedShot)) {
                         comparable++
                         if (ShotMatching.scoresAgree(truthShot, detectedShot)) {
                             correct++
                         }
                     }
-                    pair.distance?.let { errors.add(it) }
+                    val distance = pair.distance
+                    if (distance != null) {
+                        if (truthShot.uncertain) {
+                            // The annotator estimated this position because
+                            // the shaft was occluded at the entry point, so
+                            // any error here is the annotation's, not the
+                            // detector's. The pair still counts as matched
+                            // above; only its distance stays out of the
+                            // position error.
+                            uncertainExcluded++
+                        } else {
+                            errors.add(distance)
+                        }
+                    }
                 }
                 rejectedOnDistance.addAll(outcome.match.detectionsRejectedOnDistance)
             }
@@ -227,7 +286,9 @@ class Metrics(
                 rejectedDistances = rejectedOnDistance,
                 entriesWithPositions = withPositions,
                 annotatedEntries = annotated,
-                forgivenEntries = forgiven
+                forgivenEntries = forgiven,
+                boundaryShots = boundaryShots,
+                uncertainPositionsExcluded = uncertainExcluded
             )
         }
 

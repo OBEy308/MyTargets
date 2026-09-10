@@ -84,6 +84,40 @@ object MetricsReport {
             )
         }
 
+        if (overall.boundaryShots > 0) {
+            sb.appendLine()
+            sb.appendLine(
+                "${overall.boundaryShots} " +
+                    "${plural(overall.boundaryShots, "hit", "hits")} " +
+                    "sit near a ring boundary and are excluded from ring accuracy."
+            )
+        }
+
+        if (overall.uncertainPositionsExcluded > 0) {
+            sb.appendLine()
+            sb.appendLine(
+                "${overall.uncertainPositionsExcluded} " +
+                    "${plural(overall.uncertainPositionsExcluded, "position", "positions")} " +
+                    "excluded from the position error because the annotation was uncertain."
+            )
+        }
+
+        val outOfScope = outcomes.filter { it.entry.outOfScope != null }
+        if (outOfScope.isNotEmpty()) {
+            sb.appendLine()
+            sb.appendLine("## Out of scope")
+            sb.appendLine()
+            sb.appendLine(
+                "${outOfScope.size} " +
+                    "${plural(outOfScope.size, "photograph", "photographs")} " +
+                    "stay in the corpus but count for no metric:"
+            )
+            sb.appendLine()
+            for (outcome in outOfScope.sortedBy { it.entry.imageName }) {
+                sb.appendLine("- ${outcome.entry.imageName}: ${outcome.entry.outOfScope}")
+            }
+        }
+
         val byTag = Metrics.byTag(outcomes)
         if (byTag.isNotEmpty()) {
             sb.appendLine()
@@ -107,7 +141,15 @@ object MetricsReport {
         // with entries that measured nothing and pushing out the ones that
         // measured badly, which is the opposite of this table's purpose.
         // Sort entries that measured nothing last instead.
+        //
+        // Out-of-scope entries are excluded before that sort entirely: they
+        // are already named, and explained, in the "Out of scope" section
+        // above, and Metrics.over reports zero for every one of their
+        // numbers -- listing one here would read as a flawless zero-arrow
+        // entry rather than as what it is, a photograph nothing was measured
+        // against on purpose.
         val worst = outcomes
+            .filter { it.entry.outOfScope == null }
             .sortedWith(
                 compareBy(
                     { scoreAccuracyOf(it) == null },

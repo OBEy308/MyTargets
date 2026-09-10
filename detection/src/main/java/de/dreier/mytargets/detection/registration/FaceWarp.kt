@@ -66,13 +66,13 @@ object FaceWarp {
             0.0, 0.0, 1.0
         )
         val map = OpenCvMats.of(warpedFromTarget * imageToTarget)
-        val warped = Mat()
         try {
-            Imgproc.warpPerspective(
-                original, warped, map, Size(edge.toDouble(), edge.toDouble()),
-                Imgproc.INTER_LINEAR, Core.BORDER_CONSTANT, Scalar(0.0, 0.0, 0.0)
-            )
-            return warped
+            return Mat().releaseIfThrows { warped ->
+                Imgproc.warpPerspective(
+                    original, warped, map, Size(edge.toDouble(), edge.toDouble()),
+                    Imgproc.INTER_LINEAR, Core.BORDER_CONSTANT, Scalar(0.0, 0.0, 0.0)
+                )
+            }
         } finally {
             map.release()
         }

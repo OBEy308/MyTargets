@@ -21,9 +21,23 @@ import org.opencv.core.Mat
 
 object OpenCvMats {
     /** A new 3x3 CV_64F matrix holding [m]; the caller releases it. */
-    fun of(m: Mat3): Mat {
-        val mat = Mat(3, 3, CvType.CV_64F)
-        mat.put(0, 0, *DoubleArray(9) { m[it / 3, it % 3] })
-        return mat
+    fun of(m: Mat3): Mat =
+        Mat(3, 3, CvType.CV_64F).releaseIfThrows { mat ->
+            mat.put(0, 0, *DoubleArray(9) { m[it / 3, it % 3] })
+        }
+}
+
+/**
+ * Hands this new Mat to [fill] and returns it. If [fill] throws, the Mat is
+ * released and the exception rethrown, so a function that returns a new Mat
+ * leaks nothing when it fails.
+ */
+internal inline fun <T : Mat> T.releaseIfThrows(fill: (T) -> Unit): T {
+    try {
+        fill(this)
+    } catch (e: Throwable) {
+        release()
+        throw e
     }
+    return this
 }

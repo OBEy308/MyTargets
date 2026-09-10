@@ -26,7 +26,8 @@ import kotlin.math.PI
 
 /**
  * The registrar's stage images (Haupt-Spec, Debug-Ansicht). Each call returns
- * a new Mat at the working size; the registrar releases it after the sink.
+ * a new Mat at the working size; the registrar releases it after the sink. A
+ * call that throws releases its Mat itself.
  */
 object DebugImages {
 
@@ -61,14 +62,12 @@ object DebugImages {
                 bytes[i + 2] = colour[2]
             }
         }
-        val mat = Mat(classes.height, classes.width, CvType.CV_8UC3)
-        mat.put(0, 0, bytes)
-        return mat
+        return Mat(classes.height, classes.width, CvType.CV_8UC3)
+            .releaseIfThrows { mat -> mat.put(0, 0, bytes) }
     }
 
     /** Every measured disc thin and grey, the counted ones thick and green. */
-    fun discs(small: Mat, search: DiscSearch): Mat {
-        val mat = small.clone()
+    fun discs(small: Mat, search: DiscSearch): Mat = small.clone().releaseIfThrows { mat ->
         for (disc in search.measured) {
             Imgproc.circle(mat, point(disc.centre), disc.radius.toInt(), GREY, 1)
         }
@@ -76,15 +75,13 @@ object DebugImages {
             Imgproc.circle(mat, point(disc.centre), disc.radius.toInt(), GREEN, 3)
             Imgproc.circle(mat, point(disc.centre), 3, GREEN, Imgproc.FILLED)
         }
-        return mat
     }
 
     /**
      * Boundary points green when the fit kept them, red when it did not; the
      * fitted conic yellow for an accepted ring, magenta for a rejected one.
      */
-    fun rings(small: Mat, attempts: List<RingAttempt>): Mat {
-        val mat = small.clone()
+    fun rings(small: Mat, attempts: List<RingAttempt>): Mat = small.clone().releaseIfThrows { mat ->
         for (attempt in attempts) {
             val kept = attempt.fit?.inliers?.toHashSet() ?: emptySet()
             for (p in attempt.points) {
@@ -106,7 +103,6 @@ object DebugImages {
                 polyline.release()
             }
         }
-        return mat
     }
 
     private fun point(v: Vec2) = Point(v.x, v.y)

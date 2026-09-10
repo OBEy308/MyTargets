@@ -75,9 +75,8 @@ class RegistrationCorpusRun {
     @Test
     fun registersTheCorpusAndWritesTheReport() {
         val entries = CorpusLoader.load(root).entries
-        val files = root.walkTopDown()
-            .filter { it.isFile && it.extension.lowercase() in IMAGE_EXTENSIONS }
-            .associateBy { it.name }
+        val names = entries.mapTo(HashSet()) { it.imageName }
+        val files = root.walkTopDown().filter { it.isFile && it.name in names }.groupBy { it.name }
         val imagesDir = File(reportDir, "registration")
         imagesDir.deleteRecursively()
         imagesDir.mkdirs()
@@ -85,9 +84,7 @@ class RegistrationCorpusRun {
         val rows = ArrayList<RegistrationRow>()
         val outcomes = HashMap<String, RegistrationOutcome>()
         for (entry in entries) {
-            val file = checkNotNull(files[entry.imageName]) {
-                "${entry.imageName}: no image file under $root"
-            }
+            val file = imageFileOf(entry.imageName, files[entry.imageName].orEmpty())
             val image = Imgcodecs.imread(file.absolutePath)
             try {
                 check(!image.empty()) { "${entry.imageName}: cannot be decoded" }
@@ -209,11 +206,23 @@ class RegistrationCorpusRun {
 
     private fun values(m: Mat3): List<Double> = List(9) { m[it / 3, it % 3] }
 
+    /**
+     * The one file under the root that an entry names. Matched by name alone,
+     * a second file of that name in another folder would be picked silently.
+     */
+    private fun imageFileOf(imageName: String, candidates: List<File>): File {
+        check(candidates.isNotEmpty()) { "$imageName: no image file under $root" }
+        check(candidates.size == 1) {
+            "$imageName: ${candidates.size} image files under $root: " +
+                candidates.map { it.path }.sorted().joinToString()
+        }
+        return candidates.single()
+    }
+
     private companion object {
         const val MULTIPLE_TARGETS = "a6_x99999_multiple_targets.jpg"
         const val WA6RING = "WA6Ring"
         const val WA6RING_IN_WAFULL_UNITS = 0.6
-        val IMAGE_EXTENSIONS = setOf("jpg", "jpeg", "png")
         val GREEN = Scalar(0.0, 200.0, 0.0)
         val MAGENTA = Scalar(255.0, 0.0, 255.0)
     }

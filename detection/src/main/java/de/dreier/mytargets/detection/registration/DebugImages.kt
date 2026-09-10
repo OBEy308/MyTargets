@@ -100,8 +100,11 @@ object DebugImages {
             }
             if (outline.size < 2) continue
             val polyline = MatOfPoint(*outline.toTypedArray())
-            Imgproc.polylines(mat, listOf(polyline), true, if (attempt.accepted) YELLOW else MAGENTA, 2)
-            polyline.release()
+            try {
+                Imgproc.polylines(mat, listOf(polyline), true, if (attempt.accepted) YELLOW else MAGENTA, 2)
+            } finally {
+                polyline.release()
+            }
         }
         return mat
     }

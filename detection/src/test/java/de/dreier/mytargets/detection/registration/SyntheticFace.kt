@@ -69,15 +69,17 @@ object SyntheticFace {
 
     /** The face seen through [targetToPhoto] on a [width] x [height] photograph. The caller releases it. */
     fun photograph(width: Int, height: Int, targetToPhoto: Mat3): Mat {
+        // Computed before any Mat exists, so a singular matrix leaves nothing to release.
+        val photoToTarget = requireNotNull(targetToPhoto.inverse()) { "targetToPhoto is singular" }
         val side = (2.2 * CANONICAL).toInt() + 1
-        val canvas = Mat(side, side, CvType.CV_8UC3, BACKGROUND)
         val middle = Point(1.1 * CANONICAL, 1.1 * CANONICAL)
         val canvasFromTarget = Mat3.of(
             CANONICAL, 0.0, 1.1 * CANONICAL,
             0.0, CANONICAL, 1.1 * CANONICAL,
             0.0, 0.0, 1.0
         )
-        val map = OpenCvMats.of(canvasFromTarget * targetToPhoto.inverse()!!)
+        val canvas = Mat(side, side, CvType.CV_8UC3, BACKGROUND)
+        val map = OpenCvMats.of(canvasFromTarget * photoToTarget)
         val photo = Mat()
         try {
             for ((r, colour) in RINGS) {

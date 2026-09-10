@@ -100,7 +100,7 @@ class RectificationTest {
     }
 
     @Test
-    fun returnsNullWhenTheConicsAreNotConcentricCircles() {
+    fun rejectsConicsThatAreNotConcentricCircles() {
         val notACircle = Conic.fit(
             (0 until 12).map { i ->
                 val a = 2.0 * PI * i / 12
@@ -108,9 +108,10 @@ class RectificationTest {
             }
         )!!
         val other = Conic.circle(Vec2(0.0, 0.0), 0.4).transformedBy(h)
-        assertThat(
-            Rectification.fromConcentricCircles(notACircle, 1.0, other, 0.4)
-        ).isNull()
+
+        assertThat(Rectification.attempt(notACircle, 1.0, other, 0.4))
+            .isInstanceOf(Rectification.Attempt.Rejected::class.java)
+        assertThat(Rectification.fromConcentricCircles(notACircle, 1.0, other, 0.4)).isNull()
     }
 
     @Test
@@ -154,7 +155,28 @@ class RectificationTest {
         // than short-circuiting in the pencil.
         val outer = Conic.circle(Vec2(0.0, 0.0), 1.0).transformedBy(h)
         val inner = Conic.circle(Vec2(0.0, 0.0), 0.4).transformedBy(h)
-        assertThat(Rectification.fromConcentricCircles(outer, 1.0, inner, 0.9)).isNull()
+
+        val attempt = Rectification.attempt(outer, 1.0, inner, 0.9)
+
+        assertThat(attempt).isInstanceOf(Rectification.Attempt.Rejected::class.java)
+        val rejected = attempt as Rectification.Attempt.Rejected
+        assertThat(rejected.reason).isEqualTo(Rectification.Reason.RATIO_MISMATCH)
+        assertThat(rejected.value!!).isWithin(1e-6).of(0.4)
+        assertThat(rejected.limit!!).isWithin(1e-12).of(0.9)
+        assertThat(rejected.describe()).isEqualTo("radius ratio 0.400, expected 0.900")
+    }
+
+    @Test
+    fun aSuccessfulAttemptCarriesTheResult() {
+        val outer = Conic.circle(Vec2(640.0, 480.0), 300.0)
+        val inner = Conic.circle(Vec2(640.0, 480.0), 120.0)
+
+        val attempt = Rectification.attempt(outer, 1.0, inner, 0.4)
+
+        assertThat(attempt).isInstanceOf(Rectification.Attempt.Rectified::class.java)
+        val result = (attempt as Rectification.Attempt.Rectified).result
+        val recovered = result.imageToTarget.mapPoint(Vec2(940.0, 480.0))!!
+        assertThat(recovered.distanceTo(Vec2(1.0, 0.0))).isLessThan(1e-6)
     }
 
     @Test

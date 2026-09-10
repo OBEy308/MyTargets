@@ -40,10 +40,19 @@ data class MatchedPair(
     val distance: Double?
 )
 
+/**
+ * @param detectionsRejectedOnDistance The distance from each detection left
+ *        unmatched to the nearest truth shot that also went unmatched, has a
+ *        position, and sits on the same face -- where such a truth shot
+ *        exists. This is not part of matching; it exists so the position
+ *        error is not silently bounded by the gate that produced [pairs]. In
+ *        detection order.
+ */
 class MatchResult(
     val pairs: List<MatchedPair>,
     val unmatchedTruth: List<Int>,
-    val unmatchedDetected: List<Int>
+    val unmatchedDetected: List<Int>,
+    val detectionsRejectedOnDistance: List<Double> = emptyList()
 )
 
 /**
@@ -66,9 +75,12 @@ class MatchResult(
 object ShotMatching {
 
     /**
-     * The tolerance used for a truth shot that states none of its own, in spot
-     * radii. The corpus records a tolerance per hit, so this only applies to
-     * entries that predate that.
+     * The detector's own position budget, in spot radii: how far a detection
+     * may sit from a hit's annotated position and still count as the same
+     * arrow, before accounting for how precisely the annotator could place
+     * that hit. The gate actually used adds [TruthShot.positionTolerance] to
+     * this (zero when the shot carries none) — the detector's budget plus
+     * whatever slack the annotation itself carries.
      */
     const val DEFAULT_POSITION_TOLERANCE = 0.05
 
@@ -76,10 +88,42 @@ object ShotMatching {
         entry: CorpusEntry,
         detected: List<DetectedShotRecord>,
         defaultPositionTolerance: Double = DEFAULT_POSITION_TOLERANCE
-    ): MatchResult = if (entry.hasPositions) {
-        matchByPosition(entry, detected, defaultPositionTolerance)
-    } else {
-        matchByScore(entry, detected)
+    ): MatchResult {
+        val result = if (entry.hasPositions) {
+            matchByPosition(entry, detected, defaultPositionTolerance)
+        } else {
+            matchByScore(entry, detected)
+        }
+
+        return MatchResult(
+            pairs = result.pairs,
+            unmatchedTruth = result.unmatchedTruth,
+            unmatchedDetected = result.unmatchedDetected,
+            detectionsRejectedOnDistance = rejectedOnDistance(
+                entry, detected, result.unmatchedTruth, result.unmatchedDetected
+            )
+        )
+    }
+
+    /**
+     * For every detection matching found no home for, the distance to the
+     * nearest truth shot that also found no home, carries a position, and
+     * sits on the same face — where one exists. Nothing here influences
+     * [pairs][MatchResult.pairs]; it exists purely so a position error metric
+     * built on matched pairs is not silently bounded by the matching gate no
+     * matter how inaccurate the detector actually is.
+     */
+    private fun rejectedOnDistance(
+        entry: CorpusEntry,
+        detected: List<DetectedShotRecord>,
+        unmatchedTruth: List<Int>,
+        unmatchedDetected: List<Int>
+    ): List<Double> {
+        val candidatePositions = unmatchedTruth.mapNotNull { entry.shots[it].position }
+        return unmatchedDetected.mapNotNull { detectedIndex ->
+            val position = detected[detectedIndex].position
+            candidatePositions.mapNotNull { position.distanceTo(it) }.minOrNull()
+        }
     }
 
     private fun matchByPosition(
@@ -92,7 +136,7 @@ object ShotMatching {
             // hasPositions guarantees this, so the elvis can never fire; kept
             // null safe rather than asserted.
             val truthPosition = truth.position ?: return@forEachIndexed
-            val tolerance = truth.positionTolerance ?: defaultPositionTolerance
+            val tolerance = defaultPositionTolerance + (truth.positionTolerance ?: 0.0)
             detected.forEachIndexed { detectedIndex, record ->
                 val distance = truthPosition.distanceTo(record.position)
                 if (distance != null && distance <= tolerance) {

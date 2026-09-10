@@ -74,6 +74,16 @@ object MetricsReport {
                 "of ${overall.positionErrors.size} placed hits |"
         )
 
+        if (overall.detectionsRejectedOnDistance > 0) {
+            sb.appendLine()
+            sb.appendLine(
+                "${overall.detectionsRejectedOnDistance} " +
+                    "${plural(overall.detectionsRejectedOnDistance, "detection", "detections")} " +
+                    "missed only on distance, median " +
+                    "${spotRadii(overall.medianRejectedDistance)}."
+            )
+        }
+
         val byTag = Metrics.byTag(outcomes)
         if (byTag.isNotEmpty()) {
             sb.appendLine()

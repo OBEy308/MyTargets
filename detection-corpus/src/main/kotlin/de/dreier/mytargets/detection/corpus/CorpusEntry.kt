@@ -80,10 +80,12 @@ data class SpotPosition(val faceIndex: Int, val x: Double, val y: Double) {
  * the inherited photographs, whose file names give printed values and no target
  * model. A shot needs at least one of the two.
  *
- * [positionTolerance] is how far a detection may sit from this hit and still be
- * the same arrow, in spot radii. It belongs to the shot rather than to the run:
- * the annotator records a larger value where shafts overlap and the entry point
- * had to be estimated.
+ * [positionTolerance] is how precisely the ANNOTATOR could place this hit, in
+ * spot radii -- 0.01 for a freely visible tip, larger where shafts overlap and
+ * the entry point had to be estimated. It is annotation uncertainty, not a
+ * detector's matching budget: when matching a detection against this hit, it
+ * is added to the detector's own budget rather than replacing it -- see
+ * `ShotMatching.DEFAULT_POSITION_TOLERANCE`.
  */
 data class TruthShot(
     val scoringRing: Int? = null,

@@ -393,4 +393,26 @@ class MetricsReportTest {
         // scoreAccuracy = 1/1 = 100.0 %.
         assertThat(report).contains("Ring accuracy | 100.0 % | of 1 comparable hits")
     }
+
+    @Test
+    fun theReportNamesDetectionsThatMissedOnlyOnDistance() {
+        val e = entry("a.jpg", shots = arrayOf(truth(9, 0.0, 0.0)))
+        val detected = listOf(found(9, 0.10, 0.0)) // 0.10 from truth, beyond the 0.05 gate
+        val report = MetricsReport.render(listOf(outcome(e, detected)), title = "Distance")
+
+        assertThat(report).contains("missed only on distance")
+        assertThat(report).contains("1 detection")
+        assertThat(report).contains("0.1000 spot radii")
+    }
+
+    @Test
+    fun theReportOmitsTheMissedOnDistanceLineWhenThereIsNothingToReport() {
+        val e = entry("p.jpg", shots = arrayOf(truth(9, 0.0, 0.0)))
+        val report = MetricsReport.render(
+            listOf(outcome(e, listOf(found(9, 0.0, 0.0)))),
+            title = "Perfect"
+        )
+
+        assertThat(report).doesNotContain("missed only on distance")
+    }
 }

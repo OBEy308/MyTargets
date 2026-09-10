@@ -76,7 +76,14 @@ class ShotMatchingTest {
         // exactly representable and Math.hypot(0.05, 0.0) returns exactly
         // 0.05, so this is a genuine boundary case, not one that only looks
         // like one due to floating point rounding.
-        val e = entry(truth(ringX, 0.0, 0.0, tolerance = 0.05))
+        //
+        // The truth shot carries no tolerance of its own, so the gate is
+        // exactly DEFAULT_POSITION_TOLERANCE (0.05) -- the detector's budget
+        // plus zero annotation slack. Giving the shot its own tolerance here
+        // would widen the gate past 0.05 (the two add), which would leave
+        // this detection sitting comfortably inside the gate rather than on
+        // its boundary.
+        val e = entry(truth(ringX, 0.0, 0.0))
         val detected = listOf(found(ringX, 0.05, 0.0))
 
         val result = ShotMatching.match(e, detected)
@@ -205,7 +212,10 @@ class ShotMatchingTest {
     fun eachTruthShotBringsItsOwnTolerance() {
         // The annotator records a larger tolerance where shafts overlap and the
         // entry point had to be estimated. A single global gate would either
-        // reject that hit or admit sloppiness everywhere else.
+        // reject that hit or admit sloppiness everywhere else. The gate a shot
+        // actually uses is DEFAULT_POSITION_TOLERANCE (0.05) plus its own
+        // annotation tolerance, so truth 0's gate is 0.052 and truth 1's is
+        // 0.09.
         val e = CorpusEntry(
             imageName = "t.jpg", image = null, camera = null, capture = null,
             target = null, shotsPerEnd = 2,
@@ -218,27 +228,30 @@ class ShotMatchingTest {
             unresolvedArrows = 0, registration = null
         )
         val detected = listOf(
-            DetectedShotRecord(0, null, SpotPosition(0, 0.01, 0.0), 0.9),
-            DetectedShotRecord(2, null, SpotPosition(0, 0.53, 0.0), 0.9)
+            DetectedShotRecord(0, null, SpotPosition(0, 0.06, 0.0), 0.9),
+            DetectedShotRecord(2, null, SpotPosition(0, 0.585, 0.0), 0.9)
         )
 
         val result = ShotMatching.match(e, detected)
 
-        // 0.01 exceeds the tight tolerance of 0.002; 0.03 fits inside 0.04.
+        // 0.06 exceeds truth 0's gate of 0.052; 0.085 fits inside truth 1's
+        // gate of 0.09.
         assertThat(result.pairs).hasSize(1)
         assertThat(result.pairs[0].truthIndex).isEqualTo(1)
         assertThat(result.unmatchedTruth).containsExactly(0)
         // Strengthens the assertions above: pins which detection the surviving
         // pair uses and its distance. Without this, a bug that swapped which
-        // truth shot receives which tolerance (using truth 1's 0.04 for truth 0,
-        // and truth 0's 0.002 for truth 1) would also leave exactly one pair
-        // with truthIndex 1 by accident: distance 0.01 <= 0.04 admits truth 0,
-        // and distance 0.03 > 0.002 rejects truth 1 -- but then the surviving
-        // pair would carry detectedIndex 0, not 1, and unmatchedTruth would
+        // truth shot receives which tolerance (using truth 1's 0.04 for truth
+        // 0, and truth 0's 0.002 for truth 1) would also leave exactly one
+        // pair by accident: truth 0's distance of 0.06 would fit inside the
+        // swapped-in gate of 0.09, admitting truth 0 instead, and truth 1's
+        // distance of 0.085 would exceed the swapped-in gate of 0.052,
+        // rejecting truth 1 -- but then the surviving pair would carry
+        // truthIndex 0 and detectedIndex 0, not 1, and unmatchedTruth would
         // contain 1, not 0. That mirror-image failure only shows up once the
         // detected index and distance are actually checked.
         assertThat(result.pairs[0].detectedIndex).isEqualTo(1)
-        assertThat(result.pairs[0].distance!!).isWithin(1e-9).of(0.03)
+        assertThat(result.pairs[0].distance!!).isWithin(1e-9).of(0.085)
     }
 
     @Test
@@ -262,10 +275,11 @@ class ShotMatchingTest {
     }
 
     @Test
-    fun aLargerPerShotToleranceAdmitsWhatTheDefaultWouldReject() {
+    fun aLargerPerShotToleranceAdmitsWhatTheDefaultAloneWouldReject() {
         // 0.06 exceeds ShotMatching.DEFAULT_POSITION_TOLERANCE (0.05), so the
-        // default alone would reject this pair; the shot's own wider
-        // tolerance of 0.08 admits it.
+        // default alone (no annotation tolerance) would reject this pair; the
+        // shot's own annotation tolerance of 0.08 widens the gate to 0.13,
+        // which admits it.
         val e = entry(truth(ringX, 0.0, 0.0, tolerance = 0.08))
         val detected = listOf(found(ringX, 0.06, 0.0))
 
@@ -276,12 +290,31 @@ class ShotMatchingTest {
     }
 
     @Test
-    fun aTighterPerShotToleranceRejectsWhatTheDefaultWouldAccept() {
-        // 0.03 fits ShotMatching.DEFAULT_POSITION_TOLERANCE (0.05), so the
-        // default alone would accept this pair; the shot's own narrower
-        // tolerance of 0.01 rejects it.
+    fun aDetectionTheOldGateWouldHaveRejectedNowMatchesInsideTheWidenedGate() {
+        // Real annotation tolerances are 0.01-0.02 -- a tenth of a ring,
+        // narrower than an arrow shaft. Under the old rule the gate WAS the
+        // annotation tolerance (0.01 here), so a detector accurate to 0.03
+        // was rejected outright. The corrected gate is the detector's own
+        // budget (DEFAULT_POSITION_TOLERANCE, 0.05) PLUS that annotation
+        // tolerance -- 0.06 here -- because the tolerance is annotation
+        // uncertainty, not a detector budget, and must not replace the
+        // detector's budget rather than add to it. 0.03 now fits.
         val e = entry(truth(ringX, 0.0, 0.0, tolerance = 0.01))
         val detected = listOf(found(ringX, 0.03, 0.0))
+
+        val result = ShotMatching.match(e, detected)
+
+        assertThat(result.pairs).hasSize(1)
+        assertThat(result.pairs[0].distance!!).isWithin(1e-9).of(0.03)
+    }
+
+    @Test
+    fun aDetectionBeyondTheWidenedGateStillDoesNotMatch() {
+        // Same annotation tolerance as above (0.01), so the same gate of
+        // 0.06. 0.07 exceeds it, so this still does not match -- the widened
+        // gate is not unlimited.
+        val e = entry(truth(ringX, 0.0, 0.0, tolerance = 0.01))
+        val detected = listOf(found(ringX, 0.07, 0.0))
 
         val result = ShotMatching.match(e, detected)
 
@@ -347,5 +380,42 @@ class ShotMatchingTest {
                 DetectedShotRecord(6, PrintedScore.of("9"), SpotPosition(0, 0.0, 0.0), 0.9)
             )
         ).isFalse()
+    }
+
+    @Test
+    fun anUnmatchedDetectionRecordsItsDistanceToTheNearestUnmatchedTruthOnItsFace() {
+        // Truth A is close enough to be matched by position. Truth B is not:
+        // no detection comes near enough, so it stays unmatched, and the
+        // detection that almost found it is recorded as having missed only on
+        // distance -- this is what makes the position error metric honest
+        // about a detector that never gets close enough to be admitted at
+        // all, rather than being silently bounded by the gate. A third,
+        // unrelated detection sits on a DIFFERENT face: the one truth left
+        // over (B) belongs to a different spot, so there is no comparable
+        // candidate for it, and it must NOT be recorded -- recording it would
+        // misattribute a distance across spots that were never comparable in
+        // the first place.
+        val e = CorpusEntry(
+            imageName = "t.jpg", image = null, camera = null, capture = null,
+            target = null, shotsPerEnd = 2,
+            shots = listOf(
+                truth(ring9, 0.0, 0.0),
+                truth(ring7, 0.5, 0.0)
+            ),
+            unresolvedArrows = 0, registration = null
+        )
+        val detected = listOf(
+            found(ring9, 0.01, 0.0),          // matches truth A by position
+            found(ring7, 0.6, 0.0),           // 0.1 from truth B, beyond the 0.05 gate
+            found(ring7, 0.0, 0.0, face = 1)  // different face: no comparable truth left
+        )
+
+        val result = ShotMatching.match(e, detected)
+
+        assertThat(result.pairs).hasSize(1)
+        assertThat(result.unmatchedTruth).containsExactly(1)
+        assertThat(result.unmatchedDetected).containsExactly(1, 2).inOrder()
+        assertThat(result.detectionsRejectedOnDistance).hasSize(1)
+        assertThat(result.detectionsRejectedOnDistance[0]).isWithin(1e-9).of(0.1)
     }
 }

@@ -65,6 +65,14 @@ class Metrics(
     val correctScores: Int,
     val scoreComparableShots: Int,
     val positionErrors: List<Double>,
+    /**
+     * For every detection that ended up unmatched, its distance to the
+     * nearest unmatched, positioned truth shot on the same face -- where one
+     * existed. Kept so [detectionsRejectedOnDistance] and
+     * [medianRejectedDistance] can be derived from the same numbers rather
+     * than recomputed.
+     */
+    val rejectedDistances: List<Double>,
     val entriesWithPositions: Int,
     val annotatedEntries: Int,
     val forgivenEntries: Int
@@ -98,19 +106,35 @@ class Metrics(
 
     /** Null when no entry in the corpus carried positions. */
     val medianPositionError: Double?
-        get() = percentile(0.50)
+        get() = percentile(positionErrors, 0.50)
 
     /** Null when no entry in the corpus carried positions. */
     val p95PositionError: Double?
-        get() = percentile(0.95)
+        get() = percentile(positionErrors, 0.95)
+
+    /**
+     * How many detections missed ONLY on distance: close enough to a truth
+     * shot's score, perhaps, or with no comparable truth at all, but ruled
+     * out purely because nothing unmatched and positioned was near enough.
+     * Without this, [medianPositionError] and [p95PositionError] are bounded
+     * by the matching gate no matter how inaccurate the detector actually
+     * is -- a detector that never gets within the gate reports a flattering,
+     * empty [positionErrors] rather than a visibly bad one.
+     */
+    val detectionsRejectedOnDistance: Int
+        get() = rejectedDistances.size
+
+    /** Null when nothing was ever rejected on distance alone. */
+    val medianRejectedDistance: Double?
+        get() = percentile(rejectedDistances, 0.50)
 
     private fun ratio(count: Int, total: Int): Double? =
         if (total == 0) null else count.toDouble() / total
 
     /** Linear interpolation between order statistics, the common definition. */
-    private fun percentile(fraction: Double): Double? {
-        if (positionErrors.isEmpty()) return null
-        val sorted = positionErrors.sorted()
+    private fun percentile(values: List<Double>, fraction: Double): Double? {
+        if (values.isEmpty()) return null
+        val sorted = values.sorted()
         val rank = fraction * (sorted.size - 1)
         val lower = rank.toInt()
         val upper = minOf(lower + 1, sorted.size - 1)
@@ -131,6 +155,7 @@ class Metrics(
             var annotated = 0
             var forgiven = 0
             val errors = mutableListOf<Double>()
+            val rejectedOnDistance = mutableListOf<Double>()
 
             for (outcome in outcomes) {
                 val entry = outcome.entry
@@ -182,6 +207,7 @@ class Metrics(
                     }
                     pair.distance?.let { errors.add(it) }
                 }
+                rejectedOnDistance.addAll(outcome.match.detectionsRejectedOnDistance)
             }
 
             return Metrics(
@@ -192,6 +218,7 @@ class Metrics(
                 correctScores = correct,
                 scoreComparableShots = comparable,
                 positionErrors = errors,
+                rejectedDistances = rejectedOnDistance,
                 entriesWithPositions = withPositions,
                 annotatedEntries = annotated,
                 forgivenEntries = forgiven

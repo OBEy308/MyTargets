@@ -425,6 +425,32 @@ class MetricsTest {
     }
 
     @Test
+    fun detectionsRejectedOnDistanceAggregatesTheCountAndTheMedian() {
+        // Two entries, each with one detection that missed only on distance:
+        // 0.10 and 0.20 away from the nearest unmatched truth. The metric
+        // must count both and report their median, not silently drop them
+        // because they never became a matched pair.
+        val a = entry("a.jpg", shots = arrayOf(truth(2, 0.0, 0.0)))
+        val detectedA = listOf(found(2, 0.10, 0.0))
+        val b = entry("b.jpg", shots = arrayOf(truth(3, 0.0, 0.0)))
+        val detectedB = listOf(found(3, 0.20, 0.0))
+
+        val m = Metrics.over(listOf(outcome(a, detectedA), outcome(b, detectedB)))
+
+        assertThat(m.detectionsRejectedOnDistance).isEqualTo(2)
+        assertThat(m.medianRejectedDistance!!).isWithin(1e-9).of(0.15)
+    }
+
+    @Test
+    fun detectionsRejectedOnDistanceIsZeroAndTheMedianIsNullWhenNothingWasRejectedOnDistance() {
+        val e = entry("p.jpg", shots = arrayOf(truth(2, 0.0, 0.0)))
+        val m = Metrics.over(listOf(outcome(e, listOf(found(2, 0.0, 0.0)))))
+
+        assertThat(m.detectionsRejectedOnDistance).isEqualTo(0)
+        assertThat(m.medianRejectedDistance).isNull()
+    }
+
+    @Test
     fun ringAccuracyCountsOnlyComparableTruth() {
         // Both truth shots carry a position, so ShotMatching pairs them by
         // distance regardless of what kind of score either side reports --

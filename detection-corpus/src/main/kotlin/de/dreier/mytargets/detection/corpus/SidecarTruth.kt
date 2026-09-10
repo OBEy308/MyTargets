@@ -35,6 +35,7 @@ object SidecarTruth {
         var x: Double? = null
         var y: Double? = null
         var scoringRing: Int? = null
+        var printedScore: String? = null
         var positionTolerance: Double? = null
         var nearRingBoundary: Boolean? = null
         var uncertain: Boolean? = null
@@ -135,7 +136,10 @@ object SidecarTruth {
 
         return TruthShot(
             scoringRing = shot.scoringRing,
-            printedScore = null,
+            // Optional. The annotated inherited photographs carry it so the
+            // printed value can be checked against the file name; a detector
+            // is matched on the zone index.
+            printedScore = shot.printedScore?.let { PrintedScore.of(it) },
             position = position,
             positionTolerance = shot.positionTolerance,
             nearRingBoundary = shot.nearRingBoundary ?: false,

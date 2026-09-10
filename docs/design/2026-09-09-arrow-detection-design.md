@@ -459,32 +459,46 @@ für einen auf vier Millimeter genauen Erkenner erzeugt.
 
 **16 geerbte Fotos.** Der Branch `feature/249_auto_detect_arrows` (Florian
 Dreier, Dezember 2017, nie gemergt) enthält einen OpenCV-Prototyp derselben
-Funktion samt 16 Testfotos, rund 40 MB. Die Wahrheit steckt im Dateinamen:
-`a6_998877` sind sechs Pfeile mit 9,9,8,8,7,7, `a8_xxx99988_front` acht Pfeile
-mit drei X, frontal. Die Marker `dark`, `noise`, `overlap`, `front` und
-`multiple_targets` benennen die jeweilige Erschwernis.
+Funktion samt 16 Testfotos, rund 40 MB. Die Wahrheit steckte zunächst nur im
+Dateinamen: `a6_998877` sind sechs Pfeile mit 9,9,8,8,7,7, `a8_xxx99988_front`
+acht Pfeile mit drei X, frontal. Die Marker `dark`, `noise`, `overlap`,
+`front` und `multiple_targets` benennen die jeweilige Erschwernis. `x` steht
+im Schema sowohl für X als auch für eine glatte Zehn.
 
 Sie liegen unter `<DETECTION_CORPUS_DIR>/inherited-249/`, nicht im Repo — im
 Prototyp lagen sie in `res/drawable-nodpi` und damit im APK, was dort ProGuard
 schon für Debug-Builds nötig machte.
 
-**Zwei Arten von Ringwert, und eine bindende Anforderung an Plan 3.** Die 16
-geerbten Fotos tragen ihre Wahrheit als **gedruckte Ringwert-Zeichen** (`X`,
-`9`, `M`, aus dem Dateinamen); eines davon liegt außerhalb des Umfangs, es
-bleiben 94 geerbte Treffer im Umfang. Die 4 bisher annotierten Fotos tragen ihre
-Wahrheit als **Zonenindex**. Der Vergleich verlangt auf beiden Seiten dieselbe
-Art von Ringwert (siehe *Kennzahlen*). Ein Erkenner, der nur Zonenindizes
-ausgibt, kann deshalb gegen diese 94 Treffer nie zugeordnet werden:
-Erkennungsrate ist auf 17,5 % gedeckelt (20 von 114), Falsch-Positiv-Rate auf
-82,5 % nach unten begrenzt — dauerhaft, unabhängig davon, wie gut der Erkenner ist. Die
-Umrechnung von Zonenindex auf gedruckten Wert ist bewusst nicht Teil dieser
-Spec, weil sie die Zonentabellen aus `:shared` braucht, die erst Plan 3
-bereitstellt. Das ist eine **bindende Anforderung an den Plan-3-Runner**: Jeder
-erkannte Treffer muss den gedruckten Wert zusätzlich zum Zonenindex tragen,
-umgerechnet über das Zielscheibenmodell des Eintrags — sonst lassen sich die
-geerbten Fotos nicht zuordnen. Wer auf eine Erkennungsrate um 17 % oder eine
-Falsch-Positiv-Rate um 82 % stößt, sollte hier nachsehen, bevor er den
-Erkenner verdächtigt.
+Seit 2026-09-10 tragen alle 16 ein Sidecar mit Registrierung, Positionen und
+Zonenindizes, erzeugt mit den Korpuswerkzeugen (siehe `README.md` des Korpus).
+Zwölf zeigen eine WA-Vollauflage 122 cm, vier eine 80-cm-6-Ring-Auflage
+(`WA6Ring`); letztere sind in WA6Ring-Koordinaten annotiert und in
+`out-of-scope.json` eingetragen. Der Dateiname bleibt als Gegenprobe:
+`printedScore` je Treffer und `annotation.fileNameCheck` im Sidecar halten
+fest, ob die Geometrie die Zählung von 2017 bestätigt. Drei Fotos tun das
+nicht (`a6_998887_dark`, `a6_x98887`, `a6_x99999_multiple_targets`); die
+Sidecars begründen es, und `RealCorpusTest` pinnt diese Liste.
+
+**Zwei Arten von Ringwert.** Die Dateinamen nennen **gedruckte
+Ringwert-Zeichen** (`X`, `9`, `M`), die Sidecars **Zonenindizes**. Der
+Vergleich verlangt auf beiden Seiten dieselbe Art von Ringwert (siehe
+*Kennzahlen*). Solange die geerbten Fotos nur ihre Dateinamen hatten, konnte
+ein Erkenner, der nur Zonenindizes ausgibt, gegen die 94 geerbten Treffer im
+Umfang nie zugeordnet werden — Erkennungsrate gedeckelt auf 17,5 % (20 von
+114), Falsch-Positiv-Rate auf 82,5 % nach unten begrenzt. Mit den Sidecars ist
+das behoben: Alle 20 Fotos tragen Zonenindizes, und der Plan-3-Runner muss
+keine gedruckten Werte mehr liefern, um sie zuzuordnen. Im Umfang liegen jetzt
+92 gelistete Treffer, 72 davon geerbt und 20 aus `wa-full`; die 28 Treffer der
+vier WA6Ring-Fotos stehen außerhalb. Das ist eine Aussage über diesen Korpus, nicht
+über das Modul: Wahrheit nur aus dem Dateinamen (`FilenameTruth`, Zuordnung
+über den gedruckten Wert) bleibt absichtlich unterstützt, weil ein neues Foto
+wieder ohne Sidecar ankommen kann — bis es eines hat, ist es für einen reinen
+Zonenindex-Erkenner wieder unzuordenbar, und die Deckelung kehrt anteilig
+zurück. Die Umrechnung von Zonenindex auf gedruckten Wert bleibt bewusst
+außerhalb dieser Spec; wer sie im Runner ergänzt, gewinnt eine zusätzliche
+Kontrolle gegen die Dateinamen und schließt diese Lücke. Wer auf eine Erkennungsrate
+von 17,5 % oder eine Falsch-Positiv-Rate von 82,5 % stößt, hat vermutlich einen
+Korpus ohne die Sidecars.
 
 Abzudecken sind die Fälle, an denen die Pipeline realistisch scheitert:
 Hallenlicht und Sonne mit harten Schatten, frontale und schräge Winkel,
@@ -507,11 +521,19 @@ Ringtreue zählt damit nicht über alle geschossenen Pfeile, sondern nur über d
 bei denen überhaupt etwas zugeordnet wurde und bei denen Wahrheit und Erkennung
 vergleichbar sind — alles andere hieße, einen übersehenen Pfeil als falschen
 Ring zu zählen, was eine Lüge wäre. Der Nenner kann dadurch sehr klein werden:
-Gemessen am jetzigen Korpus liegt die Ringtreue bei 100 %, während die
-Erkennungsrate bei 0,9 % liegt — ein Erkenner, der einen von hundertvierzehn
-Pfeilen gefunden und richtig geringt hat. **Die Ringtreue ist ohne ihren Nenner
+Gemessen am jetzigen Korpus (92 gelistete Treffer im Umfang, Stand 2026-09-10)
+liegt die Ringtreue bei 100 %, während die Erkennungsrate bei 1,1 % liegt — ein
+Erkenner, der einen von zweiundneunzig Pfeilen gefunden und richtig geringt hat. **Die Ringtreue ist ohne ihren Nenner
 und ohne die Erkennungsrate daneben bedeutungslos und darf nie ohne beide
 zitiert oder abgebildet werden.**
+
+Der Positionsfehler ist in Spot-Radien angegeben, und ein Spot-Radius ist auf
+jeder Auflage eine andere Zahl Millimeter: 61 cm auf der 122er-Vollauflage,
+40 cm auf der 80er, 24 cm auf der 80-cm-6-Ring-Auflage, deren äußerster Ring
+der Fünfer ist. Ein über Auflagen verschiedener Größe gemittelter Median ist
+deshalb eine Mischung physikalischer Maßstäbe. Das ist so gewollt, weil der
+Erkenner in Spot-Radien arbeitet; wer Millimeter braucht, rechnet je Eintrag
+über `target.diameterCm` um, das jedes Sidecar trägt.
 
 Diese Werte werden als Regressionsschranke festgeschrieben, **nachdem** sie das
 erste Mal gemessen wurden. Eine Zielgenauigkeit vorab festzulegen wäre geraten.
@@ -554,12 +576,13 @@ lokalisieren, nur erraten.
 
 1. ~~**Build-Umgebung herstellen.**~~ Erledigt: Android Studio mit JBR und SDK.
    Die drei lokal beizusteuernden Dateien sind in `BUILDING.md` beschrieben.
-2. **Fotos sammeln.** 16 geerbte Fotos liegen bereits unter
-   `<DETECTION_CORPUS_DIR>/inherited-249/`, mit Ringwerten im Dateinamen und
-   ohne Positionen. Sie decken dunkel, verrauscht, überlappend, frontal und
-   mehrere Auflagen ab — nicht aber die von dieser Spec bevorzugte leicht
-   schräge Aufnahme, verkantete Bilder oder 3-Spot-Auflagen. Eigene Fotos
-   ergänzen genau diese Lücken; Originalauflösung behalten.
+2. **Fotos sammeln.** 16 geerbte Fotos liegen unter
+   `<DETECTION_CORPUS_DIR>/inherited-249/`, seit 2026-09-10 vollständig
+   annotiert (Positionen, Zonenindizes, Homographie). Sie decken dunkel,
+   verrauscht, überlappend, frontal und mehrere Auflagen ab — nicht aber die
+   von dieser Spec bevorzugte leicht schräge Aufnahme, verkantete Bilder oder
+   3-Spot-Auflagen. Eigene Fotos ergänzen genau diese Lücken;
+   Originalauflösung behalten.
 3. **APK-Zuwachs durch OpenCV messen** (siehe *Offene Risiken*), bevor die
    Abhängigkeit festgezurrt wird.
 4. Modul `:detection` anlegen, Schnittstelle und Datentypen.
@@ -614,21 +637,17 @@ nicht. Als Referenz taugt er, als Grundlage nicht. Seine beiden
 Pfeilerkennungs-Strategien sind die Messlatte: Schlägt unsere klassische
 Pipeline einen acht Jahre alten Prototyp nicht, ist das ein Signal.
 
-**Zwei Fälle im geerbten Korpus, die außerhalb des Umfangs liegen.** Ein Foto
-zeigt drei Auflagen nebeneinander (`multiple_targets`) — die Pipeline nimmt eine
-an; hier muss sie sauber `FACE_MISMATCH` melden statt eine beliebige zu wählen.
-Und mindestens eines zeigt eine **FITA 80 cm 6-Ring**-Auflage (`WA6Ring`), die
-v1 nicht abdeckt. Welche Auflage je Foto zu sehen ist, klärt sich bei der
-Annotation; Fotos außerhalb des Umfangs bleiben im Korpus, aber außerhalb der
-Kennzahlen.
-
-Dafür gibt es inzwischen einen Mechanismus: `out-of-scope.json` im
-Korpus-Wurzelverzeichnis führt solche Fotos auf, Dateiname auf Begründung
-(siehe die `README.md` des Korpus, Abschnitt *Fotos außerhalb des Umfangs*).
-Ein dort eingetragenes Foto wird weiterhin geladen und bleibt für
-Registrierungstests verfügbar; es zählt nur für keine Trefferkennzahl.
-`multiple_targets` lässt sich so bereits eintragen. Der `WA6Ring`-Fall lässt
-sich erst eintragen, wenn die Annotation geklärt hat, welches Foto es ist.
+**Vier Fotos im geerbten Korpus liegen außerhalb des Umfangs.** Eines zeigt
+drei Auflagen nebeneinander (`multiple_targets`) — die Pipeline nimmt eine an;
+hier muss sie sauber `FACE_MISMATCH` melden statt eine beliebige zu wählen.
+Dieses und drei weitere (`a6_xxxx99_overlap`, `a8_xxx99988_front`,
+`a8_xxx99988_overlap`) zeigen eine **FITA 80 cm 6-Ring**-Auflage (`WA6Ring`),
+die v1 nicht abdeckt. Alle vier stehen in `out-of-scope.json` im
+Korpus-Wurzelverzeichnis, Dateiname auf Begründung (siehe die `README.md` des
+Korpus, Abschnitt *Fotos außerhalb des Umfangs*). Ein dort eingetragenes Foto
+wird weiterhin geladen und bleibt für Registrierungstests verfügbar; es zählt
+nur für keine Trefferkennzahl. Die vier sind trotzdem annotiert, in
+WA6Ring-Koordinaten, damit die Wahrheit vorliegt, sobald der Umfang wächst.
 
 **APK-Größe.** OpenCV bringt native Bibliotheken mit. Vor der Integration ist zu
 messen, wie viel je ABI dazukommt, und zu entscheiden, ob ABI-Splits genügen

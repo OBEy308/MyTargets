@@ -57,11 +57,26 @@ class SidecarTruthTest {
     }
 
     @Test
+    fun aPrintedScoreIsReadWhenGivenAndAbsentOtherwise() {
+        val json = """
+            { "shots": [
+                { "x": 0.1, "y": 0.2, "scoringRing": 0, "printedScore": "x" },
+                { "x": 0.1, "y": 0.2, "scoringRing": 1 }
+            ] }
+        """.trimIndent()
+
+        val e = SidecarTruth.parse("a.jpg", json)
+
+        assertThat(e.shots[0].printedScore).isEqualTo(PrintedScore.X)
+        assertThat(e.shots[1].printedScore).isNull()
+    }
+
+    @Test
     fun readsTheShotsWithRingToleranceAndFlags() {
         val e = SidecarTruth.parse("a.jpg", full)
 
         assertThat(e.expectedShots).isEqualTo(2)
-        assertThat(e.hasPositions).isTrue()
+        assertThat(e.shots.all { it.position != null }).isTrue()
 
         val first = e.shots[0]
         assertThat(first.scoringRing).isEqualTo(3)

@@ -142,3 +142,6 @@ fabric.properties
 .idea/deploymentTargetSelector.xml
 .idea/markdown.xml
 .idea/vcs.xml
+
+# Kotlin build session data
+.kotlin/

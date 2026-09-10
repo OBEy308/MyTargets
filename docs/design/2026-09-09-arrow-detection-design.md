@@ -536,8 +536,8 @@ zitiert oder abgebildet werden.**
 Dasselbe gilt für den Positionsfehler, aus einem zweiten Grund: Die Zuordnung
 nimmt je Erkennung den nächsten gelisteten Treffer innerhalb des Budgets. Wird
 eine Erkennung um eine Strecke in der Größenordnung des Pfeilabstands
-verschoben, kann sie im Budget des *Nachbarn* landen und gilt als zugeordnet — mit kleinem Fehler zum
-falschen Pfeil. Gemessen am Korpus (2026-09-10): Ein um 0,20 Radien
+verschoben, kann sie im Budget des *Nachbarn* landen und gilt als zugeordnet —
+mit kleinem Fehler zum falschen Pfeil. Gemessen am Korpus (2026-09-10): Ein um 0,20 Radien
 verschobener Erkenner meldet über sechs zugeordnete Treffer einen Median von
 0,054, und alle sechs sind solche Fehlzuordnungen; die 86 auf Distanz
 verworfenen Erkennungen mit ihrem Median von 0,195 zeigen den wahren Versatz.

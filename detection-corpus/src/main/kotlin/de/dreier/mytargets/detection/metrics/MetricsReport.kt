@@ -36,17 +36,96 @@ object MetricsReport {
         sb.appendLine()
         sb.appendLine(
             "$photographs ${plural(photographs, "photograph", "photographs")}, " +
-                "${overall.expectedShots} ${plural(overall.expectedShots, "arrow", "arrows")}, " +
-                "${overall.entriesWithPositions} with annotated positions."
+                "${overall.annotatedEntries} annotated, " +
+                "${overall.expectedShots} listed " +
+                "${plural(overall.expectedShots, "hit", "hits")}, " +
+                "${overall.entriesWithPositions} with positions, " +
+                "${overall.pairsMatchedByScore} " +
+                "${plural(overall.pairsMatchedByScore, "pair", "pairs")} matched by score " +
+                "rather than by position."
         )
+        if (overall.forgivenEntries > 0) {
+            sb.appendLine()
+            sb.appendLine(
+                "${overall.forgivenEntries} " +
+                    "${plural(overall.forgivenEntries, "entry", "entries")} " +
+                    "${plural(overall.forgivenEntries, "declares", "declare")} unresolved " +
+                    "arrows, so surplus detections there are forgiven only up to the number " +
+                    "of unresolved arrows -- anything beyond that is still charged as a " +
+                    "false positive."
+            )
+        }
+        if (overall.entriesChargedBeyondForgiveness > 0) {
+            sb.appendLine()
+            sb.appendLine(
+                "${overall.entriesChargedBeyondForgiveness} " +
+                    "${plural(overall.entriesChargedBeyondForgiveness, "entry", "entries")} " +
+                    "had surplus beyond " +
+                    "${plural(overall.entriesChargedBeyondForgiveness, "its", "their")} " +
+                    "unresolved arrows: ${overall.detectionsChargedDespiteForgiveness} " +
+                    "${plural(overall.detectionsChargedDespiteForgiveness, "detection", "detections")} " +
+                    "${plural(overall.detectionsChargedDespiteForgiveness, "was", "were")} " +
+                    "charged despite forgiveness applying."
+            )
+        }
         sb.appendLine()
-        sb.appendLine("| Metric | Value |")
-        sb.appendLine("|---|---|")
-        sb.appendLine("| Detection rate | ${percent(overall.detectionRate)} |")
-        sb.appendLine("| False positives | ${percent(overall.falsePositiveRate)} |")
-        sb.appendLine("| Ring accuracy | ${percent(overall.scoreAccuracy)} |")
-        sb.appendLine("| Position error, median | ${spotRadii(overall.medianPositionError)} |")
-        sb.appendLine("| Position error, 95th pct | ${spotRadii(overall.p95PositionError)} |")
+        sb.appendLine("| Metric | Value | Measured over |")
+        sb.appendLine("|---|---|---|")
+        sb.appendLine(
+            "| Detection rate | ${percent(overall.detectionRate)} | " +
+                "of ${overall.expectedShots} listed hits |"
+        )
+        sb.appendLine(
+            "| False positives | ${percent(overall.falsePositiveRate)} | " +
+                "of ${overall.expectedShots} listed hits |"
+        )
+        sb.appendLine(
+            "| Ring accuracy | ${percent(overall.scoreAccuracy)} | " +
+                "of ${overall.scoreComparableShots} comparable hits |"
+        )
+        sb.appendLine(
+            "| Position error, median | ${spotRadii(overall.medianPositionError)} | " +
+                "${positionErrorDenominator(overall)} |"
+        )
+        sb.appendLine(
+            "| Position error, 95th pct | ${spotRadii(overall.p95PositionError)} | " +
+                "${positionErrorDenominator(overall)} |"
+        )
+
+        if (overall.boundaryShots > 0) {
+            sb.appendLine()
+            sb.appendLine(
+                "${overall.boundaryShots} " +
+                    "${plural(overall.boundaryShots, "hit", "hits")} " +
+                    "sit near a ring boundary and are excluded from ring accuracy."
+            )
+        }
+
+        if (overall.uncertainPositionsExcluded > 0) {
+            sb.appendLine()
+            sb.appendLine(
+                "${overall.uncertainPositionsExcluded} " +
+                    "${plural(overall.uncertainPositionsExcluded, "position", "positions")} " +
+                    "excluded from the position error because the annotation was uncertain."
+            )
+        }
+
+        val outOfScope = outcomes.filter { it.entry.outOfScope != null }
+        if (outOfScope.isNotEmpty()) {
+            sb.appendLine()
+            sb.appendLine("## Out of scope")
+            sb.appendLine()
+            sb.appendLine(
+                "${outOfScope.size} " +
+                    "${plural(outOfScope.size, "photograph", "photographs")} " +
+                    "${plural(outOfScope.size, "stays", "stay")} in the corpus but " +
+                    "${plural(outOfScope.size, "counts", "count")} for no metric:"
+            )
+            sb.appendLine()
+            for (outcome in outOfScope.sortedBy { it.entry.imageName }) {
+                sb.appendLine("- ${outcome.entry.imageName}: ${outcome.entry.outOfScope}")
+            }
+        }
 
         val byTag = Metrics.byTag(outcomes)
         if (byTag.isNotEmpty()) {
@@ -64,22 +143,47 @@ object MetricsReport {
             }
         }
 
+        // Ranked by detection rate first, then by ring accuracy. An entry
+        // where the detector found nothing has no matched pair and therefore
+        // no ring accuracy at all; ranking by ring accuracy alone once sorted
+        // exactly that entry, the worst there is, last. Among entries with the
+        // same detection rate, one whose ring accuracy could not be measured
+        // sorts after one where it could.
+        //
+        // Two kinds of entry are not listed at all. A registration-only entry
+        // lists no hits, so nothing about it was measured. An out-of-scope
+        // entry is already named, and explained, in the "Out of scope"
+        // section above, and Metrics.over reports zero for every one of its
+        // numbers. A row of zeros for either would read as a result.
         val worst = outcomes
+            .filter { it.entry.outOfScope == null && it.entry.isAnnotated }
+            .map { it to Metrics.over(listOf(it)) }
             .sortedWith(
-                compareBy({ Metrics.over(listOf(it)).scoreAccuracy }, { it.entry.imageName })
+                compareBy(
+                    { (_, m) -> m.detectionRate },
+                    { (_, m) -> m.scoreAccuracy == null },
+                    { (_, m) -> m.scoreAccuracy },
+                    { (outcome, _) -> outcome.entry.imageName }
+                )
             )
             .take(WORST_ENTRIES)
         if (worst.isNotEmpty()) {
             sb.appendLine()
             sb.appendLine("## Worst entries")
             sb.appendLine()
+            // "Correct" is rendered as correct/comparable, not as a bare
+            // count against "Found": change 5 takes nearRingBoundary pairs
+            // out of scoreComparableShots and correctScores entirely, so a
+            // count of correctScores alone reads against the wrong
+            // denominator and can make a flawless detector look partial. See
+            // Metrics.boundaryShots.
             sb.appendLine("| Photograph | Arrows | Found | Correct | Invented |")
             sb.appendLine("|---|---|---|---|---|")
-            for (outcome in worst) {
-                val m = Metrics.over(listOf(outcome))
+            for ((outcome, m) in worst) {
                 sb.appendLine(
                     "| ${outcome.entry.imageName} | ${m.expectedShots} | " +
-                        "${m.matchedShots} | ${m.correctScores} | ${m.falsePositives} |"
+                        "${m.matchedShots} | ${m.correctScores}/${m.scoreComparableShots} | " +
+                        "${m.falsePositives} |"
                 )
             }
         }
@@ -88,6 +192,24 @@ object MetricsReport {
     }
 
     private fun plural(count: Int, one: String, many: String) = if (count == 1) one else many
+
+    /**
+     * The "Measured over" text shared by the two position error rows: the
+     * number of placed hits the error was computed over, plus -- when any
+     * exist -- the count and median of detections that missed only on
+     * distance. The two live in the same cell on purpose (change 8's
+     * mitigation for change 4's gate): a flattering median next to a hidden
+     * paragraph is exactly what let a detector 0.20 off read as more
+     * accurate than one 0.04 off.
+     */
+    private fun positionErrorDenominator(overall: Metrics): String {
+        val placed = overall.positionErrors.size
+        val base = "of $placed placed ${plural(placed, "hit", "hits")}"
+        if (overall.detectionsRejectedOnDistance == 0) return base
+        return base + ", ${overall.detectionsRejectedOnDistance} " +
+            "${plural(overall.detectionsRejectedOnDistance, "detection", "detections")} " +
+            "missed only on distance (median ${spotRadii(overall.medianRejectedDistance)})"
+    }
 
     /** Renders a value that may be absent -- an empty corpus, or one with no
      *  annotated positions -- as "not measured" rather than a number that

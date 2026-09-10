@@ -7,10 +7,12 @@ item, the photo corpus for the arrow detection, is optional.
 ## Requirements
 
 - Android Studio, or a JDK plus the Android command line tools
+- A JDK 17, since the modules declare `sourceCompatibility`/`targetCompatibility`
+  17 and Gradle fails outright without one
 - An Android SDK matching `compileSdk` in `gradle/libs.versions.toml`
 
-If you build from the command line, point `JAVA_HOME` at a JDK. The one bundled
-with Android Studio works:
+If you build from the command line, point `JAVA_HOME` at a JDK 17. The one
+bundled with Android Studio works if it is version 17:
 
 ```
 # Windows

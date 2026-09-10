@@ -44,16 +44,34 @@ object FilenameTruth {
         if (scoreText.length != declaredCount) return null
 
         val shots = scoreText.map { c ->
-            val score = Score.parseFilenameChar(c) ?: return null
-            TruthShot(score)
+            val score = PrintedScore.parseFilenameChar(c) ?: return null
+            TruthShot(printedScore = score)
         }
 
-        val tag = match.groupValues[3]
         return CorpusEntry(
             imageName = fileName,
-            targetModel = null,
+            image = null,
+            camera = null,
+            capture = null,
+            target = null,
+            shotsPerEnd = declaredCount,
             shots = shots,
-            tags = if (tag.isEmpty()) emptySet() else setOf(tag)
+            unresolvedArrows = 0,
+            registration = null
         )
+    }
+
+    /**
+     * The difficulty marker the inherited scheme appends, such as "dark" or
+     * "overlap", or null when there is none.
+     *
+     * It is not a capture condition in the sense the annotated photographs use,
+     * so it does not become a [CorpusEntry] tag automatically; the loader
+     * decides what to do with it.
+     */
+    fun tagOf(fileName: String): String? {
+        val match = PATTERN.matchEntire(fileName) ?: return null
+        val tag = match.groupValues[3]
+        return tag.ifEmpty { null }
     }
 }

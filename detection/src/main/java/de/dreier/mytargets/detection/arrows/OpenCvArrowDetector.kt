@@ -55,7 +55,8 @@ class OpenCvArrowDetector(
             val rectified = System.nanoTime()
             val runs = if (foot == null) emptyList() else ShaftSearch.find(face, foot, request.zoneRadii)
             val searched = System.nanoTime()
-            val walks = runs.map { TipWalk.walk(face, it.tip, it.tip - it.far) }
+            val blackZones = BlackZones.of(request.transitions)
+            val walks = runs.map { TipWalk.walk(face, it.tip, it.tip - it.far, blackZones) }
             val candidates = if (foot == null) emptyList() else ArrowCandidates.build(runs, walks, foot, request.layout)
             val selection = CandidateSelection.select(
                 candidates.mapNotNull { it.located }, request.expectedShots, request.maxArrowsPerSpot

@@ -29,7 +29,8 @@ import kotlin.math.min
  */
 class FlankContrast private constructor(
     private val centreOffsets: DoubleArray,
-    private val flank: Double,
+    /** How far the flanks lie from the line on either side. */
+    val flank: Double,
     private val bilinear: Boolean
 ) {
 

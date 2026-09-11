@@ -39,7 +39,8 @@ class TipWalkTest {
     /** Towards the entry, three degrees off, as a seed from the search can be. */
     private val seedDirection = rotate(outward * -1.0, 3.0)
 
-    private fun shaft() = FacePainter(0.9f).stripe(entry, entry + outward * 0.4, 0.012, 0.15f).build()
+    private fun shaft(length: Double = 0.4) =
+        FacePainter(0.9f).stripe(entry, entry + outward * length, 0.012, 0.15f).build()
 
     @Test
     fun findsTheEndOfTheShaft() {
@@ -61,11 +62,32 @@ class TipWalkTest {
     }
 
     @Test
-    fun aShaftRunningPastTheWindowRunsOutOnTheRefinedLine() {
+    fun aShaftEndingWellAheadOfTheSeedIsWalkedToItsEnd() {
+        // 0.3 ahead: the window of tips.py, 0.035, would have run out.
+        val result = TipWalk.walk(shaft(), entry + outward * 0.3, seedDirection)
+
+        assertThat(result.refinement).isEqualTo(TipRefinement.REFINED)
+        assertThat(result.tip.distanceTo(entry)).isAtMost(0.002)
+    }
+
+    @Test
+    fun aShaftLongerThanTheReachRunsOutOnTheRefinedLine() {
+        // The end lies 0.9 ahead of the seed, beyond the reach of 0.8.
+        val seed = entry + outward * 0.9
+
+        val result = TipWalk.walk(shaft(1.2), seed, seedDirection)
+
+        assertThat(result.refinement).isEqualTo(TipRefinement.RAN_OUT)
+        assertThat(result.tip.distanceTo(seed)).isAtMost(0.002)
+        assertThat(abs(result.line.signedDistanceTo(entry + outward * 1.0))).isAtMost(0.002)
+    }
+
+    @Test
+    fun withTheReachOfTipsPyAShaftRunningPastItRunsOut() {
         // The seed sits 0.05 behind the end; the walk looks only 0.035 ahead.
         val seed = entry + outward * 0.05
 
-        val result = TipWalk.walk(shaft(), seed, seedDirection)
+        val result = TipWalk.walk(shaft(), seed, seedDirection, reach = 0.035)
 
         assertThat(result.refinement).isEqualTo(TipRefinement.RAN_OUT)
         assertThat(result.tip.distanceTo(seed)).isAtMost(0.002)
@@ -73,15 +95,63 @@ class TipWalkTest {
     }
 
     @Test
-    fun aShortGapReachingTheEndOfTheWindowStillEndsTheShaftBeforeIt() {
-        // The end lies 0.03 ahead of the seed. After it only 0.005 of the window
+    fun aShortGapReachingTheEndOfTheReachStillEndsTheShaftBeforeIt() {
+        // The end lies 0.03 ahead of the seed. After it only 0.005 of the reach
         // remain, less than the 0.012 an end needs, but the gap reaches the end of
-        // the window, and tips.py ends the shaft there.
+        // the reach, and tips.py ends the shaft there.
         val seed = entry + outward * 0.03
 
-        val result = TipWalk.walk(shaft(), seed, seedDirection)
+        val result = TipWalk.walk(shaft(), seed, seedDirection, reach = 0.035)
 
         assertThat(result.refinement).isEqualTo(TipRefinement.REFINED)
         assertThat(result.tip.distanceTo(entry)).isAtMost(0.002)
+    }
+
+    /** WAFull's black ring. */
+    private val blackRing = listOf(0.6..0.8)
+
+    /**
+     * A face with the black ring, in the brightness of SyntheticFace's black,
+     * and a shaft of brightness [v] along the x axis from [from] out to the edge.
+     */
+    private fun ringFace(from: Vec2, v: Float) =
+        FacePainter(0.9f).ring(0.6, 0.8, 0.118f).stripe(from, Vec2(-1.1, 0.0), 0.012, v).build()
+
+    /** Towards the entries of the ring faces, where the foot point would lie, three degrees off. */
+    private val inward = rotate(Vec2(1.0, 0.0), 3.0)
+
+    @Test
+    fun aDarkShaftIsWalkedAcrossTheBlackRingToItsEntry() {
+        val result = TipWalk.walk(ringFace(Vec2(-0.5, 0.0), 0.16f), Vec2(-0.9, 0.0), inward, blackRing)
+
+        assertThat(result.refinement).isEqualTo(TipRefinement.REFINED)
+        assertThat(result.tip.distanceTo(Vec2(-0.5, 0.0))).isAtMost(0.002)
+    }
+
+    @Test
+    fun withoutTheBlackZoneTheRingEndsADarkShaft() {
+        val result = TipWalk.walk(ringFace(Vec2(-0.5, 0.0), 0.16f), Vec2(-0.9, 0.0), inward)
+
+        assertThat(result.refinement).isEqualTo(TipRefinement.REFINED)
+        assertThat(result.tip.distanceTo(Vec2(-0.8, 0.0))).isAtMost(0.002)
+    }
+
+    @Test
+    fun aDarkShaftEnteringOnBlackEndsWhereItVanished() {
+        // A known limit: the entry at -0.7 cannot be seen, the tip stays at the ring's edge.
+        val result = TipWalk.walk(ringFace(Vec2(-0.7, 0.0), 0.16f), Vec2(-0.95, 0.0), inward, blackRing)
+
+        assertThat(result.refinement).isEqualTo(TipRefinement.REFINED)
+        assertThat(result.tip.distanceTo(Vec2(-0.8, 0.0))).isAtMost(0.002)
+    }
+
+    @Test
+    fun aGreyShaftEnteringOnBlackEndsAtItsEntry() {
+        // Grey is darker than white and lighter than black: it has contrast on the
+        // ring, so the ring is not bridged before its entry.
+        val result = TipWalk.walk(ringFace(Vec2(-0.7, 0.0), 0.59f), Vec2(-0.95, 0.0), inward, blackRing)
+
+        assertThat(result.refinement).isEqualTo(TipRefinement.REFINED)
+        assertThat(result.tip.distanceTo(Vec2(-0.7, 0.0))).isAtMost(0.002)
     }
 }

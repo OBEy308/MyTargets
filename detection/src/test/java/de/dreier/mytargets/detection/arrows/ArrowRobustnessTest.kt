@@ -133,6 +133,20 @@ class ArrowRobustnessTest {
     }
 
     @Test
+    fun anArrowLeaningFourDegreesIsFoundOnceAtItsEntry() {
+        // At a height of 2.0 a lean of 4 degrees across puts the shaft's line
+        // about 0.14 from Q, far outside the search's window of 0.04: the search
+        // meets the shaft only in pieces, and every piece walks to the entry
+        // (arrow design, Verfahren step 4, Neu ansetzen).
+        val arrow = SyntheticArrow(Vec2(0.1, -0.05), tilt = leanAcross(Vec2(0.1, -0.05), 4.0))
+
+        val analysis = analyse(photograph(arrow), 1)
+
+        assertThat(analysis.candidates.filter { it.tip.distanceTo(arrow.entry) <= 0.02 }).hasSize(1)
+        assertThat(analysis.selection.accepted.single().local.distanceTo(arrow.entry)).isAtMost(0.01)
+    }
+
+    @Test
     fun aShadowThatDoesNotPointAtTheFootPointIsNotFound() {
         val start = Vec2(0.1, -0.05)
         val turned = rotate((start - camera.footPoint) * (1.0 / (start - camera.footPoint).length), 30.0)

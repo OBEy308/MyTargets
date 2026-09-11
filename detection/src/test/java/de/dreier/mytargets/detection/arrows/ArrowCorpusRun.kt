@@ -15,6 +15,7 @@
 
 package de.dreier.mytargets.detection.arrows
 
+import com.google.common.truth.Truth.assertWithMessage
 import de.dreier.mytargets.detection.Candidate
 import de.dreier.mytargets.detection.DetectionRequest
 import de.dreier.mytargets.detection.FaceLayout
@@ -26,7 +27,10 @@ import de.dreier.mytargets.detection.geometry.CommonPoint
 import de.dreier.mytargets.detection.geometry.FootPoint
 import de.dreier.mytargets.detection.geometry.Mat3
 import de.dreier.mytargets.detection.geometry.Vec2
+import de.dreier.mytargets.detection.metrics.ArrowBounds
 import de.dreier.mytargets.detection.metrics.ArrowGroups
+import de.dreier.mytargets.detection.metrics.ArrowMeasurement
+import de.dreier.mytargets.detection.metrics.ArrowPins
 import de.dreier.mytargets.detection.metrics.ArrowReport
 import de.dreier.mytargets.detection.metrics.ArrowRow
 import de.dreier.mytargets.detection.metrics.DetectedShotRecord
@@ -58,7 +62,7 @@ import kotlin.math.roundToInt
 /**
  * Finds the arrows in every annotated photograph in scope and writes the
  * report and the stage images (arrow design, Korpuslauf und Bericht). It
- * measures and does not judge until the bounds are pinned.
+ * fails when a metric of the oblique photographs gets worse than its bound.
  */
 class ArrowCorpusRun {
 
@@ -132,9 +136,22 @@ class ArrowCorpusRun {
             }
         }
 
+        val oblique = outcomes.filter { ArrowGroups.of(it.entry) == ArrowGroups.OBLIQUE }
+        val measurement = ArrowMeasurement.of(rows.count { it.group == ArrowGroups.OBLIQUE }, Metrics.over(oblique))
+        // The worst a matched error can be: the detector's budget plus the largest annotation tolerance.
+        val worstBudget = ShotMatching.DEFAULT_POSITION_TOLERANCE +
+            (oblique.flatMap { it.entry.shots }.mapNotNull { it.positionTolerance }.maxOrNull() ?: 0.0)
         val report = File(reportDir, "arrows.md")
-        report.writeText(ArrowReport.render("Arrows against the corpus", rows, truths, photos, outcomes, outOfScope))
+        report.writeText(
+            ArrowReport.render("Arrows against the corpus", rows, truths, photos, outcomes, outOfScope) +
+                ArrowReport.pinsSection(ArrowBounds.pinsFor(measurement, worstBudget))
+        )
         println("Arrow report: ${report.absolutePath}")
+
+        // Checked after writing, so a failing run still leaves its report.
+        val broken = ArrowBounds.violations(measurement, PINS)
+        assertWithMessage("bounds of the oblique photographs:\n" + broken.joinToString("\n"))
+            .that(broken).isEmpty()
     }
 
     private class Measured(
@@ -326,6 +343,13 @@ class ArrowCorpusRun {
     }
 
     private companion object {
+        /**
+         * Pinned from the report of 2026-09-11 (arrow design, Schranken):
+         * the block under "Bounds, oblique photographs". When the corpus changes
+         * the run fails and says so; set them again against a new report.
+         */
+        val PINS = ArrowPins(photographs = 15, listed = 86, matched = 33, falsePositives = 10, correctScores = 21, comparableScores = 23, medianErrorBound = 0.011363, p95ErrorBound = 0.054956)
+
         val CYAN = Scalar(255.0, 255.0, 0.0)
         val GREEN = Scalar(0.0, 200.0, 0.0)
         val WHITE = Scalar(255.0, 255.0, 255.0)

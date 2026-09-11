@@ -125,8 +125,9 @@ them against the listed hits:
 ```
 
 It writes `detection/build/reports/detection/arrows.md` and, beside it, one
-folder of stage images per photograph. It measures and does not judge; the
-bounds for the oblique photographs come in a later step.
+folder of stage images per photograph. It fails when a metric of the oblique
+photographs gets worse than its bound, or when the oblique group of the
+corpus has changed; the end of the report then shows the values to pin anew.
 
 ## Build
 

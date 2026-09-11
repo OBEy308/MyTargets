@@ -256,6 +256,32 @@ object ArrowReport {
         }
     }
 
+    /**
+     * The block to copy into ArrowCorpusRun's PINS (arrow design, Schranken).
+     * Six decimals, so rounding never moves a bound below the value it came from.
+     */
+    fun pinsSection(pins: ArrowPins): String {
+        fun bound(v: Double?) = v?.let { String.format(Locale.ROOT, "%.6f", it) } ?: "null"
+        return buildString {
+            appendLine()
+            appendLine("## Bounds, oblique photographs")
+            appendLine()
+            appendLine(
+                "What this run would pin. The check allows one arrow of slack on each count; " +
+                    "the error bounds already contain theirs."
+            )
+            appendLine()
+            appendLine("```kotlin")
+            appendLine(
+                "ArrowPins(photographs = ${pins.photographs}, listed = ${pins.listed}, " +
+                    "matched = ${pins.matched}, falsePositives = ${pins.falsePositives}, " +
+                    "correctScores = ${pins.correctScores}, comparableScores = ${pins.comparableScores}, " +
+                    "medianErrorBound = ${bound(pins.medianErrorBound)}, p95ErrorBound = ${bound(pins.p95ErrorBound)})"
+            )
+            appendLine("```")
+        }
+    }
+
     private fun ratio(count: Int, total: Int): Double? = if (total == 0) null else count.toDouble() / total
 
     private fun median(sorted: List<Double>): Double? = when {

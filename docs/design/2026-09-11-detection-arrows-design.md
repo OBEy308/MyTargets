@@ -50,8 +50,11 @@ trägt. Was er für die Pfeilfindung bedeutet, steht unter *Verfahren*.
   und bekommen keine Schranke.
 - Das Befiederungsende als zweites Merkmal und die Schätzung des Fluchtpunkts
   aus den Streifen (Haupt-Spec, Stufe 6). In 3b liegt jeder Kandidat per
-  Konstruktion auf einer Geraden durch den Fußpunkt. Ein falscher Fußpunkt
-  zeigt sich deshalb als fehlende Kandidaten, nicht als falsch gewähltes Ende.
+  Konstruktion auf einer Geraden nahe dem Fußpunkt. Ein falscher Fußpunkt oder
+  ein geneigter Pfeil zeigt sich deshalb als fehlender oder verkürzter
+  Kandidat, nicht als falsch gewähltes Ende; der Bericht misst beides am
+  Abstand der Kandidatengeraden von `Q` (siehe *Verfahren*, Schritt 3, und
+  *Offene Punkte*, *Geneigte Pfeile*).
 - 3-Spot-Auflagen und `WA6Ring`
 - Alles in `:app`: die Umwandlung `Bitmap` → `Mat`, das Lesen der Brennweite
   aus EXIF, die Linienregel mit Pfeilradius für den Ringwert
@@ -63,6 +66,7 @@ trägt. Was er für die Pfeilfindung bedeutet, steht unter *Verfahren*.
 |---|---|---|
 | Frontale Fotos | laufen mit, eigene Gruppe, keine Schranke | Die Haupt-Spec nimmt leicht schräge Aufnahmen an und nennt frontale den schwächeren Fall. Bei frontalen Fotos liegt der Fußpunkt zwischen den Pfeilen, und Schäfte nahe daran schrumpfen zu Stummeln. |
 | Verfahren | `tools/radial.py` und `tools/tips.py` des Korpus portieren | Sie haben Kandidaten und Einschüsse der schrägen Fotos geliefert. Die Schaftrichtung folgt aus der Geometrie, statt gesucht zu werden. |
+| Geneigte Pfeile | nur die seitlichen Versätze der Suche, keine Schätzung des Fluchtpunkts aus den Streifen | Die Versätze decken eine Neigung bis `0,04 / d` gegen die Normale ab, auf dem Korpus 0,7° bis 1,8°. Der Korpus ist indoor auf der Achse aufgenommen und hält das. Der Bericht misst den Abstand jeder Kandidatengeraden von `Q`, damit ein Folgeplan weiß, ob die Schätzung aus den Streifen nötig ist (siehe *Offene Punkte*). |
 | Stufen 4 und 5 | entfallen für 3b | Der Flankenkontrast ist lokal und braucht keine Lichtkorrektur. Farbfeld und Residuum wären der größte Teil von 3b, ohne Vorlage und ungetestet, und jeder Ringübergang hinterließe nach dem Entzerren einen Saum im Residuum. |
 | Registrierung im Korpuslauf | die eigene aus 3a, nicht die Referenz aus dem Sidecar | Ihr größter Fehler auf dem Korpus liegt bei 0,019 Radien, der Median der Foto-Maxima bei 0,0015; das Budget des Erkenners ist 0,05. Gemessen wird so die ganze Kette, und der Bericht zeigt je Foto den Registrierungsfehler daneben. |
 | Arbeitsbild | das entzerrte Bild aus 3a (`FaceWarp`) | Es hat auf dem Korpus 706 bis 1364 px je Radius, die Werkzeuge arbeiteten bei 1000. Ihre Schwellen stehen in Auflageneinheiten und gelten unverändert. |
@@ -96,8 +100,12 @@ trägt. Was er für die Pfeilfindung bedeutet, steht unter *Verfahren*.
 - **Vorhandener Code** wird genutzt, nicht nachgebaut: `OpenCvFaceRegistrar`,
   `FaceWarp`, `NormalVanishingPoint`, `SpotMapping`, `CandidateSelection`.
 - **`:detection-corpus`** bekommt den Pfeilbericht mit der Tabelle je Foto und
-  der Kandidatendiagnose. Es bleibt ohne Bildverarbeitung. Die Kennzahlen
-  rendert der vorhandene `MetricsReport`.
+  der Kandidatendiagnose und liest aus dem Sidecar zusätzlich
+  `registration.view.cameraPositionFaceUnits`, das der Test *Korpusgeometrie*
+  braucht; `SidecarTruth` kennt bisher nur `imageToTarget` und `imagedCentre`.
+  Die README des Korpus führt das Feld in ihrer Feldtabelle nach. Das Modul
+  bleibt ohne Bildverarbeitung. Die Kennzahlen rendert der vorhandene
+  `MetricsReport`.
 - **`:app`** bleibt unberührt.
 
 ### Schnittstelle
@@ -124,11 +132,13 @@ enum class TipRefinement { REFINED, NO_SHAFT, RAN_OUT }
 
 class ArrowCandidate(
     val tip: Vec2,                  // Einschuss, Auflagenkoordinaten
-    val far: Vec2,                  // anderes Ende des Laufs, zur Nocke hin
+    val far: Vec2,                  // anderes Ende, zur Nocke hin, auf der Geraden des Kandidaten
     val contrast: Double,           // Kontrast des Laufs aus der Suche
+    val shaftContrast: Double,      // Schaftkontrast aus dem Schaftlauf
     val score: Double,              // Länge mal Kontrast, wie radial.py
     val refinement: TipRefinement,
-    val confidence: Double,         // score / höchster score des Fotos
+    val offsetFromFoot: Double,     // Abstand der Geraden tip–far von Q, mit Vorzeichen
+    val confidence: Double,         // siehe Verfahren, Schritt 5
     val located: Candidate?         // Spot und spot-lokale Lage, null neben der Auflage
 )
 
@@ -170,7 +180,8 @@ class OpenCvArrowDetector(
   0,5 bis 0,8. Eichen lässt sich die Güte nicht, weil die Registrierung im
   Umfang kein einziges Mal scheitert.
 - **`DetectedShot.confidence`** ist die Zuversicht des Kandidaten.
-- `ArrowDetectorContractTest` folgt der neuen Signatur.
+- `ArrowDetectorContractTest` folgt der neuen Signatur. Weil auch der Stub ein
+  `Mat` entgegennimmt, lädt der Test die native Bibliothek über `OpenCvRule`.
 
 ## Verfahren
 
@@ -181,11 +192,13 @@ rechnet die Kantenlänge des entzerrten Bildes um.
 
 1. **Arbeitsbild.** `FaceWarp.warp` aus dem Original, die Kantenlänge wie in 3a
    nach der Pixeldichte am Scheibenzentrum, höchstens 3000 px. Davon der
-   Helligkeitskanal `V = max(B, G, R) / 255` als `FloatArray`. Eine Maske aus
-   Einsen wird mit `INTER_NEAREST` genauso entzerrt; Pixel außerhalb des
-   Originals sind ungültig. Eine Probe, an der ein ungültiges Pixel beteiligt
-   ist, liefert keinen Kontrast. Die Werkzeuge hielten jedes Pixel mit
-   `R + G + B = 0` für ungültig, was auf dem schwarzen Ring falsch sein kann.
+   Helligkeitskanal `V = max(B, G, R) / 255` als `FloatArray`. Dazu eine Maske
+   gültiger Pixel, auf dem entzerrten Raster aus `H⁻¹` gerechnet: Ein Pixel
+   ist gültig, wenn sein Urbild im Rechteck des Originals liegt. Das braucht
+   keine zweite `Mat` in Originalgröße und keinen zweiten Warp. Eine Probe, an
+   der ein ungültiges Pixel beteiligt ist, liefert keinen Kontrast. Die
+   Werkzeuge hielten jedes Pixel mit `R + G + B = 0` für ungültig, was auf dem
+   schwarzen Ring falsch sein kann.
 
 2. **Fußpunkt der Kamera.** Das Lot von der Kamera auf die Auflagenebene
    trifft sie im Fußpunkt `Q`. Im entzerrten Bild zeigt jedes Pixel, wo der
@@ -214,7 +227,16 @@ rechnet die Kantenlänge des entzerrten Bildes um.
      Strahl wird alle 0,002 auf dem Stück abgetastet, das im Quadrat
      `|x|, |y| < 1,05` liegt, und das für 17 seitliche Versätze von −0,04 bis
      +0,04 in Schritten von 0,005. Die Versätze nehmen Pfeile auf, die nicht
-     genau senkrecht stecken.
+     genau senkrecht stecken, aber nur wenig: Ein um `α` gegen die Normale
+     geneigter Pfeil bildet einen Streifen, dessen Gerade `Q` um `d · tan α`
+     verfehlt, mit `d` dem Abstand der Kamera von der Ebene in Radien, gleich
+     wo der Pfeil steckt. Alle gleich geneigten Pfeile laufen durch denselben
+     Punkt `Q − d · t`, mit `t` dem Anteil der Pfeilrichtung in der Ebene je
+     Einheit Höhe. Das Fenster ±0,04 verlangt also `tan α ≤ 0,04 / d`. Auf
+     dem Korpus liegt `d` zwischen 1,3 und 3,3 (`cameraPositionFaceUnits`,
+     dritter Wert), das sind 1,8° bis 0,7°. Ein stärker geneigter Schaft wird
+     nur noch als Sehne getroffen, und sein Einschuss aus der Suche rutscht
+     entlang des Schafts (siehe *Offene Punkte*, *Geneigte Pfeile*).
    - **Kontrast je Probe.** Die Mitte ist das Minimum dreier Linien im
      Abstand 0,003 um den Strahl, die Flanken liegen bei ±0,016.
      `dunkler = min(Flanken) − Mitte` für einen dunklen Schaft,
@@ -256,23 +278,46 @@ rechnet die Kantenlänge des entzerrten Bildes um.
      Der Schaftkontrast ist der Median der Proben mehr als 0,03 hinter der
      Saat. Ab 0,03 hinter der Saat geht der Lauf nach vorn. Der Einschuss ist
      die letzte Probe vor einer Lücke von mindestens 0,012, deren Kontrast
-     unter 35 % des Schaftkontrasts liegt.
+     unter 35 % des Schaftkontrasts liegt. Erreicht eine kürzere Lücke das
+     Ende des Fensters, endet der Lauf ebenfalls vor ihr; so macht es
+     `tips.py`, und das ist kein `RAN_OUT`.
    - Liegt der Schaftkontrast unter 0,08, gibt es keinen Schaft zu verfolgen
-     (`NO_SHAFT`). Endet der Lauf erst am Ende des Fensters (`RAN_OUT`), hat er
-     kein Ende gefunden. In beiden Fällen behält der Kandidat den Einschuss aus
-     der Suche. Die Werkzeuge haben diese Fälle dem Annotator gemeldet, der
-     Bericht zählt sie.
+     (`NO_SHAFT`). Hat noch die letzte Probe des Fensters Kontrast
+     (`RAN_OUT`), hat der Lauf kein Ende gefunden. In beiden Fällen behält der
+     Kandidat den Einschuss aus der Suche. Die Werkzeuge haben diese Fälle dem
+     Annotator gemeldet, der Bericht zählt sie.
+   - Nach dem Lauf liegt `far` auf der verfeinerten Geraden, als Projektion
+     des Suche-Endes darauf, und `offsetFromFoot` ist der Abstand dieser
+     Geraden von `Q` mit Vorzeichen. Bei `NO_SHAFT` und `RAN_OUT` bleibt die
+     Gerade der Suche, weil der Einschuss aus der Suche auf ihr liegt.
 
 5. **Zusammenlegen und Zuversicht.** Beides ist neu, weil es in den Werkzeugen
    der Annotator von Hand erledigt hat.
-   - Liegen zwei verfeinerte Einschüsse näher als 0,01 beieinander, bleibt der
-     besser bewertete.
-   - **Zuversicht** ist die Bewertung geteilt durch die höchste Bewertung
-     aller Kandidaten des Fotos nach dem Zusammenlegen. So hat die Abstandsregel aus Stufe 7, 0,15 der Skala, einen
-     Maßstab, ohne dass die Bewertung absolut geeicht sein muss. Die Zuversicht
-     ist der wichtigste Stellknopf von 3b. Die Kandidatendiagnose zeigt die
-     Zuversicht echter und falscher Kandidaten nebeneinander, und vor den
-     Schranken wird sie daran nachgestellt.
+   - Zwei Kandidaten sind derselbe Pfeil, wenn ihre verfeinerten Einschüsse
+     näher als 0,01 beieinander liegen oder wenn ihre Geraden zusammenfallen:
+     Richtung unter 2° und jeder Einschuss näher als 0,01 an der Geraden des
+     anderen. Der zweite Fall fängt zwei Sehnen desselben Schafts ab, von
+     denen eine im Lauf gescheitert ist und deshalb den Einschuss aus der
+     Suche behalten hat; ohne ihn wäre das ein Fehlfund. Es bleibt der mit
+     `REFINED` vor `RAN_OUT` vor `NO_SHAFT`, bei gleichem Ausgang der besser
+     bewertete.
+   - **Zuversicht.** Die Bewertung der Suche taugt zum Ordnen, nicht zum
+     Auswählen: Sie wächst mit der Länge, und ein kurzer echter Schaft, nahe
+     `Q` oder halb verdeckt, läge damit bei einem Ringfragment. Die
+     Abstandsregel aus Stufe 7, 0,15 der Skala, braucht dagegen echte Pfeile
+     nahe 1 und falsche nahe 0. Die Zuversicht ist deshalb Länge mal Kontrast
+     mit drei Änderungen: Die Länge sättigt bei 0,3, also
+     `min(Länge, 0,3) / 0,3`, weil ein Schaft ab dieser Länge nicht mehr
+     wahrscheinlicher ein Schaft ist. Der Kontrast ist der Schaftkontrast aus
+     dem Lauf, der das Merkmal „dunkle Linie mit zwei hellen Flanken“ auf der
+     nachgestellten Geraden misst. `NO_SHAFT` und `RAN_OUT` halbieren das
+     Produkt, weil ihr Einschuss nur aus der Suche stammt. Geteilt wird durch
+     den höchsten Wert aller Kandidaten des Fotos nach dem Zusammenlegen,
+     damit die Abstandsregel einen Maßstab hat, ohne dass der Kontrast
+     absolut geeicht sein muss. Die 0,3 und die Halbierung sind Startwerte.
+     Die Zuversicht bleibt der wichtigste Stellknopf von 3b: Die
+     Kandidatendiagnose zeigt sie für echte und falsche Kandidaten
+     nebeneinander, und vor den Schranken wird sie daran nachgestellt.
 
 6. **Spot und Auswahl.** `SpotMapping.locate` ordnet jeden Einschuss einem
    Spot zu und rechnet spot-lokal um. Ein Einschuss neben der Auflage fällt weg
@@ -286,7 +331,7 @@ rechnet die Kantenlänge des entzerrten Bildes um.
 |---|---|---|---|
 | Fußpunkt | Zerlegung der Pose aus Homographie und EXIF-Brennweite | Fluchtpunkt der Normalen unter der Homographie | vorhandene Geometrie; die Abweichung liegt innerhalb der seitlichen Versätze |
 | Auflösung | 1000 px je Radius | 706 bis 1364 px je Radius | das entzerrte Bild aus 3a; die Schwellen stehen in Auflageneinheiten |
-| ungültige Pixel | `R + G + B = 0` | mitentzerrte Maske | ein schwarzes Pixel auf dem schwarzen Ring ist gültig |
+| ungültige Pixel | `R + G + B = 0` | Urbild unter `H⁻¹` außerhalb des Originals | ein schwarzes Pixel auf dem schwarzen Ring ist gültig |
 | Saatpunkte | Suche, dann von Hand geprüft und ergänzt | nur die Suche | die Pipeline hat keinen Annotator |
 | Einschuss bei `RAN_OUT` | letzte Probe des Fensters | Einschuss aus der Suche | ein Lauf ohne Ende hat keinen Endpunkt, das Ende des Fensters ist willkürlich |
 | Auswahl | Annotator | Zusammenlegen, relative Zuversicht, Stufe 7 | neu |
@@ -328,21 +373,32 @@ Pfeile und Kennzahlen kommen unverändert aus `:detection-corpus`
    schlechtesten Fotos.
 2. Eine Tabelle je Foto, nach Gruppe, das schlechteste zuerst: Winkel, Abstand
    von `Q` zum Zentrum, größter Registrierungsfehler gegen die Referenz,
+   Abstand des eigenen `Q` zum `Q` aus der Referenz-Homographie mit denselben
+   Intrinsics, größter Abstand einer zugeordneten Kandidatengeraden von `Q`,
    gelistete und unaufgelöste Pfeile, Kandidaten, angenommene und zugeordnete
    Funde, Fehlfunde, Grund der Auswahl, größter Positionsfehler, Zahl der
    Kandidaten mit `NO_SHAFT` und `RAN_OUT`, Laufzeit je Stufe (Registrierung,
-   Entzerren, Suche, Lauf).
+   Entzerren, Suche, Lauf). Der Registrierungsfehler aus 3a misst auf den
+   Ringen; `Q` hängt an der dritten Zeile der Homographie, die die Ringe kaum
+   festlegen. Ein Foto mit kleinem Ringfehler kann deshalb ein deutlich
+   verschobenes `Q` haben, und nur diese Spalte zeigt das.
 3. **Kandidatendiagnose.** Sie trennt Finden von Auswählen. Dieselbe Zuordnung
    wie für die Kennzahlen läuft über alle Kandidaten statt nur über die
    angenommenen. Für jeden gelisteten Treffer steht dort, ob vor der Auswahl ein
-   Kandidat im Budget lag, auf welchem Rang und mit welcher Zuversicht, und ob
-   die Auswahl ihn angenommen hat. Je Foto kommt die höchste Zuversicht eines
-   Kandidaten dazu, der zu keinem Treffer passt. Je Gruppe fasst sie zusammen,
-   welcher Anteil der Treffer einen Kandidaten hatte und welchen Anteil erst die
-   Auswahl verloren hat.
+   Kandidat im Budget lag, auf welchem Rang, mit welcher Zuversicht und mit
+   welchem Abstand seiner Geraden von `Q`, und ob die Auswahl ihn angenommen
+   hat. Je Foto kommt die höchste Zuversicht eines Kandidaten dazu, der zu
+   keinem Treffer passt. Je Gruppe fasst sie zusammen, welcher Anteil der
+   Treffer einen Kandidaten hatte, welchen Anteil erst die Auswahl verloren
+   hat, und wie sich die Abstände der zugeordneten Kandidatengeraden von `Q`
+   verteilen: Median und Anteil über 0,03. Häufen sie sich am Rand des
+   Fensters, 0,04, ist das Fenster der Suche zu eng; ein gemeinsames
+   Vorzeichen auf einem Foto heißt, dass die Pfeile dort gemeinsam geneigt
+   stecken.
 
 **Debug-Bilder** unter `detection/build/reports/detection/arrows/<foto>/`: die
-Bilder 1 bis 3 vom Registrar wie in 3a, dazu
+Bilder 1 bis 3 vom Registrar und Bild 4 vom Korpuslauf wie in 3a, mit dem
+Helfer aus `RegistrationCorpusRun` geteilt, dazu
 
 - `5-kandidaten.png`: das entzerrte Bild mit `Q`, oder einem Pfeil zu ihm,
   wenn er außerhalb liegt, und allen Kandidaten als Strecken, nummeriert nach
@@ -358,14 +414,24 @@ Bilder 1 bis 3 vom Registrar wie in 3a, dazu
 Letzte Aufgabe des Plans, nachdem der erste vollständige Bericht vorliegt und
 die Zuversicht daran nachgestellt ist. Die Schranken gelten nur für die schrägen
 Fotos, Winkel `leicht-schraeg` oder `stark-schraeg`, gemessen mit
-`Metrics.over` über diese Gruppe. Jede lässt einen Pfeil Spielraum:
+`Metrics.over` über diese Gruppe. Jede Zählung lässt einen Pfeil Spielraum,
+der Positionsfehler ein bis zwei Pixel:
 
 | Kennzahl | Schranke |
 |---|---|
-| Erkennungsrate | ≥ (zugeordnete − 1) / gelistete |
-| Fehlfundrate | ≤ (Fehlfunde + 1) / gelistete |
-| Ringtreue | ≥ (richtige − 1) / Nenner, und der Nenner fällt um höchstens 1 |
-| Positionsfehler, Median und 95. Perzentil | ≤ dem gemessenen Wert eine Stelle weiter oben in der sortierten Liste der Fehler |
+| zugeordnete Treffer | ≥ gemessen − 1 |
+| Fehlfunde | ≤ gemessen + 1 |
+| richtige Ringwerte | ≥ gemessen − 1 |
+| vergleichbare Treffer, der Nenner der Ringtreue | ≥ gemessen − 1 |
+| Positionsfehler, Median und 95. Perzentil | ≤ gemessen + 0,002 |
+
+Festgeschrieben werden Zähler, nicht Raten: Bei festgeschriebener Zahl der
+gelisteten Treffer sind die Raten damit bestimmt, und der Spielraum ist genau
+ein Pfeil statt eines Bruchteils. Zähler und Nenner der Ringtreue sind einzeln
+gehalten, weil ein Verhältnis steigen kann, wenn beide fallen. Der Spielraum
+der Positionsfehler, 0,002 Radien, sind ein bis zwei Pixel des entzerrten
+Bildes; das linear interpolierte Perzentil aus `Metrics` hat keine „nächste
+Stelle“, an der sich ein Spielraum festmachen ließe.
 
 Dazu werden die Zahl der Fotos und der gelisteten Treffer der Gruppe
 festgeschrieben. Wächst der Korpus, schlägt der Lauf mit dieser Begründung
@@ -394,12 +460,17 @@ damit ein roter Lauf seinen Bericht hinterlässt.
    - die Läufe: Lücken bis 0,02 werden überbrückt, größere trennen,
      Mindestlänge, Füllung und Ringfilter
    - Doppelte und Zusammenlegen: Zwei Stücke eines Schafts beiderseits einer
-     Lücke werden einer mit dem Einschuss näher an `Q`; zwei Schäfte im Abstand
-     0,05 bleiben zwei
+     Lücke werden einer mit dem Einschuss näher an `Q`; zwei parallele Schäfte
+     im Abstand 0,03 bleiben zwei, im Abstand 0,02 werden sie einer, was die
+     Grenze der Doppelten-Regel festhält
    - der Schaftlauf auf einem Streifen mit bekanntem Ende: Einschuss auf eine
      Probe genau, ohne Streifen `NO_SHAFT`, mit Streifen über das Fenster
-     hinaus `RAN_OUT`
-   - Zusammenlegen nach dem Verfeinern, relative Zuversicht, die Umwandlung von
+     hinaus `RAN_OUT`, mit einer kurzen Lücke am Fensterende der Einschuss
+     davor
+   - der Abstand einer Geraden von `Q` mit Vorzeichen
+   - Zusammenlegen nach dem Verfeinern: zwei Sehnen desselben Schafts, eine
+     `REFINED`, eine `NO_SHAFT`, werden eine, und die `REFINED` bleibt; die
+     Zuversicht mit Sättigung und Halbierung; die Umwandlung von
      `ArrowAnalysis` in `DetectionResult` samt `faceConfidence`
 2. **Synthetische Bilder**, testgetrieben. `SyntheticFace` bekommt eine Kamera
    aus Brennweite, Drehung und Lage, aus der sich die Homographie der Auflage
@@ -412,12 +483,21 @@ damit ein roter Lauf seinen Bericht hinterlässt.
    scheitert so, statt unter beiden Vorzeichen grün zu bleiben. Weitere Fälle:
    Ein Schlagschatten, der nicht durch `Q` zeigt, wird nicht gefunden; ein
    grauer Schaft auf dem schwarzen Ring und ein Schaft, der den schwarzen Ring
-   kreuzt, werden gefunden. Das ist eine Prüfung gegen exakt bekannte Wahrheit,
-   keine Schranke für den Korpus.
+   kreuzt, werden gefunden. Ein Pfeil, der bei `d` = 2 um 1° geneigt steckt,
+   liegt innerhalb des Fensters der Suche, und sein Einschuss muss auf 0,01
+   stimmen. Bei 3° liegt seine Gerade weiter als 0,04 von `Q`: Ein Kandidat
+   muss auf der Geraden des Schafts liegen und in `offsetFromFoot` den
+   Abstand `d · tan α` auf 0,01 tragen, damit die Diagnose die Neigung
+   ausweist; ob sein Einschuss stimmt, verlangt der Test nicht. Ein Bild, das
+   die Auflage anschneidet, sodass ein Schaft zur Nocke hin aus dem Bild
+   läuft, ergibt einen Kandidaten mit richtigem Einschuss und keinen
+   Kandidaten entlang des Bildrands. Das ist eine Prüfung gegen exakt
+   bekannte Wahrheit, keine Schranke für den Korpus.
 3. **Korpusgeometrie.** Für jedes Foto mit `registration.view` stimmt `Q` aus
-   Referenz-Homographie und Brennweite mit `cameraPositionFaceUnits` auf 0,03
-   Radien überein (siehe *Verfahren*, Schritt 2). Ohne Korpus überspringt sich
-   der Test.
+   Referenz-Homographie und Brennweite mit `cameraPositionFaceUnits` auf 0,04
+   Radien überein, dem Fenster der Suche (siehe *Verfahren*, Schritt 2).
+   Gemessen sind höchstens 0,028; eine Grenze bei 0,03 wäre eine Rundung vom
+   Rot entfernt. Ohne Korpus überspringt sich der Test.
 4. **Korpuslauf** wie oben.
 
 Die Grenzwerte der Wahrnehmung, also Kontrastschwellen, Längen und Winkel,
@@ -434,7 +514,10 @@ Mit diesem Dokument geändert:
 - *Stufen 4 und 5:* für schräge Aufnahmen ersetzt durch die Schaftsuche durch
   den Fußpunkt. Farbfeld und Residuum bleiben beschrieben, als möglicher Weg
   für frontale Aufnahmen.
-- *Stufe 6:* ergänzt um die Form der Regel im entzerrten Bild.
+- *Stufe 6:* ergänzt um die Form der Regel im entzerrten Bild und um die
+  Grenze der Suche durch `Q`: Sie setzt bis auf `0,04 / d` senkrecht
+  steckende Pfeile voraus; für geneigte bleibt die Schätzung des Fluchtpunkts
+  aus den Streifen der Weg, den 3b noch nicht geht.
 - *Debug-Ansicht:* die Bilder 5 bis 7 aus dem Korpuslauf.
 - *Reihenfolge der Umsetzung:* Schritt 2 nennt die Serie vom 2026-09-10.
   Schritt 7 verweist auf dieses Dokument; festgeschrieben werden die Kennzahlen
@@ -449,6 +532,21 @@ Mit diesem Dokument geändert:
   Werkzeuge, ein kleiner Positionsfehler heißt deshalb auch „nahe an den
   Werkzeugen“. Wo der Annotator korrigiert hat, zeigt der Bericht den Fehler,
   den das Werkzeug gemacht hätte; das ist gewollt.
+- **Geneigte Pfeile.** Die Suche findet einen Schaft nur ganz, wenn seine
+  Gerade höchstens 0,04 von `Q` entfernt liegt, also bis zu einer Neigung von
+  `0,04 / d` gegen die Normale, auf dem Korpus 0,7° bis 1,8° (siehe
+  *Verfahren*, Schritt 3). Indoor auf 10 m von der Achse aus hält das, und der
+  Korpus ist so aufgenommen. Outdoor auf 70 m stecken alle Pfeile um den
+  Fallwinkel von rund 5° geneigt, ein Schütze einen halben Meter neben der
+  Achse gibt bei 10 m 3°. Dort laufen die Streifen durch einen gemeinsamen
+  Punkt neben `Q`, und die Haupt-Spec sieht vor, ihn aus den Streifen zu
+  schätzen. 3b tut das nicht. Damit ein Folgeplan weiß, ob es nötig ist,
+  trägt jeder Kandidat den Abstand seiner Geraden von `Q`, und die
+  Kandidatendiagnose fasst die Verteilung zusammen. Der naheliegende Weg
+  danach: nach dem ersten Lauf den Punkt, der die Abstandsquadrate zu den
+  verfeinerten Geraden minimiert, und liegt er weiter als 0,04 von `Q`, die
+  Suche von dort wiederholen. Das ist eine Grenze von 3b, nicht der
+  Haupt-Spec.
 - **Frontale Fotos** bleiben der Schwachpunkt. Wege für einen Folgeplan sind
   die Stufen 4 und 5 der Haupt-Spec oder Befiederung und Nocke als Merkmal,
   wo der Schaft zum Stummel wird.
@@ -467,7 +565,10 @@ Mit diesem Dokument geändert:
   wird mit der Integration entschieden.
 - **Relative Zuversicht.** Auf einem Foto ohne einen einzigen Pfeil bekommt der
   beste falsche Kandidat die Zuversicht 1, dann schützt nur die
-  Kontrastschwelle der Suche. Der Korpus hat kein solches Foto.
+  Kontrastschwelle der Suche. Der Korpus hat kein solches Foto. Ob Sättigung
+  bei 0,3 und Halbierung für `NO_SHAFT` und `RAN_OUT` echte von falschen
+  Kandidaten trennen, zeigt erst die Kandidatendiagnose; die Werte sind
+  Startwerte.
 - **Dicht beieinander steckende Pfeile.** Das Verwerfen von Doppelten legt zwei
   sich berührende Schäfte zusammen. Das ist die bekannte Grenze *Stark
   überlappende Schäfte* der Haupt-Spec; die Kandidatendiagnose zeigt die

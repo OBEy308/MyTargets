@@ -293,7 +293,13 @@ weiter entfernt. Damit ist die Zuordnung berechenbar statt heuristisch.
 der Homographie ist der Fußpunkt `Q` der Kamera auf der Auflagenebene. Jeder
 senkrecht steckende Schaft liegt dort auf einer Geraden durch `Q`, und der
 Einschuss ist sein Ende näher an `Q`. Plan 3b sucht die Schäfte genau so
-(Pfeilfindungsdesign, *Verfahren*).
+(Pfeilfindungsdesign, *Verfahren*). Ein um `α` geneigter Schaft verfehlt `Q`
+um `d · tan α`, mit `d` dem Abstand der Kamera von der Ebene in Radien, und
+alle gleich geneigten Schäfte laufen durch einen gemeinsamen Punkt neben `Q`.
+Die Suche von 3b lässt dafür 0,04 Radien zu, also rund 1° bei `d` = 2.
+Outdoor auf 70 m stecken die Pfeile um den Fallwinkel von etwa 5° geneigt;
+dort ist der Fluchtpunkt aus den Streifen zu schätzen, wie oben beschrieben,
+was 3b noch nicht tut.
 
 *Korrektur vom 2026-09-09.* Bis zur Gesamtprüfung des Geometrieplans stand hier
 die umgekehrte Regel, und der Absatz über das Spreizen widerlegte sie bereits.

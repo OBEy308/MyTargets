@@ -663,6 +663,34 @@ Mit diesem Dokument geändert:
   Schritt 4), die Zählung der Stücke im Bericht (*Korpuslauf und Bericht*,
   Punkt 3), danach eine zweite Messung und erst dann die Zuversicht und die
   Schranken.
+- **Zweite Messung (2026-09-11), nach dem Nachtrag.** Schräg: 33 von 86
+  Treffern gefunden (38,4 %), 10 Fehlfunde, Ringtreue 91,3 % (21/23),
+  Positionsfehler Median 0,0089, 95. Perzentil 0,0462. 68 Treffer hatten
+  einen Kandidaten, 36 davon hat erst die Auswahl verloren, 18 hatten keinen;
+  Linienabstände im Median 0,1261, 58 von 68 über 0,03. Falsche Kandidaten:
+  36 auf dem Schaft eines Treffers, 80 anderswo. Frontal: 15 von 74 (20,3 %),
+  30 Fehlfunde, Ringtreue 88,9 % (8/9), Positionsfehler Median 0,0130,
+  95. Perzentil 0,0385; 28 Treffer hatten einen Kandidaten, 15 davon hat die
+  Auswahl verloren, 46 hatten keinen; Linienabstände im Median 0,0926, 23 von
+  28 über 0,03; falsche Kandidaten 22 auf Schäften, 71 anderswo. Laufzeit je
+  schrägem Foto im Median: Registrierung 654 ms, Entzerren 40 ms, Suche
+  706 ms, Lauf 207 ms. Positionsfehler und Ringtreue sind schlechter als in
+  der ersten Messung, weil jetzt auch Treffer gefunden werden, die vorher
+  fehlten, etwa am Rand des schwarzen Rings. Die Startwerte der Zuversicht
+  sind geblieben: Den größten Verlust macht jetzt die Auswahl. Auf 5 schrägen
+  Fotos nimmt sie nichts an, obwohl echte Kandidaten oben liegen, auf
+  `leicht-schraeg_03` etwa 1,0, 0,98, 0,94 und 0,87 gegen 0,78 als besten
+  falschen, weil die Regel aus Stufe 7 eine Lücke von 0,15 genau an der Stelle
+  der erwarteten Pfeilzahl verlangt; unter 15 dicht gestaffelten Kandidaten
+  gibt es sie nicht. Sättigungslänge und Faktor ändern daran nichts, `RAN_OUT`
+  kommt kaum noch vor. Die Auswahlregel und die übrigen Fehlkandidaten,
+  gedruckte Ringlinien nahe am Auflagenrand, Schaftstücke hinter bunten Wraps
+  und Risse im Gold, gehören in einen Folgeplan, eingestellt am gewachsenen
+  Korpus. Ob das breitere Fenster der Suche nötig ist, bleibt offen: Welche
+  der 18 Treffer ohne Kandidat die Suche verfehlt und welche als dunkle
+  Einschüsse auf dem schwarzen Ring unsichtbar sind, zeigt erst eine
+  Auszählung wie nach der ersten Messung. Die Schranken schreiben diesen
+  Stand fest.
 - **Mehr Fotos.** 86 Treffer auf 15 schrägen Fotos reichen, um die großen
   Fehlerarten zu sehen, aber nicht, um die Zuversicht und die Schranken
   einzustellen, ohne dass sie nur zu diesen Fotos passen: Die Treffer eines

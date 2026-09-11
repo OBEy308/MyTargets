@@ -29,3 +29,14 @@ fun interface DebugSink {
         val NONE = DebugSink { _, _ -> }
     }
 }
+
+/** Renders a stage only when someone looks, and releases it after the sink. */
+internal fun DebugSink.show(stage: String, render: () -> Mat) {
+    if (this === DebugSink.NONE) return
+    val rendered = render()
+    try {
+        image(stage, rendered)
+    } finally {
+        rendered.release()
+    }
+}

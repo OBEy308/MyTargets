@@ -53,8 +53,8 @@ trägt. Was er für die Pfeilfindung bedeutet, steht unter *Verfahren*.
   Konstruktion auf einer Geraden nahe dem Fußpunkt. Ein falscher Fußpunkt oder
   ein geneigter Pfeil zeigt sich deshalb als fehlender oder verkürzter
   Kandidat, nicht als falsch gewähltes Ende; der Bericht misst beides am
-  Abstand der Kandidatengeraden von `Q` (siehe *Verfahren*, Schritt 3, und
-  *Offene Punkte*, *Geneigte Pfeile*).
+  Abstand der Kandidatengeraden von `Q` und am gemeinsamen Punkt der Geraden
+  (siehe *Verfahren*, Schritt 3, und *Offene Punkte*, *Geneigte Pfeile*).
 - 3-Spot-Auflagen und `WA6Ring`
 - Alles in `:app`: die Umwandlung `Bitmap` → `Mat`, das Lesen der Brennweite
   aus EXIF, die Linienregel mit Pfeilradius für den Ringwert
@@ -66,7 +66,7 @@ trägt. Was er für die Pfeilfindung bedeutet, steht unter *Verfahren*.
 |---|---|---|
 | Frontale Fotos | laufen mit, eigene Gruppe, keine Schranke | Die Haupt-Spec nimmt leicht schräge Aufnahmen an und nennt frontale den schwächeren Fall. Bei frontalen Fotos liegt der Fußpunkt zwischen den Pfeilen, und Schäfte nahe daran schrumpfen zu Stummeln. |
 | Verfahren | `tools/radial.py` und `tools/tips.py` des Korpus portieren | Sie haben Kandidaten und Einschüsse der schrägen Fotos geliefert. Die Schaftrichtung folgt aus der Geometrie, statt gesucht zu werden. |
-| Geneigte Pfeile | nur die seitlichen Versätze der Suche, keine Schätzung des Fluchtpunkts aus den Streifen | Die Versätze decken eine Neigung bis `0,04 / d` gegen die Normale ab, auf dem Korpus 0,7° bis 1,8°. Der Korpus ist indoor auf der Achse aufgenommen und hält das. Der Bericht misst den Abstand jeder Kandidatengeraden von `Q`, damit ein Folgeplan weiß, ob die Schätzung aus den Streifen nötig ist (siehe *Offene Punkte*). |
+| Geneigte Pfeile | nur die seitlichen Versätze der Suche, keine Schätzung des Fluchtpunkts aus den Streifen | Die Versätze decken jede Neigung mit `tan α ≤ 0,04 / d` gegen die Normale ab, auf dem Korpus 0,7° bis 1,8°. Der Korpus ist überwiegend draußen auf kurze Distanz aufgenommen, die Serie vom 2026-09-10 auf 10 m, und dort hat `radial.py` die Kandidaten geliefert. Ob die Pfeile im Fenster liegen, ist damit plausibel, aber nicht gemessen. Der Bericht misst es am Abstand jeder Kandidatengeraden von `Q` und am gemeinsamen Punkt der Geraden, damit ein Folgeplan weiß, ob die Schätzung aus den Streifen nötig ist (siehe *Offene Punkte*). |
 | Stufen 4 und 5 | entfallen für 3b | Der Flankenkontrast ist lokal und braucht keine Lichtkorrektur. Farbfeld und Residuum wären der größte Teil von 3b, ohne Vorlage und ungetestet, und jeder Ringübergang hinterließe nach dem Entzerren einen Saum im Residuum. |
 | Registrierung im Korpuslauf | die eigene aus 3a, nicht die Referenz aus dem Sidecar | Ihr größter Fehler auf dem Korpus liegt bei 0,019 Radien, der Median der Foto-Maxima bei 0,0015; das Budget des Erkenners ist 0,05. Gemessen wird so die ganze Kette, und der Bericht zeigt je Foto den Registrierungsfehler daneben. |
 | Arbeitsbild | das entzerrte Bild aus 3a (`FaceWarp`) | Es hat auf dem Korpus 706 bis 1364 px je Radius, die Werkzeuge arbeiteten bei 1000. Ihre Schwellen stehen in Auflageneinheiten und gelten unverändert. |
@@ -84,7 +84,8 @@ trägt. Was er für die Pfeilfindung bedeutet, steht unter *Verfahren*.
   `try`/`finally` freigegeben. Der vorhandene Test über die Importe deckt
   `arrows/` mit ab.
 - **Der Fußpunkt der Kamera** kommt nach `geometry/`, reines Kotlin (siehe
-  *Verfahren*, Schritt 2).
+  *Verfahren*, Schritt 2), ebenso der gemeinsame Punkt mehrerer Geraden, den
+  die Kandidatendiagnose braucht (siehe *Korpuslauf und Bericht*).
 - **Einheiten in `arrows/`:**
 
 | Einheit | Aufgabe | Vorlage |
@@ -103,7 +104,8 @@ trägt. Was er für die Pfeilfindung bedeutet, steht unter *Verfahren*.
   der Kandidatendiagnose und liest aus dem Sidecar zusätzlich
   `registration.view.cameraPositionFaceUnits`, das der Test *Korpusgeometrie*
   braucht; `SidecarTruth` kennt bisher nur `imageToTarget` und `imagedCentre`.
-  Die README des Korpus führt das Feld in ihrer Feldtabelle nach. Das Modul
+  Die README des Korpus führt das Feld in ihrer Feldtabelle nach; das ist ein
+  Commit im Korpus-Repo, nicht in diesem. Das Modul
   bleibt ohne Bildverarbeitung. Die Kennzahlen rendert der vorhandene
   `MetricsReport`.
 - **`:app`** bleibt unberührt.
@@ -194,7 +196,10 @@ rechnet die Kantenlänge des entzerrten Bildes um.
    nach der Pixeldichte am Scheibenzentrum, höchstens 3000 px. Davon der
    Helligkeitskanal `V = max(B, G, R) / 255` als `FloatArray`. Dazu eine Maske
    gültiger Pixel, auf dem entzerrten Raster aus `H⁻¹` gerechnet: Ein Pixel
-   ist gültig, wenn sein Urbild im Rechteck des Originals liegt. Das braucht
+   ist gültig, wenn sein Urbild einen positiven homogenen Anteil hat und in
+   `[0, W − 1] × [0, H − 1]` des Originals liegt, Pixelmitten auf ganzen
+   Zahlen. So erreicht die bilineare Abtastung des Warps den schwarzen Rand
+   nie, und ein Punkt hinter der Kamera zählt nicht als gültig. Das braucht
    keine zweite `Mat` in Originalgröße und keinen zweiten Warp. Eine Probe, an
    der ein ungültiges Pixel beteiligt ist, liefert keinen Kontrast. Die
    Werkzeuge hielten jedes Pixel mit `R + G + B = 0` für ungültig, was auf dem
@@ -227,16 +232,22 @@ rechnet die Kantenlänge des entzerrten Bildes um.
      Strahl wird alle 0,002 auf dem Stück abgetastet, das im Quadrat
      `|x|, |y| < 1,05` liegt, und das für 17 seitliche Versätze von −0,04 bis
      +0,04 in Schritten von 0,005. Die Versätze nehmen Pfeile auf, die nicht
-     genau senkrecht stecken, aber nur wenig: Ein um `α` gegen die Normale
-     geneigter Pfeil bildet einen Streifen, dessen Gerade `Q` um `d · tan α`
-     verfehlt, mit `d` dem Abstand der Kamera von der Ebene in Radien, gleich
-     wo der Pfeil steckt. Alle gleich geneigten Pfeile laufen durch denselben
-     Punkt `Q − d · t`, mit `t` dem Anteil der Pfeilrichtung in der Ebene je
-     Einheit Höhe. Das Fenster ±0,04 verlangt also `tan α ≤ 0,04 / d`. Auf
-     dem Korpus liegt `d` zwischen 1,3 und 3,3 (`cameraPositionFaceUnits`,
-     dritter Wert), das sind 1,8° bis 0,7°. Ein stärker geneigter Schaft wird
-     nur noch als Sehne getroffen, und sein Einschuss aus der Suche rutscht
-     entlang des Schafts (siehe *Offene Punkte*, *Geneigte Pfeile*).
+     genau senkrecht stecken, aber nur wenig. Ein um `α` gegen die Normale
+     geneigter Pfeil bildet einen Streifen, dessen Gerade nicht durch `Q`
+     läuft, sondern durch den Punkt `Q − d · t`. Dabei ist `d` der Abstand der
+     Kamera von der Ebene in Radien und `t` der Anteil der Pfeilrichtung in der
+     Ebene je Einheit Höhe, mit `|t| = tan α`. Alle gleich geneigten Pfeile
+     laufen durch diesen gemeinsamen Punkt. Der Abstand der Geraden von `Q` ist
+     `d · tan α · |sin β|`, mit `β` dem Winkel zwischen der Neigung und der
+     Richtung vom gemeinsamen Punkt zum Einschuss: quer dazu `d · tan α`, längs
+     dazu null. Bei gemeinsamer Neigung haben Pfeile beiderseits der Achse
+     durch `Q` und den gemeinsamen Punkt deshalb Abstände mit
+     entgegengesetztem Vorzeichen. Das Fenster ±0,04 hält jede Neigung mit
+     `tan α ≤ 0,04 / d`, gleich in welche Richtung. Auf dem Korpus liegt `d`
+     zwischen 1,3 und 3,3 (`cameraPositionFaceUnits`, dritter Wert), das sind
+     1,8° bis 0,7°. Ein stärker geneigter Schaft wird, je nach seiner Lage zur
+     Neigung, nur noch als Sehne getroffen, und sein Einschuss aus der Suche
+     rutscht entlang des Schafts (siehe *Offene Punkte*, *Geneigte Pfeile*).
    - **Kontrast je Probe.** Die Mitte ist das Minimum dreier Linien im
      Abstand 0,003 um den Strahl, die Flanken liegen bei ±0,016.
      `dunkler = min(Flanken) − Mitte` für einen dunklen Schaft,
@@ -283,38 +294,53 @@ rechnet die Kantenlänge des entzerrten Bildes um.
      `tips.py`, und das ist kein `RAN_OUT`.
    - Liegt der Schaftkontrast unter 0,08, gibt es keinen Schaft zu verfolgen
      (`NO_SHAFT`). Hat noch die letzte Probe des Fensters Kontrast
-     (`RAN_OUT`), hat der Lauf kein Ende gefunden. In beiden Fällen behält der
-     Kandidat den Einschuss aus der Suche. Die Werkzeuge haben diese Fälle dem
-     Annotator gemeldet, der Bericht zählt sie.
-   - Nach dem Lauf liegt `far` auf der verfeinerten Geraden, als Projektion
-     des Suche-Endes darauf, und `offsetFromFoot` ist der Abstand dieser
-     Geraden von `Q` mit Vorzeichen. Bei `NO_SHAFT` und `RAN_OUT` bleibt die
-     Gerade der Suche, weil der Einschuss aus der Suche auf ihr liegt.
+     (`RAN_OUT`), hat der Lauf kein Ende gefunden. In beiden Fällen gilt der
+     Einschuss aus der Suche. Die Werkzeuge haben diese Fälle dem Annotator
+     gemeldet, der Bericht zählt sie.
+   - **Gerade des Kandidaten.** Hat der Lauf einen Schaft gesehen, bei
+     `REFINED` und `RAN_OUT`, gilt die verfeinerte Gerade. `far` liegt auf ihr
+     als Projektion des Suche-Endes, bei `RAN_OUT` auch der Einschuss aus der
+     Suche, auf sie projiziert. Nur bei `NO_SHAFT` bleibt die Gerade der Suche,
+     weil der Lauf auf keiner Geraden einen Schaft gesehen hat.
+     `offsetFromFoot` ist der Abstand der Geraden des Kandidaten von `Q`, mit
+     dem Vorzeichen des Kreuzprodukts `(far − tip) × (Q − tip)`. Die Gerade
+     der Suche liegt per Konstruktion höchstens 0,04 von `Q`; nur die
+     verfeinerte kann zeigen, dass ein Schaft weiter an `Q` vorbeiläuft. Ein geneigter Schaft kann mit `RAN_OUT` enden, wenn die
+     Suche ihn nur als Sehne trifft und die Saat mehr als 0,035 hinter dem
+     Einschuss liegt. Gälte für `RAN_OUT` die Gerade der Suche, bliebe gerade
+     dieser Fall für die Diagnose unsichtbar.
 
 5. **Zusammenlegen und Zuversicht.** Beides ist neu, weil es in den Werkzeugen
    der Annotator von Hand erledigt hat.
-   - Zwei Kandidaten sind derselbe Pfeil, wenn ihre verfeinerten Einschüsse
-     näher als 0,01 beieinander liegen oder wenn ihre Geraden zusammenfallen:
+   - Zwei Kandidaten sind derselbe Pfeil, wenn ihre Einschüsse nach dem Lauf
+     näher als 0,01 beieinander liegen. Außerdem, wenn mindestens einer von
+     beiden `NO_SHAFT` oder `RAN_OUT` ist und ihre Geraden zusammenfallen:
      Richtung unter 2° und jeder Einschuss näher als 0,01 an der Geraden des
      anderen. Der zweite Fall fängt zwei Sehnen desselben Schafts ab, von
      denen eine im Lauf gescheitert ist und deshalb den Einschuss aus der
-     Suche behalten hat; ohne ihn wäre das ein Fehlfund. Es bleibt der mit
-     `REFINED` vor `RAN_OUT` vor `NO_SHAFT`, bei gleichem Ausgang der besser
-     bewertete.
+     Suche trägt; ohne ihn wäre das ein Fehlfund. Zwei Kandidaten mit
+     `REFINED` auf einer gemeinsamen Geraden bleiben dagegen zwei: Von `Q` aus
+     hintereinander steckende Pfeile liegen genau so, und sie zu verschmelzen
+     verlöre einen echten Treffer. Es bleibt der mit `REFINED` vor `RAN_OUT`
+     vor `NO_SHAFT`, bei gleichem Ausgang der besser bewertete.
    - **Zuversicht.** Die Bewertung der Suche taugt zum Ordnen, nicht zum
      Auswählen: Sie wächst mit der Länge, und ein kurzer echter Schaft, nahe
      `Q` oder halb verdeckt, läge damit bei einem Ringfragment. Die
      Abstandsregel aus Stufe 7, 0,15 der Skala, braucht dagegen echte Pfeile
      nahe 1 und falsche nahe 0. Die Zuversicht ist deshalb Länge mal Kontrast
-     mit drei Änderungen: Die Länge sättigt bei 0,3, also
-     `min(Länge, 0,3) / 0,3`, weil ein Schaft ab dieser Länge nicht mehr
-     wahrscheinlicher ein Schaft ist. Der Kontrast ist der Schaftkontrast aus
-     dem Lauf, der das Merkmal „dunkle Linie mit zwei hellen Flanken“ auf der
-     nachgestellten Geraden misst. `NO_SHAFT` und `RAN_OUT` halbieren das
-     Produkt, weil ihr Einschuss nur aus der Suche stammt. Geteilt wird durch
-     den höchsten Wert aller Kandidaten des Fotos nach dem Zusammenlegen,
-     damit die Abstandsregel einen Maßstab hat, ohne dass der Kontrast
-     absolut geeicht sein muss. Die 0,3 und die Halbierung sind Startwerte.
+     mit drei Änderungen: Die Länge von `tip` bis `far` nach dem Lauf sättigt
+     bei 0,3, also `min(Länge, 0,3) / 0,3`, weil ein Schaft ab dieser Länge
+     nicht mehr wahrscheinlicher ein Schaft ist. Der Kontrast ist der
+     Schaftkontrast aus dem Lauf, der das Merkmal „dunkle Linie mit zwei hellen
+     Flanken“ auf der nachgestellten Geraden misst. `NO_SHAFT` und `RAN_OUT`
+     halbieren das Produkt, weil ihr Einschuss nur aus der Suche stammt. Bei
+     `NO_SHAFT` liegt der Schaftkontrast per Definition unter 0,08; solche
+     Kandidaten landen damit am unteren Ende der Skala und bestehen die
+     Abstandsregel praktisch nie. Das ist gewollt, denn der Lauf hat auf ihrer
+     Geraden keinen Schaft gesehen. Geteilt wird durch den höchsten Wert
+     aller Kandidaten des Fotos nach dem Zusammenlegen, damit die
+     Abstandsregel einen Maßstab hat, ohne dass der Kontrast absolut geeicht
+     sein muss. Die 0,3 und die Halbierung sind Startwerte.
      Die Zuversicht bleibt der wichtigste Stellknopf von 3b: Die
      Kandidatendiagnose zeigt sie für echte und falsche Kandidaten
      nebeneinander, und vor den Schranken wird sie daran nachgestellt.
@@ -331,9 +357,9 @@ rechnet die Kantenlänge des entzerrten Bildes um.
 |---|---|---|---|
 | Fußpunkt | Zerlegung der Pose aus Homographie und EXIF-Brennweite | Fluchtpunkt der Normalen unter der Homographie | vorhandene Geometrie; die Abweichung liegt innerhalb der seitlichen Versätze |
 | Auflösung | 1000 px je Radius | 706 bis 1364 px je Radius | das entzerrte Bild aus 3a; die Schwellen stehen in Auflageneinheiten |
-| ungültige Pixel | `R + G + B = 0` | Urbild unter `H⁻¹` außerhalb des Originals | ein schwarzes Pixel auf dem schwarzen Ring ist gültig |
+| ungültige Pixel | `R + G + B = 0` | Urbild unter `H⁻¹` außerhalb von `[0, W − 1] × [0, H − 1]` oder hinter der Kamera | ein schwarzes Pixel auf dem schwarzen Ring ist gültig |
 | Saatpunkte | Suche, dann von Hand geprüft und ergänzt | nur die Suche | die Pipeline hat keinen Annotator |
-| Einschuss bei `RAN_OUT` | letzte Probe des Fensters | Einschuss aus der Suche | ein Lauf ohne Ende hat keinen Endpunkt, das Ende des Fensters ist willkürlich |
+| Einschuss bei `RAN_OUT` | letzte Probe des Fensters | Einschuss aus der Suche, auf die verfeinerte Gerade projiziert | ein Lauf ohne Ende hat keinen Endpunkt, das Ende des Fensters ist willkürlich; die Gerade dagegen hat der Lauf gefunden |
 | Auswahl | Annotator | Zusammenlegen, relative Zuversicht, Stufe 7 | neu |
 
 ## Korpuslauf und Bericht
@@ -375,7 +401,8 @@ Pfeile und Kennzahlen kommen unverändert aus `:detection-corpus`
    von `Q` zum Zentrum, größter Registrierungsfehler gegen die Referenz,
    Abstand des eigenen `Q` zum `Q` aus der Referenz-Homographie mit denselben
    Intrinsics, größter Abstand einer zugeordneten Kandidatengeraden von `Q`,
-   gelistete und unaufgelöste Pfeile, Kandidaten, angenommene und zugeordnete
+   Abstand des gemeinsamen Punkts der zugeordneten Geraden von `Q` (siehe
+   Punkt 3), gelistete und unaufgelöste Pfeile, Kandidaten, angenommene und zugeordnete
    Funde, Fehlfunde, Grund der Auswahl, größter Positionsfehler, Zahl der
    Kandidaten mit `NO_SHAFT` und `RAN_OUT`, Laufzeit je Stufe (Registrierung,
    Entzerren, Suche, Lauf). Der Registrierungsfehler aus 3a misst auf den
@@ -391,10 +418,20 @@ Pfeile und Kennzahlen kommen unverändert aus `:detection-corpus`
    keinem Treffer passt. Je Gruppe fasst sie zusammen, welcher Anteil der
    Treffer einen Kandidaten hatte, welchen Anteil erst die Auswahl verloren
    hat, und wie sich die Abstände der zugeordneten Kandidatengeraden von `Q`
-   verteilen: Median und Anteil über 0,03. Häufen sie sich am Rand des
-   Fensters, 0,04, ist das Fenster der Suche zu eng; ein gemeinsames
-   Vorzeichen auf einem Foto heißt, dass die Pfeile dort gemeinsam geneigt
-   stecken.
+   verteilen: Median und Anteil über 0,03. Liegen viele nahe 0,04 oder
+   darüber, ist das Fenster der Suche zu eng.
+
+   **Gemeinsamer Punkt.** Je Foto rechnet die Diagnose den Punkt, der die
+   Summe der Abstandsquadrate zu den Geraden der zugeordneten Kandidaten mit
+   `REFINED` oder `RAN_OUT` minimiert, und seinen Abstand von `Q`. Stecken die
+   Pfeile gemeinsam geneigt, laufen ihre Geraden durch diesen Punkt, und sein
+   Abstand von `Q` ist `d · tan α` (siehe *Verfahren*, Schritt 3). Das
+   Vorzeichen einzelner Abstände taugt dafür nicht, weil es bei gemeinsamer
+   Neigung zwischen den Seiten der Achse wechselt. Der Punkt braucht
+   mindestens zwei Geraden, die sich unter mehr als 2° schneiden; sonst bleibt
+   die Spalte leer. Er ist zugleich der Ausgangspunkt, von dem aus ein
+   Folgeplan die Suche wiederholen würde (siehe *Offene Punkte*, *Geneigte
+   Pfeile*).
 
 **Debug-Bilder** unter `detection/build/reports/detection/arrows/<foto>/`: die
 Bilder 1 bis 3 vom Registrar und Bild 4 vom Korpuslauf wie in 3a, mit dem
@@ -415,7 +452,7 @@ Letzte Aufgabe des Plans, nachdem der erste vollständige Bericht vorliegt und
 die Zuversicht daran nachgestellt ist. Die Schranken gelten nur für die schrägen
 Fotos, Winkel `leicht-schraeg` oder `stark-schraeg`, gemessen mit
 `Metrics.over` über diese Gruppe. Jede Zählung lässt einen Pfeil Spielraum,
-der Positionsfehler ein bis zwei Pixel:
+die Positionsfehler denselben einen Pfeil und dazu wenige Pixel:
 
 | Kennzahl | Schranke |
 |---|---|
@@ -423,15 +460,27 @@ der Positionsfehler ein bis zwei Pixel:
 | Fehlfunde | ≤ gemessen + 1 |
 | richtige Ringwerte | ≥ gemessen − 1 |
 | vergleichbare Treffer, der Nenner der Ringtreue | ≥ gemessen − 1 |
-| Positionsfehler, Median und 95. Perzentil | ≤ gemessen + 0,002 |
+| Positionsfehler, Median und 95. Perzentil | ≤ dasselbe Perzentil, nachdem in der Liste der gemessenen Fehler der kleinste durch einen Wert oberhalb aller ersetzt ist, plus 0,002 |
 
 Festgeschrieben werden Zähler, nicht Raten: Bei festgeschriebener Zahl der
 gelisteten Treffer sind die Raten damit bestimmt, und der Spielraum ist genau
 ein Pfeil statt eines Bruchteils. Zähler und Nenner der Ringtreue sind einzeln
-gehalten, weil ein Verhältnis steigen kann, wenn beide fallen. Der Spielraum
-der Positionsfehler, 0,002 Radien, sind ein bis zwei Pixel des entzerrten
-Bildes; das linear interpolierte Perzentil aus `Metrics` hat keine „nächste
-Stelle“, an der sich ein Spielraum festmachen ließe.
+gehalten, weil ein Verhältnis steigen kann, wenn beide fallen.
+
+Die Positionsfehler brauchen denselben Pfeil Spielraum. Die Zählschranken
+lassen zu, dass eine Zuordnung kippt: Ein Fehler kommt hinzu, fällt weg oder
+wird gegen einen anderen getauscht. Das linear interpolierte Perzentil aus
+`Metrics` rückt dabei um bis zu eine Stelle, und am oberen Ende liegen die
+Fehler weit auseinander. Ein fester Zuschlag fängt das nicht ab; Rauschen, das
+die Zählschranken passieren lassen, würde an der Perzentilschranke scheitern.
+Am ungünstigsten ist der Tausch des kleinsten Fehlers gegen einen großen, und
+genau diesen Tausch rechnet die Schranke ein. Der große Fehler ist das Budget
+des ungünstigsten Treffers der Gruppe, 0,05 plus die größte
+`positionTolerance`; größer kann kein zugeordneter Fehler sein. Nachgerechnet
+mit der Interpolation aus `Metrics`: Der Tausch deckt jede einzelne kippende
+Zuordnung ab, und ab 21 gemessenen Fehlern ändert der Wert des großen Fehlers
+weder Median noch 95. Perzentil. Die 0,002 Radien, 1,4 bis 2,7 Pixel des
+entzerrten Bildes, fangen Rauschen ab, bei dem keine Zuordnung kippt.
 
 Dazu werden die Zahl der Fotos und der gelisteten Treffer der Gruppe
 festgeschrieben. Wächst der Korpus, schlägt der Lauf mit dieser Begründung
@@ -468,8 +517,13 @@ damit ein roter Lauf seinen Bericht hinterlässt.
      hinaus `RAN_OUT`, mit einer kurzen Lücke am Fensterende der Einschuss
      davor
    - der Abstand einer Geraden von `Q` mit Vorzeichen
+   - der gemeinsame Punkt: Drei Geraden durch einen Punkt ergeben ihn exakt,
+     mit Rauschen auf den Geraden nahe daran; Geraden, die sich unter höchstens
+     2° schneiden, ergeben keinen
    - Zusammenlegen nach dem Verfeinern: zwei Sehnen desselben Schafts, eine
-     `REFINED`, eine `NO_SHAFT`, werden eine, und die `REFINED` bleibt; die
+     `REFINED`, eine `RAN_OUT`, werden eine, und die `REFINED` bleibt; zwei
+     Kandidaten mit `REFINED` auf derselben Geraden durch `Q`, 0,2
+     auseinander, bleiben zwei; die
      Zuversicht mit Sättigung und Halbierung; die Umwandlung von
      `ArrowAnalysis` in `DetectionResult` samt `faceConfidence`
 2. **Synthetische Bilder**, testgetrieben. `SyntheticFace` bekommt eine Kamera
@@ -484,11 +538,16 @@ damit ein roter Lauf seinen Bericht hinterlässt.
    Ein Schlagschatten, der nicht durch `Q` zeigt, wird nicht gefunden; ein
    grauer Schaft auf dem schwarzen Ring und ein Schaft, der den schwarzen Ring
    kreuzt, werden gefunden. Ein Pfeil, der bei `d` = 2 um 1° geneigt steckt,
-   liegt innerhalb des Fensters der Suche, und sein Einschuss muss auf 0,01
-   stimmen. Bei 3° liegt seine Gerade weiter als 0,04 von `Q`: Ein Kandidat
-   muss auf der Geraden des Schafts liegen und in `offsetFromFoot` den
-   Abstand `d · tan α` auf 0,01 tragen, damit die Diagnose die Neigung
-   ausweist; ob sein Einschuss stimmt, verlangt der Test nicht. Ein Bild, das
+   liegt in jeder Richtung innerhalb des Fensters der Suche, und sein
+   Einschuss muss auf 0,01 stimmen. Bei 3°, quer zur Richtung von `Q` zum
+   Einschuss geneigt, liegt seine Gerade rund 0,10 von `Q`: Ein Kandidat mit
+   `REFINED` oder `RAN_OUT` muss auf der Geraden des Schafts liegen und in
+   `offsetFromFoot` deren Abstand von `Q` auf 0,01 tragen, damit die Diagnose
+   die Neigung ausweist. Der Sollwert kommt aus der Projektion des Schafts,
+   nicht aus `d · tan α`, das nur für die quer liegende Neigung gilt. Ob sein
+   Einschuss stimmt, verlangt der Test nicht. Drei Pfeile mit derselben
+   Neigung von 3° an verschiedenen Stellen ergeben einen gemeinsamen Punkt,
+   der auf 0,01 bei `Q − d · t` liegt. Ein Bild, das
    die Auflage anschneidet, sodass ein Schaft zur Nocke hin aus dem Bild
    läuft, ergibt einen Kandidaten mit richtigem Einschuss und keinen
    Kandidaten entlang des Bildrands. Das ist eine Prüfung gegen exakt
@@ -515,9 +574,9 @@ Mit diesem Dokument geändert:
   den Fußpunkt. Farbfeld und Residuum bleiben beschrieben, als möglicher Weg
   für frontale Aufnahmen.
 - *Stufe 6:* ergänzt um die Form der Regel im entzerrten Bild und um die
-  Grenze der Suche durch `Q`: Sie setzt bis auf `0,04 / d` senkrecht
-  steckende Pfeile voraus; für geneigte bleibt die Schätzung des Fluchtpunkts
-  aus den Streifen der Weg, den 3b noch nicht geht.
+  Grenze der Suche durch `Q`: Sie setzt Pfeile mit `tan α ≤ 0,04 / d` voraus;
+  für stärker geneigte bleibt die Schätzung des Fluchtpunkts aus den Streifen
+  der Weg, den 3b noch nicht geht.
 - *Debug-Ansicht:* die Bilder 5 bis 7 aus dem Korpuslauf.
 - *Reihenfolge der Umsetzung:* Schritt 2 nennt die Serie vom 2026-09-10.
   Schritt 7 verweist auf dieses Dokument; festgeschrieben werden die Kennzahlen
@@ -532,21 +591,25 @@ Mit diesem Dokument geändert:
   Werkzeuge, ein kleiner Positionsfehler heißt deshalb auch „nahe an den
   Werkzeugen“. Wo der Annotator korrigiert hat, zeigt der Bericht den Fehler,
   den das Werkzeug gemacht hätte; das ist gewollt.
-- **Geneigte Pfeile.** Die Suche findet einen Schaft nur ganz, wenn seine
-  Gerade höchstens 0,04 von `Q` entfernt liegt, also bis zu einer Neigung von
-  `0,04 / d` gegen die Normale, auf dem Korpus 0,7° bis 1,8° (siehe
-  *Verfahren*, Schritt 3). Indoor auf 10 m von der Achse aus hält das, und der
-  Korpus ist so aufgenommen. Outdoor auf 70 m stecken alle Pfeile um den
-  Fallwinkel von rund 5° geneigt, ein Schütze einen halben Meter neben der
-  Achse gibt bei 10 m 3°. Dort laufen die Streifen durch einen gemeinsamen
-  Punkt neben `Q`, und die Haupt-Spec sieht vor, ihn aus den Streifen zu
-  schätzen. 3b tut das nicht. Damit ein Folgeplan weiß, ob es nötig ist,
-  trägt jeder Kandidat den Abstand seiner Geraden von `Q`, und die
-  Kandidatendiagnose fasst die Verteilung zusammen. Der naheliegende Weg
-  danach: nach dem ersten Lauf den Punkt, der die Abstandsquadrate zu den
-  verfeinerten Geraden minimiert, und liegt er weiter als 0,04 von `Q`, die
-  Suche von dort wiederholen. Das ist eine Grenze von 3b, nicht der
-  Haupt-Spec.
+- **Geneigte Pfeile.** Die Suche findet einen Schaft sicher ganz, solange
+  `tan α ≤ 0,04 / d` gilt, auf dem Korpus je nach Kameraabstand bis zu einer
+  Neigung zwischen 0,7° und 1,8° (siehe
+  *Verfahren*, Schritt 3). Auf kurze Distanz vom Schießplatz vor der Scheibe
+  aus ist das plausibel; die Serie vom 2026-09-10 ist auf 10 m so
+  aufgenommen. Stärker geneigt stecken Pfeile, wenn der Schütze neben der
+  Achse steht, ein halber Meter gibt bei 10 m 3°, oder wenn die Flugbahn nicht
+  parallel zur Normalen endet. Auf langen Distanzen fällt der Pfeil am Ende
+  um einige Grad, auf 70 m grob 5°. Steht die Scheibe nach hinten geneigt,
+  wie draußen häufig, zählt die Differenz aus Scheibenneigung und Fallwinkel,
+  nicht der Fallwinkel allein. Der Korpus weist keinen dieser Fälle aus; die
+  Distanz ist nur für die Serie vom 2026-09-10 bekannt. In diesen Fällen
+  laufen die Streifen durch einen gemeinsamen Punkt neben
+  `Q`, und die Haupt-Spec sieht vor, ihn aus den Streifen zu schätzen. 3b tut
+  das nicht. Damit ein Folgeplan weiß, ob es nötig ist, trägt jeder Kandidat
+  den Abstand seiner Geraden von `Q`, und die Kandidatendiagnose rechnet je
+  Foto den gemeinsamen Punkt der verfeinerten Geraden. Der naheliegende Weg
+  danach: Liegt dieser Punkt weiter als 0,04 von `Q`, wird die Suche von ihm
+  aus wiederholt. Das ist eine Grenze von 3b, nicht der Haupt-Spec.
 - **Frontale Fotos** bleiben der Schwachpunkt. Wege für einen Folgeplan sind
   die Stufen 4 und 5 der Haupt-Spec oder Befiederung und Nocke als Merkmal,
   wo der Schaft zum Stummel wird.

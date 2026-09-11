@@ -29,6 +29,8 @@ Beim Ausarbeiten sind diese Stellen genauer geworden. Keine ändert eine Entsche
 11. **Die Zonenradien von `WAFull`** stehen für Tests und Korpuslauf in `WaFullZones` (Testquellen); die App übersetzt sie später aus `TargetModelBase`.
 12. **Ringwert eines Funds:** der erste Zonenindex, dessen Radius größer ist als der Abstand des Einschusses vom Zentrum, wie `zone()` in `tips.py`; jenseits des letzten Rings keiner.
 13. **Die Zuversicht im Test** rechnet mit den Konstanten aus `ArrowCandidates`, damit ein Nachstellen in Task 13 den Test nicht bricht.
+14. **Die synthetischen Einschüsse liegen nicht im schwarzen Ring** (0,6 < r ≤ 0,8). Ein dunkler Schaft (V 0,157) hat auf Schwarz (V 0,118) einen Kontrast von 0,04, weit unter der Schwelle 0,15; die Suche sieht ihn dort nicht. Das ist die bekannte Grenze der Werkzeuge, kein Testfall. Der einzige Pfeil im schwarzen Ring ist der graue in Task 10. Geprüft ist auch der Weg jedes Schafts im entzerrten Bild, bei 30°, 45° und im Neigungsfall: Er beginnt auf einer hellen Zone, und wo er den schwarzen Ring kreuzt, bleibt die Lücke unter 0,3, damit das Zusammenlegen sie schließt. Die Lücke zählt, wie die Suche sie sieht: von der Stelle, an der die erste Flanke (±0,016) Schwarz erreicht, bis zu der, an der beide es verlassen haben; wo vor der Befiederung ein Stück Schaft dahinter bleibt, sind das 0,21 bis 0,23. Die eine Ausnahme ist (0,25; −0,42) bei 45°: Lücke 0,30, dahinter aber nur 0,04 Schaft, bevor die Befiederung ihn verdeckt. Das Stück fällt schon in der Suche unter die Mindestlänge 0,08.
+15. **Der Fußpunkt im synthetischen Test stimmt auf 0,03**, nicht auf 0,01. Die Ringe legen die dritte Zeile der Homographie kaum fest (Design, *Korpuslauf und Bericht*), und die Suche verkraftet 0,04. Was der Registrar wirklich schafft, zeigt danach die Spalte *Q shift* im Bericht.
 
 ## Global Constraints
 
@@ -2605,9 +2607,14 @@ class OpenCvArrowDetectorTest {
 
     private val detector = OpenCvArrowDetector()
 
-    /** Entry points at clearly different angles as seen from either camera's foot point. */
+    /**
+     * Entry points off the black ring, where a dark shaft has no contrast, whose
+     * shafts stay apart as seen from either foot point: at 45 degrees two pairs
+     * lie under the duplicate rule's 6 degrees, but their ends are at least
+     * 0.17 from each other's lines, far beyond its 0.025.
+     */
     private val entries = listOf(
-        Vec2(0.3, 0.35), Vec2(0.1, -0.05), Vec2(-0.3, -0.3), Vec2(0.5, -0.45), Vec2(-0.25, 0.15)
+        Vec2(0.3, 0.35), Vec2(0.1, -0.05), Vec2(-0.3, -0.3), Vec2(0.25, -0.42), Vec2(-0.25, 0.15)
     )
 
     /** Both cameras stand 2.0 radii above the face. */
@@ -2654,7 +2661,9 @@ class OpenCvArrowDetectorTest {
 
     @Test
     fun theFootPointComesOutWhereTheCameraStands() {
-        assertThat(analyse(at30).footPoint!!.distanceTo(at30.footPoint)).isAtMost(0.01)
+        // The rings barely pin the third row of the homography, which Q hangs on;
+        // 0.03 stays inside the search's window of 0.04.
+        assertThat(analyse(at30).footPoint!!.distanceTo(at30.footPoint)).isAtMost(0.03)
     }
 
     @Test
@@ -2958,7 +2967,8 @@ class ArrowRobustnessTest {
     @Test
     fun threeArrowsLeaningAlikeMeetInOnePoint() {
         val tilt = Vec2(0.0, tan(Math.toRadians(3.0)))
-        val arrows = listOf(Vec2(0.3, 0.35), Vec2(0.1, -0.05), Vec2(0.5, -0.45)).map { SyntheticArrow(it, tilt = tilt) }
+        // Off the black ring, like the entries of OpenCvArrowDetectorTest.
+        val arrows = listOf(Vec2(0.3, 0.35), Vec2(0.1, -0.05), Vec2(0.25, -0.42)).map { SyntheticArrow(it, tilt = tilt) }
 
         val analysis = analyse(photograph(*arrows.toTypedArray()), 3)
         val lines = arrows.map { arrow ->
@@ -3474,7 +3484,11 @@ object ArrowReport {
         )
         groups(sb, rows, outcomes)
         sb.appendLine()
-        sb.append(MetricsReport.render(outcomes, "Metrics over every photograph in scope").replaceFirst("# ", "## "))
+        // One heading level down, its own sections included.
+        sb.append(
+            MetricsReport.render(outcomes, "Metrics over every photograph in scope")
+                .replace(Regex("^#", RegexOption.MULTILINE), "##")
+        )
         photographs(sb, rows)
         diagnosis(sb, truths, photos)
         if (outOfScope.isNotEmpty()) {
@@ -4111,11 +4125,12 @@ Aus `arrows.md` für die Gruppe `schraeg` notieren:
 2. aus *Candidates before the selection*: wie viele Treffer einen Kandidaten hatten, wie viele erst die Auswahl verloren hat, Median der Linienabstände und wie viele über 0,03
 3. für jedes Foto mit einem von der Auswahl verlorenen Treffer: die Zuversicht dieses Treffers aus der Tabelle je Treffer und die beste Zuversicht eines falschen Kandidaten auf demselben Foto
 4. aus *Photographs, schraeg*: die Spalte *Common point from Q* und die Laufzeiten, Median je Stufe
+5. aus *Photographs, schraeg*: jedes Foto mit weniger Kandidaten als `expectedShots` und seine Fehlfunde. `CandidateSelection` nimmt dann alle Kandidaten an, und die Abstandsregel aus Stufe 7 läuft gar nicht; die relative Zuversicht hat keine Untergrenze, ein `NO_SHAFT`-Rest mit Zuversicht nahe 0 wird so zum Treffer. Das Design nimmt an, solche Kandidaten bestünden die Abstandsregel praktisch nie; das gilt nur bei Überschuss.
 
 - [ ] **Step 3: Entscheiden**
 
-- **Startwerte bleiben,** wenn in der Gruppe `schraeg` kein Treffer von der Auswahl verloren wurde und auf jedem Foto die beste falsche Zuversicht um mindestens 0,15 unter der niedrigsten angenommenen echten liegt.
-- **Sonst Halt beim Nutzer:** die Zahlen aus Step 2 vorlegen und benennen, welcher Hebel sie trennen würde — die Sättigungslänge, der Faktor für einen gescheiterten Lauf oder die Abstandsregel aus Stufe 7 selbst. Ohne Zustimmung ändert sich nichts. Mit Zustimmung die Konstante in `ArrowCandidates.kt` ändern, `./gradlew :detection:testDevDebugUnitTest --tests '*ArrowCandidatesTest*'` laufen lassen (der Test rechnet mit den Konstanten, siehe Präzisierung 13) und Step 1 und 2 wiederholen.
+- **Startwerte bleiben,** wenn in der Gruppe `schraeg` kein Treffer von der Auswahl verloren wurde, auf jedem Foto die beste falsche Zuversicht um mindestens 0,15 unter der niedrigsten angenommenen echten liegt und kein Fehlfund von einem Foto mit weniger Kandidaten als `expectedShots` stammt.
+- **Sonst Halt beim Nutzer:** die Zahlen aus Step 2 vorlegen und benennen, welcher Hebel sie trennen würde — die Sättigungslänge, der Faktor für einen gescheiterten Lauf, die Abstandsregel aus Stufe 7 selbst oder eine Untergrenze der Zuversicht, unter der ein Kandidat nicht in die Auswahl geht. Die Untergrenze kennt das Design nicht; sie ist der einzige Hebel gegen Fehlfunde aus Punkt 5 und wäre eine Änderung am Design und an `CandidateSelection`, nicht an `ArrowCandidates`. Ohne Zustimmung ändert sich nichts. Mit Zustimmung die Konstante in `ArrowCandidates.kt` ändern, `./gradlew :detection:testDevDebugUnitTest --tests '*ArrowCandidatesTest*'` laufen lassen (der Test rechnet mit den Konstanten, siehe Präzisierung 13) und Step 1 und 2 wiederholen.
 
 - [ ] **Step 4: Die erste Messung ins Design**
 
@@ -4555,6 +4570,7 @@ git commit -m "detection: pin the metrics of the oblique photographs, one arrow 
 - Alles in `:app`: die Umwandlung `Bitmap` → `Mat`, die Brennweite aus EXIF, die Linienregel mit Pfeilradius, den Debug-Bildschirm.
 - Laufzeit auf dem Gerät und eine gröbere Suche; der Bericht nennt die Zeiten auf dem Desktop.
 - Auflagen unter 80 cm; woher der Maßstab der Flanken kommt, entscheidet die Integration.
+- Ein dunkler Schaft, der den schwarzen Ring so schräg kreuzt, dass die Lücke 0,3 übersteigt. Das Stück dahinter wird ein eigener Kandidat mit `REFINED` und Einschuss am Ringrand bei 0,8, und die Regel „zwei `REFINED` auf einer Geraden bleiben zwei" behält ihn. Auf dem Korpus laufen die Schäfte fast radial durch den Ring, die Lücke liegt bei 0,2 bis 0,27; ein solcher Fall zeigt sich im Bericht als Fehlfund bei Radius 0,8.
 
 ## Self-Review
 

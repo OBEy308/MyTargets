@@ -18,13 +18,22 @@ package de.dreier.mytargets.detection
 import com.google.common.truth.Truth.assertThat
 import de.dreier.mytargets.detection.geometry.CameraIntrinsics
 import de.dreier.mytargets.detection.geometry.Vec2
+import de.dreier.mytargets.detection.registration.OpenCvRule
+import de.dreier.mytargets.detection.registration.RingTransitions
+import org.junit.Rule
 import org.junit.Test
+import org.opencv.core.Mat
 
 class ArrowDetectorContractTest {
+
+    // The detector takes a Mat, and even an empty Mat is created natively.
+    @get:Rule
+    val openCv = OpenCvRule()
 
     private val request = DetectionRequest(
         layout = FaceLayout.singleSpot(),
         zoneRadii = listOf(0.2, 0.4, 0.6, 0.8, 1.0),
+        transitions = RingTransitions.WA_FULL,
         expectedShots = 3,
         intrinsics = CameraIntrinsics.approximate(4000, 3000)
     )
@@ -59,14 +68,19 @@ class ArrowDetectorContractTest {
         // The whole point of the interface: plan 3 swaps the implementation and
         // nothing else changes.
         val stub = object : ArrowDetector {
-            override fun detect(request: DetectionRequest) = DetectionResult(
+            override fun detect(image: Mat, request: DetectionRequest, debug: DebugSink) = DetectionResult(
                 shots = listOf(DetectedShot(0, 0.1f, -0.2f, 0.9f)),
                 faceConfidence = 0.8f,
                 reason = SelectionReason.FEWER_THAN_EXPECTED,
                 failure = null
             )
         }
-        val result = stub.detect(request)
+        val image = Mat()
+        val result = try {
+            stub.detect(image, request)
+        } finally {
+            image.release()
+        }
         assertThat(result.shots).hasSize(1)
         assertThat(result.shots[0].faceIndex).isEqualTo(0)
         assertThat(result.failure).isNull()
@@ -79,6 +93,16 @@ class ArrowDetectorContractTest {
             throw AssertionError("expected IllegalArgumentException")
         } catch (expected: IllegalArgumentException) {
             // The radii drive the ring fitting; without them there is nothing to fit.
+        }
+    }
+
+    @Test
+    fun requestRejectsAnEmptyTransitionTable() {
+        try {
+            request.copy(transitions = emptyList())
+            throw AssertionError("expected IllegalArgumentException")
+        } catch (expected: IllegalArgumentException) {
+            // The registration finds the face from these transitions; without them there is no face.
         }
     }
 }

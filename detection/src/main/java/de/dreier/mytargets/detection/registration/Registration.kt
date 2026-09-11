@@ -15,6 +15,7 @@
 
 package de.dreier.mytargets.detection.registration
 
+import de.dreier.mytargets.detection.DebugSink
 import de.dreier.mytargets.detection.DetectionFailure
 import de.dreier.mytargets.detection.FaceLayout
 import de.dreier.mytargets.detection.geometry.Conic
@@ -81,13 +82,4 @@ interface FaceRegistrar {
         request: RegistrationRequest,
         debug: DebugSink = DebugSink.NONE
     ): RegistrationOutcome
-}
-
-fun interface DebugSink {
-    /** [image] belongs to the registrar and may be released after the call: write it now or copy it. */
-    fun image(stage: String, image: Mat)
-
-    companion object {
-        val NONE = DebugSink { _, _ -> }
-    }
 }

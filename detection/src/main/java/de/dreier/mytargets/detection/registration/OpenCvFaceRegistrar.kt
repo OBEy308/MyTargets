@@ -15,6 +15,7 @@
 
 package de.dreier.mytargets.detection.registration
 
+import de.dreier.mytargets.detection.DebugSink
 import de.dreier.mytargets.detection.DetectionFailure
 import de.dreier.mytargets.detection.geometry.Mat3
 import de.dreier.mytargets.detection.geometry.Orientation

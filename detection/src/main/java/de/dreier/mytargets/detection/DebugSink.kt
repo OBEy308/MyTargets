@@ -13,18 +13,19 @@
  * GNU General Public License for more details.
  */
 
-package de.dreier.mytargets.detection.registration
+package de.dreier.mytargets.detection
 
-import de.dreier.mytargets.detection.DebugSink
 import org.opencv.core.Mat
-import org.opencv.imgcodecs.Imgcodecs
-import java.io.File
 
-/** Writes each stage image as <stage>.png into [folder], synchronously as DebugSink requires. */
-class PngDebugSink(private val folder: File) : DebugSink {
+/**
+ * Receives the stage images of a detection (Haupt-Spec, Debug-Ansicht). The
+ * registration and the arrow search both show their stages through it.
+ */
+fun interface DebugSink {
+    /** [image] belongs to the stage and may be released after the call: write it now or copy it. */
+    fun image(stage: String, image: Mat)
 
-    override fun image(stage: String, image: Mat) {
-        val file = File(folder, "$stage.png")
-        check(Imgcodecs.imwrite(file.absolutePath, image)) { "cannot write $file" }
+    companion object {
+        val NONE = DebugSink { _, _ -> }
     }
 }

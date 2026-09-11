@@ -234,6 +234,9 @@ class ArrowCorpusRun {
         }
         val matchedCandidates = all.pairs.map { located[it.detectedIndex].value }
         val bestFalse = all.unmatchedDetected.maxOfOrNull { located[it].value.confidence }
+        val listedEntries = entry.shots.mapNotNull { shot -> shot.position?.let { Vec2(it.x, it.y) } }
+        val falseCandidates = all.unmatchedDetected.map { located[it].value }
+        val falseOnShafts = falseCandidates.count { c -> listedEntries.any { onShaftOf(c, it) } }
 
         val foot = analysis.footPoint
         val reference = entry.registration?.imageToTarget
@@ -266,7 +269,11 @@ class ArrowCorpusRun {
             ranOut = analysis.candidates.count { it.refinement == TipRefinement.RAN_OUT },
             millis = millis
         )
-        return Measured(row, truths, PhotoDiagnosis(entry.imageName, group, bestFalse), outcome)
+        return Measured(
+            row, truths,
+            PhotoDiagnosis(entry.imageName, group, bestFalse, falseOnShafts, falseCandidates.size - falseOnShafts),
+            outcome
+        )
     }
 
     /**
@@ -306,9 +313,24 @@ class ArrowCorpusRun {
         return Point(px.x, px.y)
     }
 
+    /**
+     * Whether [candidate] lies on the shaft of the hit at [entryPoint]: its line
+     * passes within SHAFT_LINE_DISTANCE of the hit, and the hit lies ahead of its
+     * tip, towards Q (arrow design, Korpuslauf und Bericht, point 3). Spot-local
+     * and target coordinates coincide on WAFull.
+     */
+    private fun onShaftOf(candidate: ArrowCandidate, entryPoint: Vec2): Boolean {
+        if (abs(candidate.line.signedDistanceTo(entryPoint)) >= SHAFT_LINE_DISTANCE) return false
+        val towardsQ = candidate.tip - candidate.far
+        return (entryPoint.x - candidate.tip.x) * towardsQ.x + (entryPoint.y - candidate.tip.y) * towardsQ.y > 0.0
+    }
+
     private companion object {
         val CYAN = Scalar(255.0, 255.0, 0.0)
         val GREEN = Scalar(0.0, 200.0, 0.0)
         val WHITE = Scalar(255.0, 255.0, 255.0)
+
+        /** How close a candidate's line passes a hit for the candidate to count as a piece of its shaft. */
+        const val SHAFT_LINE_DISTANCE = 0.02
     }
 }

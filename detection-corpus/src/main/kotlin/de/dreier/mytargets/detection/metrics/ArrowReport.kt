@@ -91,8 +91,18 @@ class TruthDiagnosis(
     val accepted: Boolean
 )
 
-/** The best confidence on a photograph of a candidate that matches no listed hit. */
-class PhotoDiagnosis(val imageName: String, val group: String, val bestFalseConfidence: Double?)
+/**
+ * One photograph in the candidate diagnosis: the best confidence of a candidate
+ * that matches no listed hit, and how many such candidates lie on the shaft of
+ * a listed hit -- pieces whose walk did not reach the entry -- or elsewhere.
+ */
+class PhotoDiagnosis(
+    val imageName: String,
+    val group: String,
+    val bestFalseConfidence: Double?,
+    val falseOnShafts: Int = 0,
+    val falseElsewhere: Int = 0
+)
 
 /**
  * Renders an arrow run as Markdown (arrow design, Korpuslauf und Bericht): the
@@ -218,12 +228,15 @@ object ArrowReport {
             val lost = inGroup.count { it.rank != null && !it.accepted }
             val offsets = inGroup.mapNotNull { it.lineOffset }.map { abs(it) }.sorted()
             val over = offsets.count { it > LINE_OFFSET_NOTE }
+            val photosInGroup = photos.filter { it.group == group }
             sb.appendLine()
             sb.appendLine(
                 "**$group:** $found of ${inGroup.size} listed hits had a candidate within the budget " +
                     "(${percent(ratio(found, inGroup.size))}); the selection lost $lost of them. " +
                     "Line offsets from Q of those candidates: median ${number(median(offsets))}, " +
-                    "above $LINE_OFFSET_NOTE: $over of ${offsets.size}."
+                    "above $LINE_OFFSET_NOTE: $over of ${offsets.size}. " +
+                    "Candidates matching no hit: ${photosInGroup.sumOf { it.falseOnShafts }} on the shaft " +
+                    "of a listed hit, ${photosInGroup.sumOf { it.falseElsewhere }} elsewhere."
             )
         }
         sb.appendLine()

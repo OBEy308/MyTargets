@@ -140,6 +140,23 @@ class ArrowReportTest {
     }
 
     @Test
+    fun theDiagnosisCountsFalseCandidatesOnRealShaftsApart() {
+        val truths = listOf(
+            TruthDiagnosis("o.jpg", ArrowGroups.OBLIQUE, 0, rank = 1, confidence = 1.0, lineOffset = 0.01, accepted = true)
+        )
+        val photos = listOf(
+            PhotoDiagnosis("o.jpg", ArrowGroups.OBLIQUE, 0.8, falseOnShafts = 3, falseElsewhere = 2),
+            PhotoDiagnosis("p.jpg", ArrowGroups.OBLIQUE, 0.5, falseOnShafts = 1, falseElsewhere = 0)
+        )
+
+        val report = ArrowReport.render(
+            "Run", listOf(row("o.jpg", ArrowGroups.OBLIQUE, 1, 1)), truths, photos, emptyList(), emptyList()
+        )
+
+        assertThat(report).contains("Candidates matching no hit: 4 on the shaft of a listed hit, 2 elsewhere.")
+    }
+
+    @Test
     fun photographsOutOfScopeAreOnlyListed() {
         val report = render(emptyList(), outOfScope = listOf("a6_x.jpg" to "three faces"))
 

@@ -14,7 +14,7 @@
 
 ## Präzisierungen gegenüber dem Design
 
-Beim Ausarbeiten sind diese Stellen genauer geworden. Keine ändert eine Entscheidung des Designs.
+Beim Ausarbeiten sind diese Stellen genauer geworden. Keine ändert eine Entscheidung des Designs; Punkt 16 kam bei der Ausführung dazu und ist im Design als Abweichung von `tips.py` eingetragen.
 
 1. **`ArrowAnalysis` trägt die Laufzeiten.** Der Bericht verlangt die Laufzeit je Stufe, und messen kann sie nur `analyse`. `NotRegistered` und `Analysed` tragen deshalb `StageTimings`.
 2. **Das Vorzeichen des homogenen Anteils bezieht sich auf das Scheibenzentrum.** `H⁻¹` ist nur bis auf einen Faktor bestimmt. Gültig ist ein Pixel, dessen Urbild im homogenen Anteil dasselbe Vorzeichen hat wie das Urbild des Scheibenzentrums.
@@ -31,6 +31,7 @@ Beim Ausarbeiten sind diese Stellen genauer geworden. Keine ändert eine Entsche
 13. **Die Zuversicht im Test** rechnet mit den Konstanten aus `ArrowCandidates`, damit ein Nachstellen in Task 13 den Test nicht bricht.
 14. **Die synthetischen Einschüsse liegen nicht im schwarzen Ring** (0,6 < r ≤ 0,8). Ein dunkler Schaft (V 0,157) hat auf Schwarz (V 0,118) einen Kontrast von 0,04, weit unter der Schwelle 0,15; die Suche sieht ihn dort nicht. Das ist die bekannte Grenze der Werkzeuge, kein Testfall. Der einzige Pfeil im schwarzen Ring ist der graue in Task 10. Geprüft ist auch der Weg jedes Schafts im entzerrten Bild, bei 30°, 45° und im Neigungsfall: Er beginnt auf einer hellen Zone, und wo er den schwarzen Ring kreuzt, bleibt die Lücke unter 0,3, damit das Zusammenlegen sie schließt. Die Lücke zählt, wie die Suche sie sieht: von der Stelle, an der die erste Flanke (±0,016) Schwarz erreicht, bis zu der, an der beide es verlassen haben; wo vor der Befiederung ein Stück Schaft dahinter bleibt, sind das 0,21 bis 0,23. Die eine Ausnahme ist (0,25; −0,42) bei 45°: Lücke 0,30, dahinter aber nur 0,04 Schaft, bevor die Befiederung ihn verdeckt. Das Stück fällt schon in der Suche unter die Mindestlänge 0,08.
 15. **Der Fußpunkt im synthetischen Test stimmt auf 0,03**, nicht auf 0,01. Die Ringe legen die dritte Zeile der Homographie kaum fest (Design, *Korpuslauf und Bericht*), und die Suche verkraftet 0,04. Was der Registrar wirklich schafft, zeigt danach die Spalte *Q shift* im Bericht.
+16. **Der Schaftlauf nimmt die Mitte der besten Geraden** (Task 7; im Design unter *Abweichungen von den Werkzeugen*). Die Güte ist auf einem gleichmäßigen Schaft über etwa ±10° flach, die erste beste Gerade liegt am Rand dieser Ebene, bis 9° neben dem Schaft, und die Tests aus Task 7 scheitern damit auch mit dem unveränderten `tips.py`. Aus jedem der drei Raster gilt deshalb die Mitte aller Geraden, deren Güte höchstens `TIE = 0,01` unter der besten liegt, oder die beste, wenn die Mitte selbst darunter fällt.
 
 ## Global Constraints
 

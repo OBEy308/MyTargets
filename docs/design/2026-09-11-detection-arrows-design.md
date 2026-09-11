@@ -284,7 +284,10 @@ rechnet die Kantenlänge des entzerrten Bildes um.
      nicht drücken.
    - **Nachstellen:** grob Richtung ±12° in 1°-Schritten und Versatz ±0,012 in
      Schritten von 0,002, dann zweimal fein, ±1° in 0,25°-Schritten und
-     ±0,002 in Schritten von 0,0005.
+     ±0,002 in Schritten von 0,0005. Aus jedem Raster gilt nicht die erste
+     beste Gerade, sondern die Mitte aller Geraden, deren Güte höchstens 0,01
+     unter der besten liegt. Fällt diese Mitte selbst darunter, weil die
+     guten Geraden in zwei Gruppen zerfallen, gilt die beste.
    - **Lauf:** Proben alle 0,0005 von 0,10 hinter der Saat bis 0,035 davor.
      Der Schaftkontrast ist der Median der Proben mehr als 0,03 hinter der
      Saat. Ab 0,03 hinter der Saat geht der Lauf nach vorn. Der Einschuss ist
@@ -360,6 +363,7 @@ rechnet die Kantenlänge des entzerrten Bildes um.
 | ungültige Pixel | `R + G + B = 0` | Urbild unter `H⁻¹` außerhalb von `[0, W − 1] × [0, H − 1]` oder hinter der Kamera | ein schwarzes Pixel auf dem schwarzen Ring ist gültig |
 | Saatpunkte | Suche, dann von Hand geprüft und ergänzt | nur die Suche | die Pipeline hat keinen Annotator |
 | Einschuss bei `RAN_OUT` | letzte Probe des Fensters | Einschuss aus der Suche, auf die verfeinerte Gerade projiziert | ein Lauf ohne Ende hat keinen Endpunkt, das Ende des Fensters ist willkürlich; die Gerade dagegen hat der Lauf gefunden |
+| Nachstellen | erste beste Gerade jedes Rasters | Mitte der Geraden, deren Güte höchstens 0,01 unter der besten liegt | Ohne das untere Viertel ist die Güte auf einem gleichmäßigen Schaft über etwa ±10° flach, und die erste beste Gerade liegt am Rand dieser Ebene. Auf dem Streifen des Tests liegt sie 9° neben dem Schaft, mit Bildrauschen 1° bis 3°; die Mitte trifft ihn auf 0,35°. |
 | Auswahl | Annotator | Zusammenlegen, relative Zuversicht, Stufe 7 | neu |
 
 ## Korpuslauf und Bericht

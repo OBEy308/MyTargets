@@ -15,9 +15,8 @@
 
 package de.dreier.mytargets.detection.geometry
 
-import kotlin.math.PI
+import java.util.Locale
 import kotlin.math.abs
-import kotlin.math.atan2
 import kotlin.math.sqrt
 
 /**
@@ -29,7 +28,8 @@ import kotlin.math.sqrt
  * then scale and translation from the known radii and the centre. Rotation
  * about the target axis is not observable from concentric circles -- the face
  * is rotationally symmetric -- and is fixed by [imageUp], measured at the
- * imaged centre.
+ * imaged centre. [attempt] says why a pair was rejected; the registration
+ * reports that per pair.
  */
 object Rectification {
 
@@ -38,6 +38,62 @@ object Rectification {
         val vanishingLine: Vec3,
         val imagedCentre: Vec2
     )
+
+    /** Why a pair of conics gave no rectification. */
+    enum class Reason {
+        /** The outer conic has no unique centre, so there is no working frame. */
+        DEGENERATE_OUTER,
+
+        /** The pencil of the two conics has no usable degenerate member. */
+        NO_PENCIL,
+
+        /** The vanishing line passes through the origin of the frame. */
+        SINGULAR_AFFINE,
+
+        /** After affine rectification the outer conic is not an ellipse. */
+        NOT_AN_ELLIPSE,
+
+        /** A rectified conic has no unique centre. */
+        NO_CENTRE,
+
+        /** The rectified outer circle has no radius. */
+        ZERO_RADIUS,
+
+        /** Centre distance in outer radii, against [CONCENTRIC_TOLERANCE]. */
+        NOT_CONCENTRIC,
+
+        /** Measured radius ratio, against the declared one. */
+        RATIO_MISMATCH,
+
+        /** Image up cannot be mapped at the imaged centre. */
+        NO_ORIENTATION
+    }
+
+    sealed interface Attempt {
+        class Rectified(val result: Result) : Attempt
+
+        /**
+         * [value] and [limit] are set for [Reason.NOT_CONCENTRIC] (centre
+         * distance in outer radii, tolerance) and [Reason.RATIO_MISMATCH]
+         * (measured ratio, declared ratio).
+         */
+        class Rejected(
+            val reason: Reason,
+            val value: Double? = null,
+            val limit: Double? = null
+        ) : Attempt {
+            fun describe(): String = when (reason) {
+                Reason.NOT_CONCENTRIC ->
+                    "centres ${format(value)} outer radii apart, limit ${format(limit)}"
+                Reason.RATIO_MISMATCH ->
+                    "radius ratio ${format(value)}, expected ${format(limit)}"
+                else -> reason.name.lowercase().replace('_', ' ')
+            }
+
+            private fun format(v: Double?) =
+                if (v == null) "?" else String.format(Locale.ROOT, "%.3f", v)
+        }
+    }
 
     /**
      * @param outer image of the ring with the larger nominal [outerRadius]
@@ -52,7 +108,17 @@ object Rectification {
         inner: Conic,
         innerRadius: Double,
         imageUp: Vec2 = Vec2(0.0, -1.0)
-    ): Result? {
+    ): Result? =
+        (attempt(outer, outerRadius, inner, innerRadius, imageUp) as? Attempt.Rectified)?.result
+
+    /** As [fromConcentricCircles], but says why when there is no result. */
+    fun attempt(
+        outer: Conic,
+        outerRadius: Double,
+        inner: Conic,
+        innerRadius: Double,
+        imageUp: Vec2 = Vec2(0.0, -1.0)
+    ): Attempt {
         require(outerRadius > innerRadius) { "outer radius must be the larger one" }
 
         // Every step below is conic arithmetic, and at pixel scale that mixes a
@@ -61,12 +127,12 @@ object Rectification {
         // noise rather than the conic. Work in a frame where the outer ring is
         // roughly the unit circle about the origin -- the same treatment
         // VanishingLine already gives itself -- and convert back at the end.
-        val frame = outer.normalisingFrame() ?: return null
+        val frame = outer.normalisingFrame() ?: return Attempt.Rejected(Reason.DEGENERATE_OUTER)
         val outerInFrame = outer.transformedBy(frame)
         val innerInFrame = inner.transformedBy(frame)
 
         val pencil = VanishingLine.fromConcentricCircles(outerInFrame, innerInFrame)
-            ?: return null
+            ?: return Attempt.Rejected(Reason.NO_PENCIL)
         // Both of these are in frame coordinates, not image coordinates.
         val lineInFrame = pencil.line
         val centreInFrame = pencil.imagedCentre
@@ -77,31 +143,34 @@ object Rectification {
             0.0, 1.0, 0.0,
             lineInFrame.x, lineInFrame.y, lineInFrame.z
         )
-        if (affine.inverse() == null) return null
+        if (affine.inverse() == null) return Attempt.Rejected(Reason.SINGULAR_AFFINE)
 
         val affineOuter = outerInFrame.transformedBy(affine)
         val affineInner = innerInFrame.transformedBy(affine)
 
         // After affine rectification the conics are ellipses that differ from
         // circles by one common linear map. Recover it from the outer one.
-        val metric = metricFromEllipse(affineOuter) ?: return null
+        val metric = metricFromEllipse(affineOuter) ?: return Attempt.Rejected(Reason.NOT_AN_ELLIPSE)
 
         val metricOuter = affineOuter.transformedBy(metric)
         val metricInner = affineInner.transformedBy(metric)
 
-        val centre = centreOf(metricOuter) ?: return null
-        val centreInner = centreOf(metricInner) ?: return null
+        val centre = centreOf(metricOuter) ?: return Attempt.Rejected(Reason.NO_CENTRE)
+        val centreInner = centreOf(metricInner) ?: return Attempt.Rejected(Reason.NO_CENTRE)
         val radius = radiusOf(metricOuter, centre)
-        if (centre.distanceTo(centreInner) > CONCENTRIC_TOLERANCE * radius) {
-            return null
+        if (radius < 1e-9) return Attempt.Rejected(Reason.ZERO_RADIUS)
+        val offset = centre.distanceTo(centreInner) / radius
+        if (offset > CONCENTRIC_TOLERANCE) {
+            return Attempt.Rejected(Reason.NOT_CONCENTRIC, offset, CONCENTRIC_TOLERANCE)
         }
-        if (radius < 1e-9) return null
 
         // Check the radius ratio; if it is wrong these were not the rings we
         // were told they were.
         val expectedRatio = innerRadius / outerRadius
         val actualRatio = radiusOf(metricInner, centreInner) / radius
-        if (abs(actualRatio - expectedRatio) > RATIO_TOLERANCE * expectedRatio) return null
+        if (abs(actualRatio - expectedRatio) > RATIO_TOLERANCE * expectedRatio) {
+            return Attempt.Rejected(Reason.RATIO_MISMATCH, actualRatio, expectedRatio)
+        }
 
         val scale = outerRadius / radius
         val toOrigin = Mat3.translation(Vec2(-centre.x, -centre.y))
@@ -114,29 +183,23 @@ object Rectification {
         // This chain starts in frame coordinates, so it must be probed there.
         val withoutRotation = scaling * toOrigin * metric * affine
 
-        val orientationFixed = if (isMirrored(withoutRotation, centreInFrame)) {
-            MIRROR_Y * withoutRotation
-        } else {
-            withoutRotation
-        }
-
-        // Fix the remaining rotation so that imageUp, taken at the imaged
-        // centre, points along -y in target coordinates: upwards on the face.
         // [imageUp] is a direction and [frame] is a similarity, so it passes
         // through unchanged up to a positive scale factor, which leaves the
         // angle -- and hence the rotation -- the same. Only the point the
         // direction is attached to has to be moved into the frame.
-        val rotation = rotationAligning(orientationFixed, centreInFrame, imageUp)
-            ?: return null
-        val frameToTarget = rotation * orientationFixed
+        val frameToTarget = Orientation.orient(withoutRotation, centreInFrame, imageUp)
+            ?: return Attempt.Rejected(Reason.NO_ORIENTATION)
 
         // Out of the frame again: image points pass through the frame first,
         // lines transform contragrediently, and the centre needs the inverse.
-        val imagedCentre = frame.inverse()?.mapPoint(centreInFrame) ?: return null
-        return Result(
-            imageToTarget = frameToTarget * frame,
-            vanishingLine = (frame.transpose() * lineInFrame).normalized(),
-            imagedCentre = imagedCentre
+        val imagedCentre = frame.inverse()?.mapPoint(centreInFrame)
+            ?: return Attempt.Rejected(Reason.NO_CENTRE)
+        return Attempt.Rectified(
+            Result(
+                imageToTarget = frameToTarget * frame,
+                vanishingLine = (frame.transpose() * lineInFrame).normalized(),
+                imagedCentre = imagedCentre
+            )
         )
     }
 
@@ -145,13 +208,6 @@ object Rectification {
     // tolerance would weaken as the rings diverge -- at a ratio of 0.1 it
     // would accept 80 percent relative error.
     private const val RATIO_TOLERANCE = 0.08
-
-    /** Reflection in the x axis, used to repair a mirrored rectification. */
-    private val MIRROR_Y = Mat3.of(
-        1.0, 0.0, 0.0,
-        0.0, -1.0, 0.0,
-        0.0, 0.0, 1.0
-    )
 
     /**
      * A linear map taking the given ellipse to a circle. The ellipse matrix
@@ -203,42 +259,5 @@ object Rectification {
             2.0 * (c[0, 2] * centre.x + c[1, 2] * centre.y)
         val r2 = -f / a
         return if (r2 <= 0.0) 0.0 else sqrt(r2)
-    }
-
-    /**
-     * Rotation that makes [imageUp], taken at [imagedCentre] and seen through
-     * [mapping], point along the negative y axis of target coordinates.
-     *
-     * The direction has to be taken at the centre of the face: [mapping] is
-     * projective, and the image of a direction depends on where it is attached.
-     * At the image corner the answer would differ by several degrees for a
-     * moderately tilted view.
-     */
-    private fun rotationAligning(mapping: Mat3, imagedCentre: Vec2, imageUp: Vec2): Mat3? {
-        val direction = mapping.mapDirection(imagedCentre, imageUp) ?: return null
-        if (direction.length < 1e-12) return null
-        // We want direction to end up pointing at -90 degrees.
-        val current = atan2(direction.y, direction.x)
-        return Mat3.rotation(-PI / 2.0 - current)
-    }
-
-    /**
-     * Whether [mapping] reverses orientation at [at].
-     *
-     * The chain above constrains rotation but not handedness: the metric step's
-     * 2x2 block is diag(sqrt(lambda)) V^T, and the sign of det(V) is whatever
-     * the Jacobi sweeps left on the eigenvectors. Without this check the face
-     * comes out mirrored in about half of all views, and no assertion phrased in
-     * radii, dot products or distances can see it, because all of those are
-     * reflection invariant.
-     *
-     * Target coordinates share the image's handedness -- x right, y downwards,
-     * up on the face being negative y -- so a correct map has a positive
-     * Jacobian determinant.
-     */
-    private fun isMirrored(mapping: Mat3, at: Vec2): Boolean {
-        val jx = mapping.mapDirection(at, Vec2(1.0, 0.0)) ?: return false
-        val jy = mapping.mapDirection(at, Vec2(0.0, 1.0)) ?: return false
-        return jx.x * jy.y - jx.y * jy.x < 0.0
     }
 }

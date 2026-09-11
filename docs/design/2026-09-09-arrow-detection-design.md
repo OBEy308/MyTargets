@@ -76,10 +76,11 @@ Datenbank nicht mehr testbar wäre.
 weder Room noch UI noch Kontext. `TargetDrawable` wird **nicht** verwendet, siehe
 Stufe 4.
 
-Abhängigkeit: OpenCV, ab 4.9 als Maven-Artefakt `org.opencv:opencv` verfügbar
-(Apache-2.0, mit GPLv2 verträglich). Die nativen Bibliotheken vergrößern das
-APK spürbar; über ABI-Splits beziehungsweise ein App Bundle bekommt der einzelne
-Nutzer nur seine Architektur. Die Alternative — Segmentierung, Kegelschnittfit
+Abhängigkeit: OpenCV 4.14.0 als Maven-Artefakt `org.opencv:opencv`
+(Apache-2.0, mit GPLv2 verträglich). Die nativen Bibliotheken vergrößern den
+Play-Download für arm64 um gemessene 10,2 MB (siehe *Offene Risiken*,
+*APK-Größe*); über ein App Bundle bekommt der einzelne Nutzer nur seine
+Architektur. Die Alternative — Segmentierung, Kegelschnittfit
 und Warp in reinem Kotlin — ist machbar und würde APK und F-Droid-Build
 einfacher halten. Sie wird bewusst zurückgestellt: Erst wenn die Pipeline am
 Korpus funktioniert, lohnt sich die Frage, ob sich der Nachbau der genutzten
@@ -181,8 +182,10 @@ nicht.
 
 **Stufe 2 — Auflage lokalisieren.** Gelbe Blobs segmentieren; ihre Anzahl muss zu
 `facePositions.size` passen, sonst `FACE_MISMATCH`. An den Farbübergängen mit
-bekannten Radien Kegelschnitte fitten (RANSAC gegen Ausreißer durch Schäfte und
-Schatten). Die Farbübergänge je Modell:
+bekannten Radien Kegelschnitte fitten, robust gegen Ausreißer durch Schäfte
+und Schatten; das Verfahren steht im Registrierungsdesign
+(`docs/design/2026-09-10-detection-registration-design.md`). Die
+Farbübergänge je Modell:
 
 | Modell | Übergänge (Radius, spot-lokal) |
 |---|---|
@@ -576,12 +579,13 @@ liegt in der App.
 
 **Wahrnehmungsstufen** — Segmentierung, Farbabgleich, Residuum, Schaftfindung.
 Diese lassen sich nicht sinnvoll rot-grün treiben; sie werden am Korpus
-gemessen. OpenCV braucht dafür native Bibliotheken, also laufen diese Messungen
-als Instrumentierungstests auf dem Gerät oder Emulator, nicht als
-JVM-Unit-Tests. Ein eigenes JVM-Werkzeug dafür gibt es im Projekt nicht;
-`tools/` enthält nur Gradle-Skripte. Ob sich ein solches Modul lohnt,
-entscheidet Plan 2. Das wird hier festgehalten, damit später niemand rot-grün
-erwartet, wo es nicht hingehört.
+gemessen. Sie laufen trotzdem als JVM-Tests: `org.openpnp:opencv` bringt die
+OpenCV-Java-API mit nativen Bibliotheken für den Desktop mit, in Version 4.9.0,
+während die App 4.14.0 ausliefert. Eine Probe am 2026-09-10 lud ein
+12-MP-Korpusfoto in 0,1 s; ein Korpuslauf dauert damit Sekunden statt Minuten
+im Emulator. Wie das eingebunden ist, steht im Registrierungsdesign
+(`docs/design/2026-09-10-detection-registration-design.md`). Das wird hier
+festgehalten, damit später niemand rot-grün erwartet, wo es nicht hingehört.
 
 ### Debug-Ansicht
 
@@ -589,9 +593,12 @@ Ein Bildschirm im Debug-Build, erreichbar aus der Galerie, der ein Foto durch
 die Pipeline schickt und jede Stufe als Bild zeigt: Segmentierung, gefittete
 Kegelschnitte, entzerrtes Bild, Farbklassenmaske, Residuum, Schaftkandidaten,
 gerechneter Fluchtpunkt samt Streifenrichtungen, gewählte Einschusspunkte mit
-Spot. Das ist
-**Pflicht, kein Extra** — ohne die Ansicht lässt sich ein Fehler nicht
-lokalisieren, nur erraten.
+Spot. Das ist **Pflicht, kein Extra** — ohne die Ansicht lässt sich ein
+Fehler nicht lokalisieren, nur erraten.
+
+Bis zur Integration übernimmt der Korpuslauf diese Aufgabe: Er schreibt für
+jedes Foto ein Bild je Stufe (siehe Registrierungsdesign). Der Bildschirm in
+der App entsteht mit der Integration, weil er sie voraussetzt.
 
 ## Reihenfolge der Umsetzung
 
@@ -604,16 +611,20 @@ lokalisieren, nur erraten.
    von dieser Spec bevorzugte leicht schräge Aufnahme, verkantete Bilder oder
    3-Spot-Auflagen. Eigene Fotos ergänzen genau diese Lücken;
    Originalauflösung behalten.
-3. **APK-Zuwachs durch OpenCV messen** (siehe *Offene Risiken*), bevor die
-   Abhängigkeit festgezurrt wird.
+3. ~~**APK-Zuwachs durch OpenCV messen.**~~ Erledigt am 2026-09-10: OpenCV
+   4.14.0 aus Maven, das Release nur für ARM (siehe *Offene Risiken*,
+   *APK-Größe*).
 4. Modul `:detection` anlegen, Schnittstelle und Datentypen.
 5. Geometrie testgetrieben: Kegelschnittfit, Zentrum und Fluchtlinie,
    Rektifizierung, Fluchtpunkt, Spot-Zuordnung, Umrechnung, Auswahl. Plan:
    `docs/plans/2026-09-09-detection-geometry-core.md`.
-6. Debug-Ansicht, sobald Stufe 3 ein Bild liefert.
-7. Wahrnehmungsstufen gegen den Korpus, Kennzahlen festschreiben.
+6. Plan 3a: Registrierung aus dem Bild (Stufen 1 bis 3), gegen den Korpus
+   gemessen, mit Debug-Bildern aus dem Korpuslauf. Design:
+   `docs/design/2026-09-10-detection-registration-design.md`.
+7. Plan 3b: Pfeilfindung (Stufen 4 bis 6) gegen den Korpus, Kennzahlen
+   festschreiben.
 8. Integration in `InputActivity` und `GalleryActivity` samt Fotoablage,
-   pending scan und Fehlerfällen.
+   pending scan, Fehlerfällen und Debug-Bildschirm.
 
 ## Offene Risiken
 
@@ -670,9 +681,36 @@ wird weiterhin geladen und bleibt für Registrierungstests verfügbar; es zählt
 nur für keine Trefferkennzahl. Die vier sind trotzdem annotiert, in
 WA6Ring-Koordinaten, damit die Wahrheit vorliegt, sobald der Umfang wächst.
 
-**APK-Größe.** OpenCV bringt native Bibliotheken mit. Vor der Integration ist zu
-messen, wie viel je ABI dazukommt, und zu entscheiden, ob ABI-Splits genügen
-oder ob die Kotlin-Alternative aus *Modulschnitt* doch vorzuziehen ist.
+**APK-Größe.** Gemessen am 2026-09-10 mit `org.opencv:opencv` aus Maven
+Central: signierter `regularRelease`-Build mit R8, Downloadgröße je ABI aus
+dem App Bundle per `bundletool get-size total`.
+
+| ABI | ohne OpenCV | 4.14.0 | 5.0.0 |
+|---|---|---|---|
+| arm64-v8a | 5,4 MB | 15,6 MB (+10,2) | 19,4 MB (+14,0) |
+| armeabi-v7a | 5,4 MB | 13,7 MB (+8,3) | 17,4 MB (+12,0) |
+| x86_64 | 5,4 MB | 30,2 MB (+24,8) | 33,7 MB (+28,3) |
+| x86 | 5,4 MB | 23,6 MB (+18,2) | 27,6 MB (+22,2) |
+
+Das Universal-APK wächst von 7,5 auf 158,8 MB (4.14.0) beziehungsweise
+190,7 MB (5.0.0): Bei `minSdk 23` legt AGP native Bibliotheken unkomprimiert
+ab, und das AAR bringt alle vier ABIs mit. Fast alles davon ist
+`libopencv_java4.so`, die sämtliche OpenCV-Module enthält (`dnn`, `calib3d`,
+`features2d` …). Die Pipeline braucht davon nur `core` und `imgproc`.
+
+**Entscheidung:** OpenCV 4.14.0 aus Maven. 5.0.0 ist je ABI rund 4 MB größer
+und bringt der Pipeline nichts. Das Release packt nur `arm64-v8a` und
+`armeabi-v7a`; x86 und x86_64 betreffen im Wesentlichen Emulatoren und
+Chromebooks mit Intel-Prozessor. Der Debug-Build behält `x86_64`, damit die
+App mit der Erkennung auch im Emulator läuft. Gerechnet, nicht gebaut: Ein
+Universal-APK mit diesen zwei ABIs läge bei rund 50 MB, mit komprimiert
+abgelegten Bibliotheken (`useLegacyPackaging`) bei rund 26 MB.
+
+Offen bleibt zweierlei. Erstens ein eigener OpenCV-Build nur mit `core` und
+`imgproc`; seine Größe ist nicht gemessen. Zweitens, ob F-Droid das vorgebaute
+AAR annimmt, das nicht aus den Quellen gebaut ist; das ist nicht geprüft.
+Beides wird vor der Integration (Schritt 8) neu entschieden, zusammen mit der
+Kotlin-Alternative aus *Modulschnitt*.
 
 **Unverifizierter Fremdcode.** Die Basis enthält 35 Commits aus einem fremden
 Fork, davon breite maschinelle Umbauten. Vier Befunde wurden geprüft, drei

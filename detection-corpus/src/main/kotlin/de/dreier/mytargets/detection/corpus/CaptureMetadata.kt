@@ -36,6 +36,20 @@ data class ImageInfo(
     /** The long edge, which is what a focal length in 35 mm terms scales against. */
     val longEdge: Int
         get() = maxOf(width, height)
+
+    /**
+     * Whether a decoder that applies the EXIF orientation produced [width] x
+     * [height]. The sidecar records the raw size of the file; orientations 5
+     * to 8 turn the image by 90 degrees and swap the sides.
+     */
+    fun matchesDecodedSize(width: Int, height: Int): Boolean {
+        val swapped = (exifOrientation ?: 1) in 5..8
+        return if (swapped) {
+            width == this.height && height == this.width
+        } else {
+            width == this.width && height == this.height
+        }
+    }
 }
 
 /**

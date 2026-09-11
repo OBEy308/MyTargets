@@ -49,10 +49,12 @@ class ArrowReportTest {
         group: String,
         listed: Int,
         matched: Int,
-        outcome: String = ArrowRow.REGISTERED
+        outcome: String = ArrowRow.REGISTERED,
+        angleDegrees: Double? = null
     ) = ArrowRow(
         imageName = name,
         group = group,
+        angleDegrees = angleDegrees,
         outcome = outcome,
         detail = if (outcome == ArrowRow.REGISTERED) null else "no yellow disc",
         footPointFromCentre = 1.2,
@@ -106,7 +108,7 @@ class ArrowReportTest {
     fun anUnregisteredPhotographComesFirstThenTheOneMissingMost() {
         val report = render(
             listOf(
-                row("fine.jpg", ArrowGroups.OBLIQUE, 6, 6),
+                row("fine.jpg", ArrowGroups.OBLIQUE, 6, 6, angleDegrees = 35.0),
                 row("poor.jpg", ArrowGroups.OBLIQUE, 6, 2),
                 row("lost.jpg", ArrowGroups.OBLIQUE, 6, 0, outcome = "FACE_NOT_FOUND")
             )
@@ -115,6 +117,8 @@ class ArrowReportTest {
         assertThat(report.indexOf("| lost.jpg |")).isLessThan(report.indexOf("| poor.jpg |"))
         assertThat(report.indexOf("| poor.jpg |")).isLessThan(report.indexOf("| fine.jpg |"))
         assertThat(report).contains("| lost.jpg | FACE_NOT_FOUND: no yellow disc |")
+        assertThat(report).contains("| Photograph | Outcome | Angle (deg) | Q from centre |")
+        assertThat(report).contains("| fine.jpg | registered | 35 | 1.2000 |")
     }
 
     @Test

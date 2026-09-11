@@ -42,6 +42,8 @@ class StageMillis(val registration: Long, val warp: Long, val search: Long, val 
 class ArrowRow(
     val imageName: String,
     val group: String,
+    /** The camera's angle to the face normal from the capture metadata, in degrees; null when the sidecar has none. */
+    val angleDegrees: Double?,
     /** REGISTERED, or the name of the registration's failure. */
     val outcome: String,
     /** Why the registration failed; null for a registered row. */
@@ -175,12 +177,12 @@ object ArrowReport {
             sb.appendLine("## Photographs, $group")
             sb.appendLine()
             sb.appendLine(
-                "| Photograph | Outcome | Q from centre | Registration error | Q shift | " +
+                "| Photograph | Outcome | Angle (deg) | Q from centre | Registration error | Q shift | " +
                     "Largest line offset | Common point from Q | Listed | Unresolved | Candidates | " +
                     "Accepted | Matched | False positives | Selection | Largest error | NO_SHAFT | " +
                     "RAN_OUT | ms: registration / warp / search / walk |"
             )
-            sb.appendLine("|" + "---|".repeat(18))
+            sb.appendLine("|" + "---|".repeat(19))
             // Failures first, then the photograph missing most, then the one inventing most.
             val ordered = inGroup.sortedWith(
                 compareBy<ArrowRow>({ it.registered }, { -(it.listed - it.matched) }, { -it.falsePositives }, { it.imageName })
@@ -192,7 +194,7 @@ object ArrowReport {
     private fun line(row: ArrowRow): String {
         val outcome = if (row.registered || row.detail == null) row.outcome else "${row.outcome}: ${row.detail}"
         val t = row.millis
-        return "| ${row.imageName} | $outcome | ${number(row.footPointFromCentre)} | " +
+        return "| ${row.imageName} | $outcome | ${degrees(row.angleDegrees)} | ${number(row.footPointFromCentre)} | " +
             "${number(row.registrationError)} | ${number(row.footPointShift)} | " +
             "${number(row.largestLineOffset)} | ${number(row.commonPointFromFoot)} | ${row.listed} | " +
             "${row.unresolved} | ${row.candidates} | ${row.accepted} | ${row.matched} | " +
@@ -250,6 +252,8 @@ object ArrowReport {
     }
 
     private fun number(value: Double?) = value?.let { String.format(Locale.ROOT, "%.4f", it) } ?: "-"
+
+    private fun degrees(value: Double?) = value?.let { String.format(Locale.ROOT, "%.0f", it) } ?: "-"
 
     private fun percent(value: Double?) = value?.let { String.format(Locale.ROOT, "%.1f %%", it * 100.0) } ?: "-"
 }

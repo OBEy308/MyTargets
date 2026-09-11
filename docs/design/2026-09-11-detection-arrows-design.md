@@ -375,8 +375,13 @@ rechnet die Kantenlänge des entzerrten Bildes um.
      halbieren das Produkt, weil ihr Einschuss nur aus der Suche stammt. Bei
      `NO_SHAFT` liegt der Schaftkontrast per Definition unter 0,08; solche
      Kandidaten landen damit am unteren Ende der Skala und bestehen die
-     Abstandsregel praktisch nie. Das ist gewollt, denn der Lauf hat auf ihrer
-     Geraden keinen Schaft gesehen. Geteilt wird durch den höchsten Wert
+     Abstandsregel praktisch nie -- das gilt aber nur, wenn mehr Kandidaten
+     als erwartete Pfeile vorliegen. Bei weniger Kandidaten als
+     `expectedShots` nimmt `CandidateSelection` jeden vorhandenen Kandidaten
+     an, unabhängig von seiner Zuversicht, und die Abstandsregel läuft gar
+     nicht (siehe *Offene Punkte*, *Weniger Kandidaten als Pfeile*). Das ist
+     gewollt, denn der Lauf hat auf ihrer Geraden keinen Schaft gesehen.
+     Geteilt wird durch den höchsten Wert
      aller Kandidaten des Fotos nach dem Zusammenlegen, damit die
      Abstandsregel einen Maßstab hat, ohne dass der Kontrast absolut geeicht
      sein muss. Die 0,3 und die Halbierung sind Startwerte.
@@ -401,6 +406,7 @@ rechnet die Kantenlänge des entzerrten Bildes um.
 | Einschuss bei `RAN_OUT` | letzte Probe des Fensters | Einschuss aus der Suche, auf die verfeinerte Gerade projiziert | ein Lauf ohne Ende hat keinen Endpunkt, das Ende des Fensters ist willkürlich; die Gerade dagegen hat der Lauf gefunden |
 | Nachstellen | erste beste Gerade jedes Rasters | Mitte der Geraden, deren Güte höchstens 0,01 unter der besten liegt | Ohne das untere Viertel ist die Güte auf einem gleichmäßigen Schaft über etwa ±10° flach, und die erste beste Gerade liegt am Rand dieser Ebene. Auf dem Streifen des Tests liegt sie 9° neben dem Schaft, mit Bildrauschen 1° bis 3°; die Mitte trifft ihn auf 0,35°. |
 | Reichweite des Laufs | Fenster bis 0,035 vor der Saat; wo der Lauf zu früh stoppte, korrigierte der Annotator | bis 0,8 vor der Saat, mit neuem Ansatz an jedem Ende ab 0,05 vor der Saat; ein Schaft ohne Kontrast auf dem schwarzen Ring läuft über ihn hinweg | Die Pfeile stecken geneigt, und die Suche trifft ihre Schäfte oft nur in Stücken. In der ersten Messung hatten 19 Treffer nur ein Stück, dessen Lauf vor dem Einschuss endete: 12 liefen aus dem Fenster, 7 Stücke begannen hinter dem schwarzen Ring. So laufen alle Stücke eines Schafts bis zum selben Einschuss. |
+| Reichweite der Strahlen | 3,5 von Q | bis zur fernen Seite des Quadrats | Bei \|Q\| über 2 blieb sonst ein Teil der Auflage ungesucht |
 | Auswahl | Annotator | Zusammenlegen, relative Zuversicht, Stufe 7 | neu |
 
 ## Korpuslauf und Bericht
@@ -663,19 +669,23 @@ Mit diesem Dokument geändert:
   Schritt 4), die Zählung der Stücke im Bericht (*Korpuslauf und Bericht*,
   Punkt 3), danach eine zweite Messung und erst dann die Zuversicht und die
   Schranken.
-- **Zweite Messung (2026-09-11), nach dem Nachtrag.** Schräg: 33 von 86
-  Treffern gefunden (38,4 %), 10 Fehlfunde, Ringtreue 91,3 % (21/23),
-  Positionsfehler Median 0,0089, 95. Perzentil 0,0462. 68 Treffer hatten
-  einen Kandidaten, 36 davon hat erst die Auswahl verloren, 18 hatten keinen;
+- **Zweite Messung (2026-09-11), nach dem Nachtrag.** Schräg: 30 von 86
+  Treffern gefunden (34,9 %), 11 Fehlfunde, Ringtreue 90,0 % (18/20),
+  Positionsfehler Median 0,0090, 95. Perzentil 0,0463. 68 Treffer hatten
+  einen Kandidaten, 38 davon hat erst die Auswahl verloren, 18 hatten keinen;
   Linienabstände im Median 0,1261, 58 von 68 über 0,03. Falsche Kandidaten:
-  36 auf dem Schaft eines Treffers, 80 anderswo. Frontal: 15 von 74 (20,3 %),
+  38 auf dem Schaft eines Treffers, 82 anderswo. Frontal: 15 von 74 (20,3 %),
   30 Fehlfunde, Ringtreue 88,9 % (8/9), Positionsfehler Median 0,0130,
-  95. Perzentil 0,0385; 28 Treffer hatten einen Kandidaten, 15 davon hat die
-  Auswahl verloren, 46 hatten keinen; Linienabstände im Median 0,0926, 23 von
-  28 über 0,03; falsche Kandidaten 22 auf Schäften, 71 anderswo. Laufzeit je
+  95. Perzentil 0,0385; 28 Treffer hatten einen Kandidaten, 13 davon hat die
+  Auswahl verloren, 46 hatten keinen; Linienabstände im Median 0,1106, 24 von
+  28 über 0,03; falsche Kandidaten 21 auf Schäften, 72 anderswo. Laufzeit je
   schrägem Foto im Median: Registrierung 654 ms, Entzerren 40 ms, Suche
-  706 ms, Lauf 207 ms. Positionsfehler und Ringtreue sind schlechter als in
-  der ersten Messung, weil jetzt auch Treffer gefunden werden, die vorher
+  706 ms, Lauf 207 ms. Die Registrierungszeit enthält das Schreiben der
+  Bilder 1 bis 3. Die Zahlen der Kandidatendiagnose sind nach einer Korrektur
+  gerechnet: Sie geht jetzt von den Paaren der Kennzahlen aus, sodass
+  gefundene minus verlorene Treffer die zugeordneten ergeben. Positionsfehler
+  und Ringtreue sind schlechter als in der ersten Messung, weil jetzt auch
+  Treffer gefunden werden, die vorher
   fehlten, etwa am Rand des schwarzen Rings. Die Startwerte der Zuversicht
   sind geblieben: Den größten Verlust macht jetzt die Auswahl. Auf 5 schrägen
   Fotos nimmt sie nichts an, obwohl echte Kandidaten oben liegen, auf
@@ -691,6 +701,15 @@ Mit diesem Dokument geändert:
   Einschüsse auf dem schwarzen Ring unsichtbar sind, zeigt erst eine
   Auszählung wie nach der ersten Messung. Die Schranken schreiben diesen
   Stand fest.
+- **Weniger Kandidaten als Pfeile.** Liegen weniger georte Kandidaten vor als
+  `expectedShots`, nimmt `CandidateSelection` alle an, gleich welche
+  Zuversicht sie tragen -- die Abstandsregel aus Stufe 7 läuft dann gar nicht
+  (siehe *Verfahren*, Schritt 5). In der zweiten Messung erzeugte das 11 der
+  30 frontalen Fehlfunde (`a6_998887_dark` 3, `a6_998877` 4, `a6_x99993` 3,
+  `a6_998875_dark` 1), auf den schrägen Fotos keinen. Das bricht „lieber
+  nichts als falsch“, sobald die App Treffer schreibt; ein Folgeplan für die
+  Auswahl braucht entweder eine Zuversichtsschwelle oder hält `NO_SHAFT` (und
+  möglicherweise `RAN_OUT`) aus der Auswahl heraus.
 - **Mehr Fotos.** 86 Treffer auf 15 schrägen Fotos reichen, um die großen
   Fehlerarten zu sehen, aber nicht, um die Zuversicht und die Schranken
   einzustellen, ohne dass sie nur zu diesen Fotos passen: Die Treffer eines

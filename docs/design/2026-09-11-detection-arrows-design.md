@@ -296,23 +296,37 @@ rechnet die Kantenlänge des entzerrten Bildes um.
      letzte Probe vor einer Lücke von mindestens 0,012, deren Kontrast unter
      35 % des Schaftkontrasts liegt. Erreicht eine kürzere Lücke das Ende der
      Reichweite, endet der Lauf ebenfalls vor ihr; so macht es `tips.py` am
-     Ende seines Fensters, und das ist kein `RAN_OUT`. Die Gerade wird dabei
-     nicht nachgestellt: Ein Richtungsfehler von 0,35° verschiebt sie auf 0,6
-     um 0,004, weniger als den halben Schaft.
-   - **Über den schwarzen Ring.** Die Polarität des Schafts bestimmt der Lauf
-     auf den Proben mehr als 0,03 hinter der Saat: dunkel, wenn dort der
-     Median von `dunkler` mindestens so groß ist wie der von `heller`, sonst
-     hell. Bei einem dunklen Schaft zählt eine Probe, deren Mitte oder eine
-     ihrer Flanken auf einer schwarzen Zone liegt, weder als Schaft noch als
-     Lücke; der Lauf geht über sie hinweg, und auch der Schaftkontrast und die
-     Güte beim Nachstellen lassen sie aus. Schwarze Zonen sind die Ringe
-     zwischen einem Übergang mit `outside = BLACK` und dem nächsten mit
+     Ende seines Fensters, und das ist kein `RAN_OUT`.
+   - **Neu ansetzen.** Liegt das gefundene Ende mindestens 0,05 vor der Saat,
+     beginnt dort ein neuer Lauf: Das Ende wird die Saat, die Gerade wird dort
+     neu nachgestellt, grob und zweimal fein wie oben, um die Richtung des
+     vorigen Laufs, und der Lauf geht mit dem Schaftkontrast des ersten Laufs
+     und der übrigen Reichweite weiter. Erst ein Ende weniger als 0,05 vor
+     seiner Saat gilt, mit der Geraden seines Laufs. Die verfeinerte Richtung
+     ist auf dem Stück hinter der Saat nur auf etwa 1° bestimmt, und bei 1°
+     verlässt die verlängerte Gerade den Schaft nach rund 0,33; ein solches
+     falsches Ende fängt der neue Lauf ab, weil er die Gerade am Schaft
+     davor neu fittet. Ein echtes Ende bestätigt er, sein eigener Lauf endet
+     sofort. Nachgerechnet auf gemalten Streifen: Einschüsse bis 0,6 vor der
+     Saat auf 0,0001, mit zwei bis drei Fits je Lauf.
+   - **Über den schwarzen Ring.** Eine Probe, deren Mitte oder eine ihrer
+     Flanken auf einer schwarzen Zone liegt und die dort keinen Kontrast hat,
+     zählt weder als Schaft noch als Lücke; der Lauf geht über sie hinweg.
+     Keinen Kontrast heißt beim Lauf höchstens die Endschwelle von 35 % des
+     Schaftkontrasts, beim Nachstellen und beim Schaftkontrast selbst, die
+     vorher kommen, unter 0,08. Ein dunkler Schaft hat auf Schwarz keinen
+     Kontrast und wird überbrückt. Ein grauer Schaft hat dort Kontrast und
+     zählt wie bisher; hinter seinem Einschuss auf Schwarz überbrückt der
+     Lauf den Rest des Rings, und die Lücke dahinter beendet den Schaft am
+     Einschuss. Eine Polarität, auf dem Stück hinter der Saat bestimmt,
+     taugt dafür nicht: Ein grauer Schaft ist auf Weiß dunkler als die
+     Flanken und auf Schwarz heller. Schwarze Zonen sind die Ringe zwischen
+     einem Übergang mit `outside = BLACK` und dem nächsten mit
      `inside = BLACK` aus `request.transitions`, bei `WAFull` 0,6 bis 0,8.
-     Taucht der Schaft hinter dem Ring nicht wieder auf, ist der Einschuss die
-     letzte Schaftprobe vor dem Ring, wie ohne Überbrücken; ein dunkler Pfeil
-     mit Einschuss auf Schwarz bleibt damit am Ringrand, eine bekannte
-     Grenze. Bei einem hellen Schaft, etwa grau auf Schwarz, gilt jede Probe
-     wie bisher, denn dort ist Schwarz sein Kontrast.
+     Taucht ein dunkler Schaft hinter dem Ring nicht wieder auf, ist der
+     Einschuss die letzte Schaftprobe vor dem Ring, wie ohne Überbrücken; ein
+     dunkler Pfeil mit Einschuss auf Schwarz bleibt damit am Ringrand, eine
+     bekannte Grenze.
    - Liegt der Schaftkontrast unter 0,08, gibt es keinen Schaft zu verfolgen
      (`NO_SHAFT`). Hat noch die letzte Probe der Reichweite Kontrast
      (`RAN_OUT`), hat der Lauf kein Ende gefunden; das kommt nach dem Nachtrag
@@ -386,7 +400,7 @@ rechnet die Kantenlänge des entzerrten Bildes um.
 | Saatpunkte | Suche, dann von Hand geprüft und ergänzt | nur die Suche | die Pipeline hat keinen Annotator |
 | Einschuss bei `RAN_OUT` | letzte Probe des Fensters | Einschuss aus der Suche, auf die verfeinerte Gerade projiziert | ein Lauf ohne Ende hat keinen Endpunkt, das Ende des Fensters ist willkürlich; die Gerade dagegen hat der Lauf gefunden |
 | Nachstellen | erste beste Gerade jedes Rasters | Mitte der Geraden, deren Güte höchstens 0,01 unter der besten liegt | Ohne das untere Viertel ist die Güte auf einem gleichmäßigen Schaft über etwa ±10° flach, und die erste beste Gerade liegt am Rand dieser Ebene. Auf dem Streifen des Tests liegt sie 9° neben dem Schaft, mit Bildrauschen 1° bis 3°; die Mitte trifft ihn auf 0,35°. |
-| Reichweite des Laufs | Fenster bis 0,035 vor der Saat; wo der Lauf zu früh stoppte, korrigierte der Annotator | bis 0,8 vor der Saat, ein dunkler Schaft läuft über den schwarzen Ring hinweg | Die Pfeile stecken geneigt, und die Suche trifft ihre Schäfte oft nur in Stücken. In der ersten Messung hatten 19 Treffer nur ein Stück, dessen Lauf vor dem Einschuss endete: 12 liefen aus dem Fenster, 7 Stücke begannen hinter dem schwarzen Ring. So laufen alle Stücke eines Schafts bis zum selben Einschuss. |
+| Reichweite des Laufs | Fenster bis 0,035 vor der Saat; wo der Lauf zu früh stoppte, korrigierte der Annotator | bis 0,8 vor der Saat, mit neuem Ansatz an jedem Ende ab 0,05 vor der Saat; ein Schaft ohne Kontrast auf dem schwarzen Ring läuft über ihn hinweg | Die Pfeile stecken geneigt, und die Suche trifft ihre Schäfte oft nur in Stücken. In der ersten Messung hatten 19 Treffer nur ein Stück, dessen Lauf vor dem Einschuss endete: 12 liefen aus dem Fenster, 7 Stücke begannen hinter dem schwarzen Ring. So laufen alle Stücke eines Schafts bis zum selben Einschuss. |
 | Auswahl | Annotator | Zusammenlegen, relative Zuversicht, Stufe 7 | neu |
 
 ## Korpuslauf und Bericht

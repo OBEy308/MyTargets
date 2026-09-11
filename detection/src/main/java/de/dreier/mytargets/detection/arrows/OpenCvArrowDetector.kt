@@ -60,6 +60,10 @@ class OpenCvArrowDetector(
                 candidates.mapNotNull { it.located }, request.expectedShots, request.maxArrowsPerSpot
             )
             val walked = System.nanoTime()
+            show(debug, ArrowDebugImages.CANDIDATES) { ArrowDebugImages.candidates(warped, foot, candidates) }
+            show(debug, ArrowDebugImages.ENTRY_POINTS) {
+                ArrowDebugImages.entryPoints(warped, candidates, selection.accepted)
+            }
             return ArrowAnalysis.Analysed(
                 registration, foot, candidates, selection,
                 StageTimings(
@@ -84,6 +88,17 @@ class OpenCvArrowDetector(
                 failure = null
             )
         }
+
+    /** Renders a stage only when someone looks, and releases it after the sink. */
+    private fun show(debug: DebugSink, stage: String, render: () -> Mat) {
+        if (debug === DebugSink.NONE) return
+        val image = render()
+        try {
+            debug.image(stage, image)
+        } finally {
+            image.release()
+        }
+    }
 
     companion object {
         /** Above this radial RMS the registration drops a ring. */

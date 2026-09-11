@@ -33,6 +33,10 @@ Beim Ausarbeiten sind diese Stellen genauer geworden. Keine ändert eine Entsche
 15. **Der Fußpunkt im synthetischen Test stimmt auf 0,03**, nicht auf 0,01. Die Ringe legen die dritte Zeile der Homographie kaum fest (Design, *Korpuslauf und Bericht*), und die Suche verkraftet 0,04. Was der Registrar wirklich schafft, zeigt danach die Spalte *Q shift* im Bericht.
 16. **Der Schaftlauf nimmt die Mitte der besten Geraden** (Task 7; im Design unter *Abweichungen von den Werkzeugen*). Die Güte ist auf einem gleichmäßigen Schaft über etwa ±10° flach, die erste beste Gerade liegt am Rand dieser Ebene, bis 9° neben dem Schaft, und die Tests aus Task 7 scheitern damit auch mit dem unveränderten `tips.py`. Aus jedem der drei Raster gilt deshalb die Mitte aller Geraden, deren Güte höchstens `TIE = 0,01` unter der besten liegt, oder die beste, wenn die Mitte selbst darunter fällt.
 
+## Nachtrag nach der ersten Messung
+
+Task 1 bis 12 sind umgesetzt. Die erste Messung (Design, *Offene Punkte*, *Erste Messung*) fand auf den schrägen Fotos 19 von 86 Treffern: Die Pfeile stecken einzeln um einige Grad geneigt, die Suche trifft ihre Schäfte oft nur in Stücken, und der Lauf hörte 0,035 vor der Saat auf. Das Design ist seitdem ergänzt (Commits `626a1f37`, `68349364`): Der Lauf reicht bis 0,8, setzt an jedem Ende ab 0,05 vor seiner Saat mit neuer Verfeinerung neu an und läuft über schwarze Zonen hinweg, wo der Schaft keinen Kontrast hat; der Bericht zählt die falschen Kandidaten, die Stücke eines echten Schafts sind. Dafür kommen **Task 12a** und **Task 12b** vor Task 13, und Task 13 misst ein zweites Mal, bevor über Zuversicht und Schranken entschieden wird.
+
 ## Global Constraints
 
 - **Sprache:** Code, Bezeichner, Kommentare, Detail- und Berichtstexte Englisch.
@@ -70,16 +74,17 @@ Beim Ausarbeiten sind diese Stellen genauer geworden. Keine ändert eine Entsche
 | `arrows/Runs.kt` | 5 | Läufe über der Schwelle, Regeln von `radial.py` |
 | `arrows/Numbers.kt` | 6 | `steps` wie `numpy.arange`, Median |
 | `arrows/ShaftSearch.kt` | 6 | Suche durch `Q`, Doppelte, Zusammenlegen |
-| `arrows/TipWalk.kt` | 7 | Schaftlauf, `TipRefinement`, `WalkResult` |
+| `arrows/TipWalk.kt` | 7, 12a | Schaftlauf, `TipRefinement`, `WalkResult` |
+| `arrows/BlackZones.kt` | 12a | schwarze Zonen aus der Übergangstabelle |
 | `arrows/ArrowCandidates.kt` | 8 | `ArrowCandidate`, Zusammenlegen nach dem Lauf, Zuversicht |
 | `arrows/ArrowAnalysis.kt` | 9 | `ArrowAnalysis`, `StageTimings` |
 | `arrows/OpenCvArrowDetector.kt` | 9, 10 | der Detektor |
 | `arrows-test/SyntheticArrows.kt` | 9, 10 | Kamera, Pfeile als Stäbe im Raum, Streifen auf der Auflage |
 | `arrows-test/WaFullZones.kt` | 9 | Zonenradien und Zonenindex von `WAFull` |
 | `arrows/ArrowDebugImages.kt` | 10 | Debug-Bilder 5 und 6 |
-| `metrics/ArrowReport.kt` | 11, 14 | Gruppen, Zeilen, Diagnose, Bericht, Block der Schranken |
+| `metrics/ArrowReport.kt` | 11, 12b, 14 | Gruppen, Zeilen, Diagnose, Bericht, Block der Schranken |
 | `registration-test/CorpusPhotos.kt` | 12 | geteilte Hilfen der Korpusläufe |
-| `arrows-test/ArrowCorpusRun.kt` | 12, 14 | der Pfeillauf, Bild 7, Schranken |
+| `arrows-test/ArrowCorpusRun.kt` | 12, 12b, 14 | der Pfeillauf, Bild 7, Schranken |
 | `BUILDING.md` | 12, 14 | wie man den Lauf startet |
 | `metrics/Percentiles.kt` | 14 | Perzentil, geteilt von `Metrics` und Schranken |
 | `metrics/ArrowBounds.kt` | 14 | `PositionBound`, `ArrowPins`, `ArrowMeasurement`, `ArrowBounds` |
@@ -4101,16 +4106,756 @@ git commit -m "detection: the arrow run over the corpus, its report and stage im
 
 ---
 
-## Task 13: Der erste Bericht und die Zuversicht
+## Task 12a: Der Lauf bis zum Einschuss
 
-Diese Aufgabe schreibt keinen neuen Code, sofern der Bericht keinen verlangt. Sie endet mit einem Halt beim Nutzer: Das Design legt die Startwerte der Zuversicht fest und verlangt, sie vor den Schranken am Bericht nachzustellen. Das ist eine Abwägung an 15 Fotos, und die trifft der Nutzer.
+Nachtrag nach der ersten Messung (Design, *Verfahren* Schritt 4, Punkte *Lauf*, *Neu ansetzen* und *Über den schwarzen Ring*; *Offene Punkte*, *Erste Messung*). Die Pfeile stecken einzeln geneigt, die Suche trifft ihre Schäfte in Stücken, und der Lauf aus Task 7 hörte 0,035 vor der Saat auf. Jetzt reicht er bis 0,8, setzt an jedem Ende ab 0,05 vor seiner Saat mit neuer Verfeinerung neu an und läuft über schwarze Zonen hinweg, wo der Schaft keinen Kontrast hat.
+
+**Files:**
+- Create: `detection/src/main/java/de/dreier/mytargets/detection/arrows/BlackZones.kt`
+- Modify: `detection/src/main/java/de/dreier/mytargets/detection/arrows/FlankContrast.kt`
+- Modify: `detection/src/main/java/de/dreier/mytargets/detection/arrows/TipWalk.kt`
+- Modify: `detection/src/main/java/de/dreier/mytargets/detection/arrows/OpenCvArrowDetector.kt`
+- Test: `detection/src/test/java/de/dreier/mytargets/detection/arrows/BlackZonesTest.kt`
+- Test: `detection/src/test/java/de/dreier/mytargets/detection/arrows/TipWalkTest.kt`
+- Test: `detection/src/test/java/de/dreier/mytargets/detection/arrows/ArrowRobustnessTest.kt`
+
+**Interfaces:**
+- Consumes: `RingTransition(radius, inside: ColourClass, outside: ColourClass)`, `RingTransitions.WA_FULL`, `ColourClass` (`registration`), `FlankContrast.WALK` (Task 5), `Numbers` (Task 6), `Line2` (Task 2), `FacePainter` mit `ring(inner, outer, v)` und `stripe(from, to, width, v)` (Task 4, Test)
+- Produces:
+  - `object BlackZones { fun of(transitions: List<RingTransition>): List<ClosedFloatingPointRange<Double>> }`
+  - `FlankContrast.flank: Double` wird öffentlich
+  - `TipWalk.walk(face: RectifiedFace, seed: Vec2, direction: Vec2, blackZones: List<ClosedFloatingPointRange<Double>> = emptyList(), reach: Double = TipWalk.REACH): WalkResult`; neue Konstanten `REACH = 0.8`, `RESEED = 0.05`; `AHEAD` entfällt. `TipRefinement` und `WalkResult` bleiben.
+
+Die Testfälle sind vor dem Plan in einer numpy-Nachbildung des Laufs auf denselben gemalten Streifen gerechnet: Alle Einschüsse treffen auf höchstens 0,0013, der Streifen über die Reichweite hinaus endet mit `RAN_OUT`.
+
+- [ ] **Step 1: Die fehlschlagenden Tests schreiben**
+
+`BlackZonesTest.kt`:
+
+```kotlin
+package de.dreier.mytargets.detection.arrows
+
+import com.google.common.truth.Truth.assertThat
+import de.dreier.mytargets.detection.registration.ColourClass
+import de.dreier.mytargets.detection.registration.RingTransition
+import de.dreier.mytargets.detection.registration.RingTransitions
+import org.junit.Test
+
+class BlackZonesTest {
+
+    @Test
+    fun theBlackRingOfTheFullFaceLiesBetweenBlueAndWhite() {
+        assertThat(BlackZones.of(RingTransitions.WA_FULL)).containsExactly(0.6..0.8)
+    }
+
+    @Test
+    fun theOrderOfTheTransitionsDoesNotMatter() {
+        assertThat(BlackZones.of(RingTransitions.WA_FULL.reversed())).containsExactly(0.6..0.8)
+    }
+
+    @Test
+    fun aFaceWithoutBlackHasNoBlackZone() {
+        val transitions = listOf(
+            RingTransition(0.2, ColourClass.YELLOW, ColourClass.RED),
+            RingTransition(0.4, ColourClass.RED, ColourClass.BLUE)
+        )
+
+        assertThat(BlackZones.of(transitions)).isEmpty()
+    }
+}
+```
+
+`TipWalkTest.kt` vollständig ersetzen (Lizenzkopf bleibt). Die ersten beiden Tests bleiben, die beiden Tests zum Fenster von `tips.py` laufen mit `reach = 0.035`, dazu kommen die Fälle des Nachtrags:
+
+```kotlin
+package de.dreier.mytargets.detection.arrows
+
+import com.google.common.truth.Truth.assertThat
+import de.dreier.mytargets.detection.geometry.Vec2
+import org.junit.Test
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.sin
+
+class TipWalkTest {
+
+    private val foot = Vec2(1.3, 0.0)
+    private val entry = Vec2(0.2, 0.1)
+
+    /** From the entry towards the nock. */
+    private val outward = (entry - foot) * (1.0 / (entry - foot).length)
+    private val across = Vec2(-outward.y, outward.x)
+
+    private fun rotate(v: Vec2, degrees: Double): Vec2 {
+        val a = Math.toRadians(degrees)
+        return Vec2(v.x * cos(a) - v.y * sin(a), v.x * sin(a) + v.y * cos(a))
+    }
+
+    /** Towards the entry, three degrees off, as a seed from the search can be. */
+    private val seedDirection = rotate(outward * -1.0, 3.0)
+
+    private fun shaft(length: Double = 0.4) =
+        FacePainter(0.9f).stripe(entry, entry + outward * length, 0.012, 0.15f).build()
+
+    @Test
+    fun findsTheEndOfTheShaft() {
+        val seed = entry + outward * 0.01 + across * 0.004
+
+        val result = TipWalk.walk(shaft(), seed, seedDirection)
+
+        assertThat(result.refinement).isEqualTo(TipRefinement.REFINED)
+        assertThat(result.tip.distanceTo(entry)).isAtMost(0.002)
+        assertThat(abs(result.line.signedDistanceTo(entry + outward * 0.3))).isAtMost(0.002)
+    }
+
+    @Test
+    fun withoutAShaftTheSeedStays() {
+        val result = TipWalk.walk(FacePainter(0.9f).build(), entry, seedDirection)
+
+        assertThat(result.refinement).isEqualTo(TipRefinement.NO_SHAFT)
+        assertThat(result.tip).isEqualTo(entry)
+    }
+
+    @Test
+    fun aShaftEndingWellAheadOfTheSeedIsWalkedToItsEnd() {
+        // 0.3 ahead: the window of tips.py, 0.035, would have run out.
+        val result = TipWalk.walk(shaft(), entry + outward * 0.3, seedDirection)
+
+        assertThat(result.refinement).isEqualTo(TipRefinement.REFINED)
+        assertThat(result.tip.distanceTo(entry)).isAtMost(0.002)
+    }
+
+    @Test
+    fun aShaftLongerThanTheReachRunsOutOnTheRefinedLine() {
+        // The end lies 0.9 ahead of the seed, beyond the reach of 0.8.
+        val seed = entry + outward * 0.9
+
+        val result = TipWalk.walk(shaft(1.2), seed, seedDirection)
+
+        assertThat(result.refinement).isEqualTo(TipRefinement.RAN_OUT)
+        assertThat(result.tip.distanceTo(seed)).isAtMost(0.002)
+        assertThat(abs(result.line.signedDistanceTo(entry + outward * 1.0))).isAtMost(0.002)
+    }
+
+    @Test
+    fun withTheReachOfTipsPyAShaftRunningPastItRunsOut() {
+        // The seed sits 0.05 behind the end; the walk looks only 0.035 ahead.
+        val seed = entry + outward * 0.05
+
+        val result = TipWalk.walk(shaft(), seed, seedDirection, reach = 0.035)
+
+        assertThat(result.refinement).isEqualTo(TipRefinement.RAN_OUT)
+        assertThat(result.tip.distanceTo(seed)).isAtMost(0.002)
+        assertThat(abs(result.line.signedDistanceTo(entry))).isAtMost(0.002)
+    }
+
+    @Test
+    fun aShortGapReachingTheEndOfTheReachStillEndsTheShaftBeforeIt() {
+        // The end lies 0.03 ahead of the seed. After it only 0.005 of the reach
+        // remain, less than the 0.012 an end needs, but the gap reaches the end of
+        // the reach, and tips.py ends the shaft there.
+        val seed = entry + outward * 0.03
+
+        val result = TipWalk.walk(shaft(), seed, seedDirection, reach = 0.035)
+
+        assertThat(result.refinement).isEqualTo(TipRefinement.REFINED)
+        assertThat(result.tip.distanceTo(entry)).isAtMost(0.002)
+    }
+
+    /** WAFull's black ring. */
+    private val blackRing = listOf(0.6..0.8)
+
+    /**
+     * A face with the black ring, in the brightness of SyntheticFace's black,
+     * and a shaft of brightness [v] along the x axis from [from] out to the edge.
+     */
+    private fun ringFace(from: Vec2, v: Float) =
+        FacePainter(0.9f).ring(0.6, 0.8, 0.118f).stripe(from, Vec2(-1.1, 0.0), 0.012, v).build()
+
+    /** Towards the entries of the ring faces, where the foot point would lie, three degrees off. */
+    private val inward = rotate(Vec2(1.0, 0.0), 3.0)
+
+    @Test
+    fun aDarkShaftIsWalkedAcrossTheBlackRingToItsEntry() {
+        val result = TipWalk.walk(ringFace(Vec2(-0.5, 0.0), 0.16f), Vec2(-0.9, 0.0), inward, blackRing)
+
+        assertThat(result.refinement).isEqualTo(TipRefinement.REFINED)
+        assertThat(result.tip.distanceTo(Vec2(-0.5, 0.0))).isAtMost(0.002)
+    }
+
+    @Test
+    fun withoutTheBlackZoneTheRingEndsADarkShaft() {
+        val result = TipWalk.walk(ringFace(Vec2(-0.5, 0.0), 0.16f), Vec2(-0.9, 0.0), inward)
+
+        assertThat(result.refinement).isEqualTo(TipRefinement.REFINED)
+        assertThat(result.tip.distanceTo(Vec2(-0.8, 0.0))).isAtMost(0.002)
+    }
+
+    @Test
+    fun aDarkShaftEnteringOnBlackEndsWhereItVanished() {
+        // A known limit: the entry at -0.7 cannot be seen, the tip stays at the ring's edge.
+        val result = TipWalk.walk(ringFace(Vec2(-0.7, 0.0), 0.16f), Vec2(-0.95, 0.0), inward, blackRing)
+
+        assertThat(result.refinement).isEqualTo(TipRefinement.REFINED)
+        assertThat(result.tip.distanceTo(Vec2(-0.8, 0.0))).isAtMost(0.002)
+    }
+
+    @Test
+    fun aGreyShaftEnteringOnBlackEndsAtItsEntry() {
+        // Grey is darker than white and lighter than black: it has contrast on the
+        // ring, so the ring is not bridged before its entry.
+        val result = TipWalk.walk(ringFace(Vec2(-0.7, 0.0), 0.59f), Vec2(-0.95, 0.0), inward, blackRing)
+
+        assertThat(result.refinement).isEqualTo(TipRefinement.REFINED)
+        assertThat(result.tip.distanceTo(Vec2(-0.7, 0.0))).isAtMost(0.002)
+    }
+}
+```
+
+In `ArrowRobustnessTest.kt` nach `threeArrowsLeaningAlikeMeetInOnePoint` einfügen:
+
+```kotlin
+    @Test
+    fun anArrowLeaningFourDegreesIsFoundOnceAtItsEntry() {
+        // At a height of 2.0 a lean of 4 degrees across puts the shaft's line
+        // about 0.14 from Q, far outside the search's window of 0.04: the search
+        // meets the shaft only in pieces, and every piece walks to the entry
+        // (arrow design, Verfahren step 4, Neu ansetzen).
+        val arrow = SyntheticArrow(Vec2(0.1, -0.05), tilt = leanAcross(Vec2(0.1, -0.05), 4.0))
+
+        val analysis = analyse(photograph(arrow), 1)
+
+        assertThat(analysis.candidates.filter { it.tip.distanceTo(arrow.entry) <= 0.02 }).hasSize(1)
+        assertThat(analysis.selection.accepted.single().local.distanceTo(arrow.entry)).isAtMost(0.01)
+    }
+```
+
+- [ ] **Step 2: Laufen lassen, Fehlschlag prüfen**
+
+Run: `./gradlew :detection:testDevDebugUnitTest --tests '*BlackZonesTest*' --tests '*TipWalkTest*'`
+Expected: FAIL beim Kompilieren — `Unresolved reference 'BlackZones'` und `Cannot find a parameter with this name: reach` bzw. zu viele Argumente für `walk`.
+
+- [ ] **Step 3: Die Flanke öffentlich**
+
+In `FlankContrast.kt` im Konstruktor
+
+```kotlin
+    private val flank: Double,
+```
+
+ersetzen durch
+
+```kotlin
+    /** How far the flanks lie from the line on either side. */
+    val flank: Double,
+```
+
+- [ ] **Step 4: Die schwarzen Zonen**
+
+`BlackZones.kt`:
+
+```kotlin
+package de.dreier.mytargets.detection.arrows
+
+import de.dreier.mytargets.detection.registration.ColourClass
+import de.dreier.mytargets.detection.registration.RingTransition
+
+/**
+ * The rings of a face on which a dark shaft has no contrast (arrow design,
+ * Verfahren step 4, Über den schwarzen Ring), as inner..outer radius about the
+ * centre of the rectified face, which is the spot's centre on the single-spot
+ * faces of v1.
+ */
+object BlackZones {
+
+    /** From each transition into BLACK, going outwards, to the next transition out of it. */
+    fun of(transitions: List<RingTransition>): List<ClosedFloatingPointRange<Double>> {
+        val sorted = transitions.sortedBy { it.radius }
+        return sorted.withIndex().mapNotNull { (k, into) ->
+            if (into.outside != ColourClass.BLACK) return@mapNotNull null
+            val out = sorted.drop(k + 1).firstOrNull { it.inside == ColourClass.BLACK } ?: return@mapNotNull null
+            into.radius..out.radius
+        }
+    }
+}
+```
+
+- [ ] **Step 5: Der Lauf**
+
+`TipWalk.kt` vollständig ersetzen (Lizenzkopf bleibt). Nachstellen und Mitte der besten Geraden sind die aus Task 7, jetzt in `fit`; neu sind die Reichweite, das neue Ansetzen und die schwarzen Zonen:
+
+```kotlin
+package de.dreier.mytargets.detection.arrows
+
+import de.dreier.mytargets.detection.geometry.Line2
+import de.dreier.mytargets.detection.geometry.Vec2
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.hypot
+import kotlin.math.roundToInt
+import kotlin.math.sin
+
+enum class TipRefinement {
+    /** The walk found the shaft and where it ends. */
+    REFINED,
+
+    /** The walk saw no shaft behind the seed; the entry point is the search's. */
+    NO_SHAFT,
+
+    /** The walk found the shaft but no end within its reach; the entry point is the search's, on the refined line. */
+    RAN_OUT
+}
+
+/**
+ * One walked shaft. [line] is the refined line when the walk saw a shaft
+ * (REFINED, RAN_OUT) and the search's line for NO_SHAFT; [tip] lies on it.
+ */
+class WalkResult(val tip: Vec2, val line: Line2, val shaftContrast: Double, val refinement: TipRefinement)
+
+/**
+ * tips.py's refine (arrow design, Verfahren step 4): fit the line of the shaft
+ * behind the seed, then walk along it until the shaft stops being darker (or
+ * lighter) than its flanks. It deviates from tips.py where the pipeline has no
+ * annotator (arrow design, Abweichungen von den Werkzeugen): of each grid it
+ * keeps the middle of the near-best lines; it looks up to REACH ahead and sets
+ * out again with a fresh fit from every end at least RESEED ahead of its seed;
+ * and it walks across a black zone on which the shaft has no contrast.
+ */
+object TipWalk {
+
+    const val BEHIND_FROM = -0.10
+    const val BEHIND_TO = -0.012
+    const val BEHIND_STEP = 0.0015
+    const val ANGLE_WINDOW = 12
+    const val OFFSET_STEPS = 6
+    const val OFFSET_STEP = 0.002
+    const val FINE_STEPS = 4
+    const val FINE_ANGLE_STEP = 0.25
+    const val FINE_OFFSET_STEP = 0.0005
+    const val WALK_STEP = 0.0005
+    const val REACH = 0.8
+    const val RESEED = 0.05
+    const val SHAFT_FROM = -0.03
+    const val END_FRACTION = 0.35
+    const val END_GAP = 0.012
+    const val NO_SHAFT_BELOW = 0.08
+
+    /** Lines whose goodness lies this close to the best count as equally good. */
+    const val TIE = 0.01
+
+    /**
+     * @param direction from the nock towards the tip; any length
+     * @param blackZones rings, inner..outer radius about the face centre, on
+     *        which a dark shaft has no contrast ([BlackZones.of])
+     * @param reach how far ahead of [seed] the walk looks for the end
+     */
+    fun walk(
+        face: RectifiedFace,
+        seed: Vec2,
+        direction: Vec2,
+        blackZones: List<ClosedFloatingPointRange<Double>> = emptyList(),
+        reach: Double = REACH
+    ): WalkResult {
+        val first = fit(face, seed, Math.toDegrees(atan2(direction.y, direction.x)), blackZones)
+        val shaft = shaftContrast(face, seed, first, blackZones)
+        if (shaft < NO_SHAFT_BELOW) {
+            return WalkResult(seed, Line2(seed, direction), shaft, TipRefinement.NO_SHAFT)
+        }
+        val firstLine = first.line(seed)
+        var from = seed
+        var fitted = first
+        var used = 0.0
+        while (true) {
+            val line = fitted.line(from)
+            val end = endAhead(face, from, fitted, shaft, blackZones, reach - used)
+                ?: return WalkResult(firstLine.project(seed), firstLine, shaft, TipRefinement.RAN_OUT)
+            val advance = (end.x - from.x) * line.direction.x + (end.y - from.y) * line.direction.y
+            if (advance < RESEED) return WalkResult(end, line, shaft, TipRefinement.REFINED)
+            // A line extended from a fit behind the seed leaves the shaft after a
+            // few tenths when its direction is a degree off. Fit again at the end
+            // found; a real end confirms itself, the next walk ends at once.
+            used += advance
+            from = end
+            fitted = fit(face, from, fitted.angle, blackZones)
+        }
+    }
+
+    /** A line fitted at a seed: [angle] in degrees, [direction] its unit vector, [offset] along the left normal. */
+    private class Fit(val angle: Double, val offset: Double, val direction: Vec2) {
+        fun line(seed: Vec2) = Line2(seed + Vec2(-direction.y, direction.x) * offset, direction)
+    }
+
+    /** tips.py's fit of the line behind [seed], around [angle0] (arrow design, Nachstellen). */
+    private fun fit(
+        face: RectifiedFace,
+        seed: Vec2,
+        angle0: Double,
+        blackZones: List<ClosedFloatingPointRange<Double>>
+    ): Fit {
+        val behind = Numbers.steps(BEHIND_FROM, BEHIND_TO, BEHIND_STEP)
+
+        // Robust mean of the contrast behind the seed: the lowest quarter is
+        // dropped so gaps and crossing shafts do not pull the line away. A sample
+        // on a black zone without contrast says nothing about the line.
+        fun goodness(angle: Double, offset: Double): Double {
+            val u = unit(angle)
+            val v = FlankContrast.WALK.profile(face, seed, u, offset, behind)
+            val kept = v.indices
+                .filter { v[it] >= NO_SHAFT_BELOW || !onBlack(seed, u, offset, behind[it], blackZones) }
+                .map { v[it] }
+                .sorted()
+            if (kept.isEmpty()) return 0.0
+            return kept.subList(kept.size / 4, kept.size).average()
+        }
+
+        // tips.py takes the first best line of each grid. On a shaft of even
+        // brightness the goodness is flat across many degrees, because the lowest
+        // quarter drops out, and the first best line lies at the edge of that
+        // plateau. The middle of the near-best lines is the shaft's axis.
+        fun middleOfBest(grid: List<Pair<Double, Double>>): Pair<Double, Double> {
+            val scores = DoubleArray(grid.size) { goodness(grid[it].first, grid[it].second) }
+            val top = scores.max()
+            var angle = 0.0
+            var offset = 0.0
+            var count = 0
+            for (k in grid.indices) {
+                if (scores[k] >= top - TIE) {
+                    angle += grid[k].first
+                    offset += grid[k].second
+                    count++
+                }
+            }
+            val middle = Pair(angle / count, offset / count)
+            if (goodness(middle.first, middle.second) >= top - TIE) return middle
+            // The near-best lines fall apart into two groups, as beside a second
+            // shaft; their middle lies between them. Keep the first best.
+            return grid[scores.indices.maxBy { scores[it] }]
+        }
+
+        var (angle, offset) = middleOfBest(
+            (-ANGLE_WINDOW..ANGLE_WINDOW).flatMap { a ->
+                (-OFFSET_STEPS..OFFSET_STEPS).map { o -> Pair(angle0 + a, o * OFFSET_STEP) }
+            }
+        )
+        repeat(2) {
+            val angleBefore = angle
+            val offsetBefore = offset
+            val fine = middleOfBest(
+                (-FINE_STEPS..FINE_STEPS).flatMap { a ->
+                    (-FINE_STEPS..FINE_STEPS).map { o ->
+                        Pair(angleBefore + a * FINE_ANGLE_STEP, offsetBefore + o * FINE_OFFSET_STEP)
+                    }
+                }
+            )
+            angle = fine.first
+            offset = fine.second
+        }
+        return Fit(angle, offset, unit(angle))
+    }
+
+    /** The median contrast more than 0.03 behind [seed], without black samples lacking contrast; 0 when none is left. */
+    private fun shaftContrast(
+        face: RectifiedFace,
+        seed: Vec2,
+        fit: Fit,
+        blackZones: List<ClosedFloatingPointRange<Double>>
+    ): Double {
+        val s = Numbers.steps(BEHIND_FROM, SHAFT_FROM, WALK_STEP)
+        val v = FlankContrast.WALK.profile(face, seed, fit.direction, fit.offset, s)
+        val kept = v.indices
+            .filter { v[it] >= NO_SHAFT_BELOW || !onBlack(seed, fit.direction, fit.offset, s[it], blackZones) }
+            .map { v[it] }
+            .toDoubleArray()
+        return if (kept.isEmpty()) 0.0 else Numbers.median(kept)
+    }
+
+    /**
+     * Walks from 0.03 behind [from] along [fit] up to [reach] ahead and returns
+     * the last sample of shaft before an end, or null when the shaft goes on.
+     * An end is a gap of END_GAP below END_FRACTION of [shaft] -- or a shorter
+     * one that reaches the end of the reach, as tips.py does at the end of its
+     * window. A sample on a black zone without contrast is neither shaft nor gap.
+     */
+    private fun endAhead(
+        face: RectifiedFace,
+        from: Vec2,
+        fit: Fit,
+        shaft: Double,
+        blackZones: List<ClosedFloatingPointRange<Double>>,
+        reach: Double
+    ): Vec2? {
+        val u = fit.direction
+        val s = Numbers.steps(BEHIND_FROM, reach, WALK_STEP)
+        val v = FlankContrast.WALK.profile(face, from, u, fit.offset, s)
+        val start = ((SHAFT_FROM - BEHIND_FROM) / WALK_STEP).roundToInt()
+        val threshold = END_FRACTION * shaft
+        val counted = (start until s.size).filter {
+            v[it] > threshold || !onBlack(from, u, fit.offset, s[it], blackZones)
+        }
+        val gap = (END_GAP / WALK_STEP).roundToInt()
+        var lastShaft = start - 1
+        var i = 0
+        while (i < counted.size) {
+            if (v[counted[i]] > threshold) {
+                lastShaft = counted[i]
+                i++
+                continue
+            }
+            var j = i
+            while (j < counted.size && v[counted[j]] <= threshold) j++
+            if (j - i >= gap || j >= counted.size) return fit.line(from).point + u * s[lastShaft]
+            i = j
+        }
+        return null
+    }
+
+    /** Whether the sample [along] on the line through [seed], or one of its flanks, lies on a black zone. */
+    private fun onBlack(
+        seed: Vec2,
+        u: Vec2,
+        offset: Double,
+        along: Double,
+        blackZones: List<ClosedFloatingPointRange<Double>>
+    ): Boolean {
+        if (blackZones.isEmpty()) return false
+        val nx = -u.y
+        val ny = u.x
+        val x = seed.x + offset * nx + along * u.x
+        val y = seed.y + offset * ny + along * u.y
+        val flank = FlankContrast.WALK.flank
+        return inBlack(hypot(x, y), blackZones) ||
+            inBlack(hypot(x - flank * nx, y - flank * ny), blackZones) ||
+            inBlack(hypot(x + flank * nx, y + flank * ny), blackZones)
+    }
+
+    private fun inBlack(radius: Double, blackZones: List<ClosedFloatingPointRange<Double>>) =
+        blackZones.any { radius in it }
+
+    private fun unit(degrees: Double): Vec2 {
+        val r = Math.toRadians(degrees)
+        return Vec2(cos(r), sin(r))
+    }
+}
+```
+
+Die Schleife in `walk` endet sicher: Ein neuer Ansatz verlangt einen Fortschritt von mindestens `RESEED`, und die übrige Reichweite schrumpft um ihn; unter `RESEED` übriger Reichweite gilt jedes Ende, oder der Lauf läuft aus. Das sind höchstens 17 Ansätze.
+
+- [ ] **Step 6: Laufen lassen, bestehen prüfen**
+
+Run: `./gradlew :detection:testDevDebugUnitTest --tests '*BlackZonesTest*' --tests '*TipWalkTest*'`
+Expected: PASS, 3 und 10 Tests.
+
+- [ ] **Step 7: Der Detektor gibt die schwarzen Zonen mit**
+
+In `OpenCvArrowDetector.analyse` die Zeile
+
+```kotlin
+            val walks = runs.map { TipWalk.walk(face, it.tip, it.tip - it.far) }
+```
+
+ersetzen durch
+
+```kotlin
+            val blackZones = BlackZones.of(request.transitions)
+            val walks = runs.map { TipWalk.walk(face, it.tip, it.tip - it.far, blackZones) }
+```
+
+- [ ] **Step 8: Die synthetischen Fälle und die ganze Suite**
+
+Run: `./gradlew :detection:testDevDebugUnitTest --tests '*ArrowRobustnessTest*' --tests '*OpenCvArrowDetectorTest*'`
+Expected: PASS, auch der neue Fall mit 4° Neigung. Scheitert ein Fall, nicht an Schwellen oder Toleranzen drehen: Kandidaten mit Einschuss, `far`, Ausgang, Zuversicht und `offsetFromFoot` sammeln, die Debug-Bilder 5 und 6 in einen Ordner außerhalb des Repos schreiben und berichten.
+
+Run: `./gradlew :detection:testDevDebugUnitTest`
+Expected: PASS.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add detection/src/main/java/de/dreier/mytargets/detection/arrows/BlackZones.kt \
+  detection/src/main/java/de/dreier/mytargets/detection/arrows/FlankContrast.kt \
+  detection/src/main/java/de/dreier/mytargets/detection/arrows/TipWalk.kt \
+  detection/src/main/java/de/dreier/mytargets/detection/arrows/OpenCvArrowDetector.kt \
+  detection/src/test/java/de/dreier/mytargets/detection/arrows/BlackZonesTest.kt \
+  detection/src/test/java/de/dreier/mytargets/detection/arrows/TipWalkTest.kt \
+  detection/src/test/java/de/dreier/mytargets/detection/arrows/ArrowRobustnessTest.kt
+git commit -m "detection: walk each shaft to its entry, across the black ring and past the window"
+```
+
+---
+
+## Task 12b: Stücke im Bericht
+
+Die Kandidatendiagnose zählt die falschen Kandidaten je Gruppe getrennt danach, ob sie auf dem Schaft eines gelisteten Treffers liegen (Design, *Korpuslauf und Bericht*, Punkt 3). In der ersten Messung waren das 69 auf echten Schäften und 67 anderswo; die zweite Messung zeigt, ob der Lauf aus Task 12a die Stücke einsammelt.
+
+**Files:**
+- Modify: `detection-corpus/src/main/kotlin/de/dreier/mytargets/detection/metrics/ArrowReport.kt`
+- Test: `detection-corpus/src/test/kotlin/de/dreier/mytargets/detection/metrics/ArrowReportTest.kt`
+- Modify: `detection/src/test/java/de/dreier/mytargets/detection/arrows/ArrowCorpusRun.kt`
+
+**Interfaces:**
+- Consumes: `ArrowReport.render`, `PhotoDiagnosis`, `TruthDiagnosis` (Task 11), `ArrowCorpusRun.analysed` (Task 12), `ArrowCandidate` mit `tip`, `far`, `line` (Task 8)
+- Produces: `class PhotoDiagnosis(imageName, group, bestFalseConfidence: Double?, falseOnShafts: Int = 0, falseElsewhere: Int = 0)`
+
+- [ ] **Step 1: Den fehlschlagenden Test schreiben**
+
+In `ArrowReportTest.kt` nach `theDiagnosisSeparatesFindingFromSelecting` einfügen:
+
+```kotlin
+    @Test
+    fun theDiagnosisCountsFalseCandidatesOnRealShaftsApart() {
+        val truths = listOf(
+            TruthDiagnosis("o.jpg", ArrowGroups.OBLIQUE, 0, rank = 1, confidence = 1.0, lineOffset = 0.01, accepted = true)
+        )
+        val photos = listOf(
+            PhotoDiagnosis("o.jpg", ArrowGroups.OBLIQUE, 0.8, falseOnShafts = 3, falseElsewhere = 2),
+            PhotoDiagnosis("p.jpg", ArrowGroups.OBLIQUE, 0.5, falseOnShafts = 1, falseElsewhere = 0)
+        )
+
+        val report = ArrowReport.render(
+            "Run", listOf(row("o.jpg", ArrowGroups.OBLIQUE, 1, 1)), truths, photos, emptyList(), emptyList()
+        )
+
+        assertThat(report).contains("Candidates matching no hit: 4 on the shaft of a listed hit, 2 elsewhere.")
+    }
+```
+
+- [ ] **Step 2: Laufen lassen, Fehlschlag prüfen**
+
+Run: `./gradlew :detection-corpus:test --tests '*ArrowReportTest*'`
+Expected: FAIL beim Kompilieren — `No parameter with name 'falseOnShafts' found`.
+
+- [ ] **Step 3: Diagnose und Bericht**
+
+In `ArrowReport.kt` die Klasse `PhotoDiagnosis` samt KDoc ersetzen durch:
+
+```kotlin
+/**
+ * One photograph in the candidate diagnosis: the best confidence of a candidate
+ * that matches no listed hit, and how many such candidates lie on the shaft of
+ * a listed hit -- pieces whose walk did not reach the entry -- or elsewhere.
+ */
+class PhotoDiagnosis(
+    val imageName: String,
+    val group: String,
+    val bestFalseConfidence: Double?,
+    val falseOnShafts: Int = 0,
+    val falseElsewhere: Int = 0
+)
+```
+
+In `diagnosis` den Satz je Gruppe um die Zählung erweitern. Den Block
+
+```kotlin
+            sb.appendLine()
+            sb.appendLine(
+                "**$group:** $found of ${inGroup.size} listed hits had a candidate within the budget " +
+                    "(${percent(ratio(found, inGroup.size))}); the selection lost $lost of them. " +
+                    "Line offsets from Q of those candidates: median ${number(median(offsets))}, " +
+                    "above $LINE_OFFSET_NOTE: $over of ${offsets.size}."
+            )
+```
+
+ersetzen durch
+
+```kotlin
+            val photosInGroup = photos.filter { it.group == group }
+            sb.appendLine()
+            sb.appendLine(
+                "**$group:** $found of ${inGroup.size} listed hits had a candidate within the budget " +
+                    "(${percent(ratio(found, inGroup.size))}); the selection lost $lost of them. " +
+                    "Line offsets from Q of those candidates: median ${number(median(offsets))}, " +
+                    "above $LINE_OFFSET_NOTE: $over of ${offsets.size}. " +
+                    "Candidates matching no hit: ${photosInGroup.sumOf { it.falseOnShafts }} on the shaft " +
+                    "of a listed hit, ${photosInGroup.sumOf { it.falseElsewhere }} elsewhere."
+            )
+```
+
+- [ ] **Step 4: Laufen lassen, bestehen prüfen**
+
+Run: `./gradlew :detection-corpus:test`
+Expected: PASS; der bisherige Diagnosetest bleibt grün, sein Satz steht weiter im Bericht.
+
+- [ ] **Step 5: Der Korpuslauf zählt**
+
+In `ArrowCorpusRun.analysed` nach der Zeile
+
+```kotlin
+        val bestFalse = all.unmatchedDetected.maxOfOrNull { located[it].value.confidence }
+```
+
+einfügen:
+
+```kotlin
+        val listedEntries = entry.shots.mapNotNull { shot -> shot.position?.let { Vec2(it.x, it.y) } }
+        val falseCandidates = all.unmatchedDetected.map { located[it].value }
+        val falseOnShafts = falseCandidates.count { c -> listedEntries.any { onShaftOf(c, it) } }
+```
+
+und am Ende von `analysed` die Zeile
+
+```kotlin
+        return Measured(row, truths, PhotoDiagnosis(entry.imageName, group, bestFalse), outcome)
+```
+
+ersetzen durch
+
+```kotlin
+        return Measured(
+            row, truths,
+            PhotoDiagnosis(entry.imageName, group, bestFalse, falseOnShafts, falseCandidates.size - falseOnShafts),
+            outcome
+        )
+```
+
+Vor `private companion object` die Hilfe einfügen:
+
+```kotlin
+    /**
+     * Whether [candidate] lies on the shaft of the hit at [entryPoint]: its line
+     * passes within SHAFT_LINE_DISTANCE of the hit, and the hit lies ahead of its
+     * tip, towards Q (arrow design, Korpuslauf und Bericht, point 3). Spot-local
+     * and target coordinates coincide on WAFull.
+     */
+    private fun onShaftOf(candidate: ArrowCandidate, entryPoint: Vec2): Boolean {
+        if (abs(candidate.line.signedDistanceTo(entryPoint)) >= SHAFT_LINE_DISTANCE) return false
+        val towardsQ = candidate.tip - candidate.far
+        return (entryPoint.x - candidate.tip.x) * towardsQ.x + (entryPoint.y - candidate.tip.y) * towardsQ.y > 0.0
+    }
+```
+
+und im `private companion object` ergänzen:
+
+```kotlin
+        /** How close a candidate's line passes a hit for the candidate to count as a piece of its shaft. */
+        const val SHAFT_LINE_DISTANCE = 0.02
+```
+
+- [ ] **Step 6: Übersetzen**
+
+Run: `./gradlew :detection:testDevDebugUnitTest --tests '*ArrowCorpusRun*'`
+Expected: PASS; ohne `DETECTION_CORPUS_DIR` übersprungen, übersetzt aber. Der eigentliche Lauf gehört zu Task 13.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add detection-corpus/src/main/kotlin/de/dreier/mytargets/detection/metrics/ArrowReport.kt \
+  detection-corpus/src/test/kotlin/de/dreier/mytargets/detection/metrics/ArrowReportTest.kt \
+  detection/src/test/java/de/dreier/mytargets/detection/arrows/ArrowCorpusRun.kt
+git commit -m "detection-corpus: count the false candidates that are pieces of a listed hit's shaft"
+```
+
+---
+
+## Task 13: Die zweite Messung und die Zuversicht
+
+Die erste Messung steht seit dem Nachtrag im Design (*Offene Punkte*, *Erste Messung*); die Startwerte der Zuversicht blieben offen, weil die Ursache vor ihr lag. Diese Aufgabe misst nach Task 12a und 12b erneut. Sie schreibt keinen neuen Code, sofern der Bericht keinen verlangt, und endet wie geplant mit einem Halt beim Nutzer, wenn die Kriterien aus Step 3 nicht erfüllt sind: Das Design legt die Startwerte der Zuversicht fest und verlangt, sie vor den Schranken am Bericht nachzustellen. Das ist eine Abwägung an 15 Fotos, und die trifft der Nutzer.
 
 **Files:**
 - Modify: `docs/design/2026-09-11-detection-arrows-design.md` (Abschnitt *Offene Punkte*)
 - Modify, nur nach Zustimmung: `detection/src/main/java/de/dreier/mytargets/detection/arrows/ArrowCandidates.kt` (`LENGTH_SATURATION`, `UNREFINED_FACTOR`)
 
 **Interfaces:**
-- Consumes: den Bericht aus Task 12
+- Consumes: den Korpuslauf aus Task 12 mit dem Lauf aus Task 12a und der Zählung aus Task 12b
 - Produces: den Stand der Zuversicht, mit dem Task 14 die Schranken festschreibt
 
 - [ ] **Step 1: Den Lauf starten**
@@ -4127,31 +4872,36 @@ Aus `arrows.md` für die Gruppe `schraeg` notieren:
 3. für jedes Foto mit einem von der Auswahl verlorenen Treffer: die Zuversicht dieses Treffers aus der Tabelle je Treffer und die beste Zuversicht eines falschen Kandidaten auf demselben Foto
 4. aus *Photographs, schraeg*: die Spalte *Common point from Q* und die Laufzeiten, Median je Stufe
 5. aus *Photographs, schraeg*: jedes Foto mit weniger Kandidaten als `expectedShots` und seine Fehlfunde. `CandidateSelection` nimmt dann alle Kandidaten an, und die Abstandsregel aus Stufe 7 läuft gar nicht; die relative Zuversicht hat keine Untergrenze, ein `NO_SHAFT`-Rest mit Zuversicht nahe 0 wird so zum Treffer. Das Design nimmt an, solche Kandidaten bestünden die Abstandsregel praktisch nie; das gilt nur bei Überschuss.
+6. aus *Candidates before the selection*: die falschen Kandidaten auf dem Schaft eines Treffers und anderswo (erste Messung: 69 und 67), und wie viele Treffer gar keinen Kandidaten hatten (erste Messung: 10). Daneben die Laufzeit des Laufs (erste Messung: 86 ms im Median).
+
+Alle Zahlen neben die der ersten Messung aus dem Design stellen.
 
 - [ ] **Step 3: Entscheiden**
 
 - **Startwerte bleiben,** wenn in der Gruppe `schraeg` kein Treffer von der Auswahl verloren wurde, auf jedem Foto die beste falsche Zuversicht um mindestens 0,15 unter der niedrigsten angenommenen echten liegt und kein Fehlfund von einem Foto mit weniger Kandidaten als `expectedShots` stammt.
 - **Sonst Halt beim Nutzer:** die Zahlen aus Step 2 vorlegen und benennen, welcher Hebel sie trennen würde — die Sättigungslänge, der Faktor für einen gescheiterten Lauf, die Abstandsregel aus Stufe 7 selbst oder eine Untergrenze der Zuversicht, unter der ein Kandidat nicht in die Auswahl geht. Die Untergrenze kennt das Design nicht; sie ist der einzige Hebel gegen Fehlfunde aus Punkt 5 und wäre eine Änderung am Design und an `CandidateSelection`, nicht an `ArrowCandidates`. Ohne Zustimmung ändert sich nichts. Mit Zustimmung die Konstante in `ArrowCandidates.kt` ändern, `./gradlew :detection:testDevDebugUnitTest --tests '*ArrowCandidatesTest*'` laufen lassen (der Test rechnet mit den Konstanten, siehe Präzisierung 13) und Step 1 und 2 wiederholen.
 
-- [ ] **Step 4: Die erste Messung ins Design**
+- [ ] **Step 4: Die zweite Messung ins Design**
 
-In `docs/design/2026-09-11-detection-arrows-design.md` unter *Offene Punkte* als ersten Punkt einfügen und mit den Zahlen aus Step 2 füllen; die Ringtreue steht nie ohne Nenner und Erkennungsrate (Haupt-Spec, *Kennzahlen*):
+In `docs/design/2026-09-11-detection-arrows-design.md` unter *Offene Punkte* direkt nach dem Punkt *Erste Messung* einfügen und mit den Zahlen aus Step 2 füllen; die Ringtreue steht nie ohne Nenner und Erkennungsrate (Haupt-Spec, *Kennzahlen*):
 
 ```markdown
-- **Erste Messung (<Datum des Laufs>).** Schräg: <zugeordnet> von <gelistet> Treffern
-  gefunden (<Erkennungsrate>), <Fehlfunde> Fehlfunde, Ringtreue <Rate> (<richtig>/<vergleichbar>),
-  Positionsfehler Median <m>, 95. Perzentil <p>. <mit Kandidat> Treffer hatten einen Kandidaten,
-  <verloren> hat erst die Auswahl verloren; Linienabstände im Median <a>, <über> über 0,03.
-  Frontal: <dieselben Zahlen>. Laufzeit je Foto im Median: Registrierung <r> ms, Entzerren
-  <w> ms, Suche <s> ms, Lauf <l> ms. Die Startwerte der Zuversicht <sind geblieben | wurden
-  auf … geändert, weil …>.
+- **Zweite Messung (<Datum des Laufs>), nach dem Nachtrag.** Schräg: <zugeordnet> von
+  <gelistet> Treffern gefunden (<Erkennungsrate>), <Fehlfunde> Fehlfunde, Ringtreue <Rate>
+  (<richtig>/<vergleichbar>), Positionsfehler Median <m>, 95. Perzentil <p>. <mit Kandidat>
+  Treffer hatten einen Kandidaten, <verloren> hat erst die Auswahl verloren, <ohne> hatten
+  keinen; Linienabstände im Median <a>, <über> über 0,03. Falsche Kandidaten: <auf Schäften>
+  auf dem Schaft eines Treffers, <anderswo> anderswo. Frontal: <dieselben Zahlen>. Laufzeit je
+  Foto im Median: Registrierung <r> ms, Entzerren <w> ms, Suche <s> ms, Lauf <l> ms. Die
+  Startwerte der Zuversicht <sind geblieben | wurden auf … geändert, weil …>. Das breitere
+  Fenster der Suche ist <nicht nötig | nötig, weil …>.
 ```
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add docs/design/2026-09-11-detection-arrows-design.md
-git commit -m "Design 3b: record the first arrow measurement"
+git commit -m "Design 3b: record the second arrow measurement"
 ```
 
 Wurde eine Konstante geändert, gehört `ArrowCandidates.kt` in denselben Commit.
@@ -4571,7 +5321,8 @@ git commit -m "detection: pin the metrics of the oblique photographs, one arrow 
 - Alles in `:app`: die Umwandlung `Bitmap` → `Mat`, die Brennweite aus EXIF, die Linienregel mit Pfeilradius, den Debug-Bildschirm.
 - Laufzeit auf dem Gerät und eine gröbere Suche; der Bericht nennt die Zeiten auf dem Desktop.
 - Auflagen unter 80 cm; woher der Maßstab der Flanken kommt, entscheidet die Integration.
-- Ein dunkler Schaft, der den schwarzen Ring so schräg kreuzt, dass die Lücke 0,3 übersteigt. Das Stück dahinter wird ein eigener Kandidat mit `REFINED` und Einschuss am Ringrand bei 0,8, und die Regel „zwei `REFINED` auf einer Geraden bleiben zwei" behält ihn. Auf dem Korpus laufen die Schäfte fast radial durch den Ring, die Lücke liegt bei 0,2 bis 0,27; ein solcher Fall zeigt sich im Bericht als Fehlfund bei Radius 0,8.
+- Den Einschuss eines dunklen Pfeils auf dem schwarzen Ring. Der Schaft ist dort unsichtbar, der Einschuss bleibt am Ringrand, wo er verschwand (Task 12a).
+- Ein breiteres Fenster der Suche, Filter gegen Risse im Gold und den Auflagenrand, und ein Nachverfeinern entlang des ganzen Laufs statt an den Enden; darüber entscheidet die zweite Messung.
 
 ## Self-Review
 

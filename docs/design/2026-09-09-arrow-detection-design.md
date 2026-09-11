@@ -301,7 +301,11 @@ der einzelne Schaft verfehlt `Q` um höchstens so viel. Die Suche von 3b lässt
 wenn der Schütze deutlich neben der Achse steht oder die Flugbahn nicht
 parallel zur Normalen endet, etwa durch den Fallwinkel auf langen Distanzen
 oder eine nach hinten geneigte Scheibe. Dort ist der Fluchtpunkt aus den
-Streifen zu schätzen, wie oben beschrieben, was 3b noch nicht tut.
+Streifen zu schätzen, wie oben beschrieben, was 3b noch nicht tut. Die erste
+Messung von 3b zeigt, dass Pfeile schon auf 10 m einzeln um einige Grad
+geneigt stecken. Die Suche trifft ihre Schäfte dann nur in Stücken, und der
+Schaftlauf verfolgt jedes Stück bis zum Einschuss (Pfeilfindungsdesign,
+*Offene Punkte*).
 
 *Korrektur vom 2026-09-09.* Bis zur Gesamtprüfung des Geometrieplans stand hier
 die umgekehrte Regel, und der Absatz über das Spreizen widerlegte sie bereits.

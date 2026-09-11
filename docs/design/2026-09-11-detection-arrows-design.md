@@ -288,18 +288,40 @@ rechnet die Kantenlänge des entzerrten Bildes um.
      beste Gerade, sondern die Mitte aller Geraden, deren Güte höchstens 0,01
      unter der besten liegt. Fällt diese Mitte selbst darunter, weil die
      guten Geraden in zwei Gruppen zerfallen, gilt die beste.
-   - **Lauf:** Proben alle 0,0005 von 0,10 hinter der Saat bis 0,035 davor.
-     Der Schaftkontrast ist der Median der Proben mehr als 0,03 hinter der
-     Saat. Ab 0,03 hinter der Saat geht der Lauf nach vorn. Der Einschuss ist
-     die letzte Probe vor einer Lücke von mindestens 0,012, deren Kontrast
-     unter 35 % des Schaftkontrasts liegt. Erreicht eine kürzere Lücke das
-     Ende des Fensters, endet der Lauf ebenfalls vor ihr; so macht es
-     `tips.py`, und das ist kein `RAN_OUT`.
+   - **Lauf:** Proben alle 0,0005 von 0,10 hinter der Saat bis 0,8 davor.
+     `tips.py` schaute nur 0,035 voraus; die Reichweite stammt aus dem
+     Nachtrag nach der ersten Messung (siehe *Offene Punkte*). Der
+     Schaftkontrast ist der Median der Proben mehr als 0,03 hinter der Saat.
+     Ab 0,03 hinter der Saat geht der Lauf nach vorn. Der Einschuss ist die
+     letzte Probe vor einer Lücke von mindestens 0,012, deren Kontrast unter
+     35 % des Schaftkontrasts liegt. Erreicht eine kürzere Lücke das Ende der
+     Reichweite, endet der Lauf ebenfalls vor ihr; so macht es `tips.py` am
+     Ende seines Fensters, und das ist kein `RAN_OUT`. Die Gerade wird dabei
+     nicht nachgestellt: Ein Richtungsfehler von 0,35° verschiebt sie auf 0,6
+     um 0,004, weniger als den halben Schaft.
+   - **Über den schwarzen Ring.** Die Polarität des Schafts bestimmt der Lauf
+     auf den Proben mehr als 0,03 hinter der Saat: dunkel, wenn dort der
+     Median von `dunkler` mindestens so groß ist wie der von `heller`, sonst
+     hell. Bei einem dunklen Schaft zählt eine Probe, deren Mitte oder eine
+     ihrer Flanken auf einer schwarzen Zone liegt, weder als Schaft noch als
+     Lücke; der Lauf geht über sie hinweg, und auch der Schaftkontrast und die
+     Güte beim Nachstellen lassen sie aus. Schwarze Zonen sind die Ringe
+     zwischen einem Übergang mit `outside = BLACK` und dem nächsten mit
+     `inside = BLACK` aus `request.transitions`, bei `WAFull` 0,6 bis 0,8.
+     Taucht der Schaft hinter dem Ring nicht wieder auf, ist der Einschuss die
+     letzte Schaftprobe vor dem Ring, wie ohne Überbrücken; ein dunkler Pfeil
+     mit Einschuss auf Schwarz bleibt damit am Ringrand, eine bekannte
+     Grenze. Bei einem hellen Schaft, etwa grau auf Schwarz, gilt jede Probe
+     wie bisher, denn dort ist Schwarz sein Kontrast.
    - Liegt der Schaftkontrast unter 0,08, gibt es keinen Schaft zu verfolgen
-     (`NO_SHAFT`). Hat noch die letzte Probe des Fensters Kontrast
-     (`RAN_OUT`), hat der Lauf kein Ende gefunden. In beiden Fällen gilt der
-     Einschuss aus der Suche. Die Werkzeuge haben diese Fälle dem Annotator
-     gemeldet, der Bericht zählt sie.
+     (`NO_SHAFT`). Hat noch die letzte Probe der Reichweite Kontrast
+     (`RAN_OUT`), hat der Lauf kein Ende gefunden; das kommt nach dem Nachtrag
+     praktisch nur noch an Kanten vor. In beiden Fällen gilt der Einschuss aus
+     der Suche. Die Werkzeuge haben diese Fälle dem Annotator gemeldet, der
+     Bericht zählt sie.
+   - **Folge für das Zusammenlegen.** Trifft die Suche einen geneigten Schaft
+     nur in Stücken, laufen alle Stücke bis zum selben Einschuss, und die
+     Regel für gleiche Einschüsse aus Schritt 5 legt sie zusammen.
    - **Gerade des Kandidaten.** Hat der Lauf einen Schaft gesehen, bei
      `REFINED` und `RAN_OUT`, gilt die verfeinerte Gerade. `far` liegt auf ihr
      als Projektion des Suche-Endes, bei `RAN_OUT` auch der Einschuss aus der
@@ -309,9 +331,9 @@ rechnet die Kantenlänge des entzerrten Bildes um.
      dem Vorzeichen des Kreuzprodukts `(far − tip) × (Q − tip)`. Die Gerade
      der Suche liegt per Konstruktion höchstens 0,04 von `Q`; nur die
      verfeinerte kann zeigen, dass ein Schaft weiter an `Q` vorbeiläuft. Ein geneigter Schaft kann mit `RAN_OUT` enden, wenn die
-     Suche ihn nur als Sehne trifft und die Saat mehr als 0,035 hinter dem
-     Einschuss liegt. Gälte für `RAN_OUT` die Gerade der Suche, bliebe gerade
-     dieser Fall für die Diagnose unsichtbar.
+     Suche ihn nur als Sehne trifft und die Saat mehr als die Reichweite von
+     0,8 hinter dem Einschuss liegt. Gälte für `RAN_OUT` die Gerade der Suche,
+     bliebe gerade dieser Fall für die Diagnose unsichtbar.
 
 5. **Zusammenlegen und Zuversicht.** Beides ist neu, weil es in den Werkzeugen
    der Annotator von Hand erledigt hat.
@@ -364,6 +386,7 @@ rechnet die Kantenlänge des entzerrten Bildes um.
 | Saatpunkte | Suche, dann von Hand geprüft und ergänzt | nur die Suche | die Pipeline hat keinen Annotator |
 | Einschuss bei `RAN_OUT` | letzte Probe des Fensters | Einschuss aus der Suche, auf die verfeinerte Gerade projiziert | ein Lauf ohne Ende hat keinen Endpunkt, das Ende des Fensters ist willkürlich; die Gerade dagegen hat der Lauf gefunden |
 | Nachstellen | erste beste Gerade jedes Rasters | Mitte der Geraden, deren Güte höchstens 0,01 unter der besten liegt | Ohne das untere Viertel ist die Güte auf einem gleichmäßigen Schaft über etwa ±10° flach, und die erste beste Gerade liegt am Rand dieser Ebene. Auf dem Streifen des Tests liegt sie 9° neben dem Schaft, mit Bildrauschen 1° bis 3°; die Mitte trifft ihn auf 0,35°. |
+| Reichweite des Laufs | Fenster bis 0,035 vor der Saat; wo der Lauf zu früh stoppte, korrigierte der Annotator | bis 0,8 vor der Saat, ein dunkler Schaft läuft über den schwarzen Ring hinweg | Die Pfeile stecken geneigt, und die Suche trifft ihre Schäfte oft nur in Stücken. In der ersten Messung hatten 19 Treffer nur ein Stück, dessen Lauf vor dem Einschuss endete: 12 liefen aus dem Fenster, 7 Stücke begannen hinter dem schwarzen Ring. So laufen alle Stücke eines Schafts bis zum selben Einschuss. |
 | Auswahl | Annotator | Zusammenlegen, relative Zuversicht, Stufe 7 | neu |
 
 ## Korpuslauf und Bericht
@@ -423,7 +446,12 @@ Pfeile und Kennzahlen kommen unverändert aus `:detection-corpus`
    Treffer einen Kandidaten hatte, welchen Anteil erst die Auswahl verloren
    hat, und wie sich die Abstände der zugeordneten Kandidatengeraden von `Q`
    verteilen: Median und Anteil über 0,03. Liegen viele nahe 0,04 oder
-   darüber, ist das Fenster der Suche zu eng.
+   darüber, ist das Fenster der Suche zu eng. Außerdem zählt sie je Gruppe
+   die Kandidaten, die zu keinem Treffer passen, getrennt danach, ob sie auf
+   dem Schaft eines gelisteten Treffers liegen: Ihre Gerade läuft näher als
+   0,02 an ihm vorbei, und er liegt vor ihrem Einschuss, zu `Q` hin. Das sind
+   Stücke eines Schafts, deren Lauf den Einschuss nicht erreicht hat; die
+   übrigen sind Risse, Kanten und andere Linien.
 
    **Gemeinsamer Punkt.** Je Foto rechnet die Diagnose den Punkt, der die
    Summe der Abstandsquadrate zu den Geraden der zugeordneten Kandidaten mit
@@ -517,9 +545,12 @@ damit ein roter Lauf seinen Bericht hinterlässt.
      im Abstand 0,03 bleiben zwei, im Abstand 0,02 werden sie einer, was die
      Grenze der Doppelten-Regel festhält
    - der Schaftlauf auf einem Streifen mit bekanntem Ende: Einschuss auf eine
-     Probe genau, ohne Streifen `NO_SHAFT`, mit Streifen über das Fenster
-     hinaus `RAN_OUT`, mit einer kurzen Lücke am Fensterende der Einschuss
-     davor
+     Probe genau, ohne Streifen `NO_SHAFT`, mit einem Ende 0,3 vor der Saat
+     der Einschuss dort, mit Streifen über die Reichweite hinaus `RAN_OUT`,
+     mit einer kurzen Lücke am Ende der Reichweite der Einschuss davor; ein
+     dunkler Schaft über einen schwarzen Ring hinweg bis zum Einschuss
+     dahinter, ein dunkler Schaft mit Einschuss auf Schwarz endet am
+     Ringrand, ein grauer Schaft auf Schwarz endet an seinem Einschuss
    - der Abstand einer Geraden von `Q` mit Vorzeichen
    - der gemeinsame Punkt: Drei Geraden durch einen Punkt ergeben ihn exakt,
      mit Rauschen auf den Geraden nahe daran; Geraden, die sich unter höchstens
@@ -551,7 +582,9 @@ damit ein roter Lauf seinen Bericht hinterlässt.
    nicht aus `d · tan α`, das nur für die quer liegende Neigung gilt. Ob sein
    Einschuss stimmt, verlangt der Test nicht. Drei Pfeile mit derselben
    Neigung von 3° an verschiedenen Stellen ergeben einen gemeinsamen Punkt,
-   der auf 0,01 bei `Q − d · t` liegt. Ein Bild, das
+   der auf 0,01 bei `Q − d · t` liegt. Ein Pfeil, der um 4° quer geneigt
+   steckt, sodass die Suche seinen Schaft nur in Stücken trifft, ergibt einen
+   einzigen Kandidaten mit dem Einschuss auf 0,01. Ein Bild, das
    die Auflage anschneidet, sodass ein Schaft zur Nocke hin aus dem Bild
    läuft, ergibt einen Kandidaten mit richtigem Einschuss und keinen
    Kandidaten entlang des Bildrands. Das ist eine Prüfung gegen exakt
@@ -578,9 +611,10 @@ Mit diesem Dokument geändert:
   den Fußpunkt. Farbfeld und Residuum bleiben beschrieben, als möglicher Weg
   für frontale Aufnahmen.
 - *Stufe 6:* ergänzt um die Form der Regel im entzerrten Bild und um die
-  Grenze der Suche durch `Q`: Sie setzt Pfeile mit `tan α ≤ 0,04 / d` voraus;
-  für stärker geneigte bleibt die Schätzung des Fluchtpunkts aus den Streifen
-  der Weg, den 3b noch nicht geht.
+  Grenze der Suche durch `Q`: Ganz findet sie nur Pfeile mit
+  `tan α ≤ 0,04 / d`; stärker geneigte trifft sie in Stücken, die der
+  Schaftlauf bis zum Einschuss verfolgt. Die Schätzung des Fluchtpunkts aus
+  den Streifen bleibt der Weg, den 3b noch nicht geht.
 - *Debug-Ansicht:* die Bilder 5 bis 7 aus dem Korpuslauf.
 - *Reihenfolge der Umsetzung:* Schritt 2 nennt die Serie vom 2026-09-10.
   Schritt 7 verweist auf dieses Dokument; festgeschrieben werden die Kennzahlen
@@ -588,6 +622,40 @@ Mit diesem Dokument geändert:
 
 ## Offene Punkte
 
+- **Erste Messung (2026-09-11), vor dem Nachtrag.** Schräg: 19 von 86
+  Treffern gefunden (22,1 %), 27 Fehlfunde, Ringtreue 100 % (15/15),
+  Positionsfehler Median 0,0046, 95. Perzentil 0,0191. 51 Treffer hatten
+  einen Kandidaten, 33 davon hat erst die Auswahl verloren; Linienabstände im
+  Median 0,1014, 42 von 51 über 0,03. Frontal: 6 von 74 (8,1 %), 32
+  Fehlfunde, Ringtreue 100 % (2/2), Positionsfehler Median 0,0183,
+  95. Perzentil 0,0534; 22 Treffer hatten einen Kandidaten, 17 davon hat die
+  Auswahl verloren; Linienabstände im Median 0,0887, 18 von 22 über 0,03.
+  Laufzeit je schrägem Foto im Median: Registrierung 688 ms, Entzerren 46 ms,
+  Suche 741 ms, Lauf 86 ms. Über die Startwerte der Zuversicht ist noch nicht
+  entschieden: Die verlorenen echten Treffer lagen bei 0,11 bis 1,0, der
+  beste falsche Kandidat je Foto bei 0,86 bis 1,0, und auf 10 der 15 schrägen
+  Fotos war er der beste überhaupt. Die Ursache liegt vor der Zuversicht.
+  Eine Auszählung aller 187 Kandidaten der schrägen Fotos gegen die Wahrheit
+  ergab 51 echte, 69 Stücke echter Schäfte (29 hinter dem schwarzen Ring, 40
+  andere, meist mit `RAN_OUT`) und 67 übrige, meist Risse im Gold und Kanten
+  am Auflagenrand. Die Stücke hinter dem Ring hatten die höchste Zuversicht,
+  im Median 0,76 gegen 0,59 der echten, weil der Schaft auf Weiß mehr Kontrast
+  hat. Von den 86 Treffern hatten 50 einen Kandidaten im Budget, 12 nur ein
+  Stück, dessen Lauf aus dem Fenster lief, 7 nur das Stück hinter dem Ring,
+  6 ein Stück, dessen Lauf vorher endete, und 10 gar keinen. Ein Vergleichslauf mit dem ersten besten
+  statt der Mitte beim Nachstellen ergab 23 statt 19 gefundene und 33 statt
+  27 Fehlfunde, also keinen klaren Unterschied. Daraufhin der Nachtrag:
+  Reichweite des Laufs und Überbrücken des schwarzen Rings (*Verfahren*,
+  Schritt 4), die Zählung der Stücke im Bericht (*Korpuslauf und Bericht*,
+  Punkt 3), danach eine zweite Messung und erst dann die Zuversicht und die
+  Schranken.
+- **Mehr Fotos.** 86 Treffer auf 15 schrägen Fotos reichen, um die großen
+  Fehlerarten zu sehen, aber nicht, um die Zuversicht und die Schranken
+  einzustellen, ohne dass sie nur zu diesen Fotos passen: Die Treffer eines
+  Fotos teilen Licht, Kamera und Auflage. Die `Fotoliste.md` im Korpus nennt,
+  was fehlt, und bittet, je Pfeil auch die Nocke zu annotieren. Mit ihr ließe
+  sich die Neigung jedes Pfeils und die Genauigkeit der verfeinerten Geraden
+  messen statt schätzen.
 - **Die Wahrheit ist nicht unabhängig.** Die Einschüsse der Serie vom
   2026-09-10 stammen aus `radial.py` und `tips.py`, die der älteren Fotos aus
   von Hand gesetzten Saaten und `tips.py`. Wo das Werkzeug zu früh oder zu
@@ -614,6 +682,17 @@ Mit diesem Dokument geändert:
   Foto den gemeinsamen Punkt der verfeinerten Geraden. Der naheliegende Weg
   danach: Liegt dieser Punkt weiter als 0,04 von `Q`, wird die Suche von ihm
   aus wiederholt. Das ist eine Grenze von 3b, nicht der Haupt-Spec.
+  Die erste Messung widerlegt die Annahme für den Korpus: Die Geraden der
+  zugeordneten Kandidaten liegen im Median 0,10 von `Q`, im 90. Perzentil
+  0,25; bei einem Kameraabstand um 2 sind das rund 3° bis 7°, und die Serie
+  vom 2026-09-10 ist auf 10 m geschossen. Nach den Stufenbildern laufen die
+  Geraden eines Fotos auch nicht durch einen gemeinsamen Punkt; die Pfeile
+  sind einzeln geneigt, und eine zweite Suche von einem gemeinsamen Punkt aus
+  hilft deshalb wenig. 3b antwortet mit dem längeren Lauf: Die Suche trifft fast
+  jeden Schaft wenigstens in einem Stück, 76 von 86, und der Lauf verfolgt
+  es bis zum Einschuss. Ein breiteres Fenster der Suche, etwa ±0,2, fände
+  die Schäfte ganz und die 10 Treffer ohne Kandidat eher, kostet aber rund
+  die fünffache Suchzeit. Ob es nötig ist, zeigt die zweite Messung.
 - **Frontale Fotos** bleiben der Schwachpunkt. Wege für einen Folgeplan sind
   die Stufen 4 und 5 der Haupt-Spec oder Befiederung und Nocke als Merkmal,
   wo der Schaft zum Stummel wird.

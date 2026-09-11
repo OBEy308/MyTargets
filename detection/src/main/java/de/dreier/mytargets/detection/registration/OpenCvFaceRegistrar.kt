@@ -15,11 +15,13 @@
 
 package de.dreier.mytargets.detection.registration
 
+import de.dreier.mytargets.detection.DebugSink
 import de.dreier.mytargets.detection.DetectionFailure
 import de.dreier.mytargets.detection.geometry.Mat3
 import de.dreier.mytargets.detection.geometry.Orientation
 import de.dreier.mytargets.detection.geometry.Rectification
 import de.dreier.mytargets.detection.geometry.Vec2
+import de.dreier.mytargets.detection.show
 import org.opencv.core.CvType
 import org.opencv.core.Mat
 import org.opencv.core.Size
@@ -77,8 +79,8 @@ class OpenCvFaceRegistrar : FaceRegistrar {
                 discs = YellowDiscs.find(classes, scale.f)
             }
         }
-        show(debug, DebugImages.CLASSES) { DebugImages.classes(classes) }
-        show(debug, DebugImages.DISCS) { DebugImages.discs(small, discs) }
+        debug.show(DebugImages.CLASSES) { DebugImages.classes(classes) }
+        debug.show(DebugImages.DISCS) { DebugImages.discs(small, discs) }
         if (discs.counted.isEmpty()) {
             return failed(DetectionFailure.FACE_NOT_FOUND, "no yellow disc with red around it")
         }
@@ -91,7 +93,7 @@ class OpenCvFaceRegistrar : FaceRegistrar {
 
         val disc = discs.counted.maxBy { it.radius }
         val rings = RingSearch.find(classes, disc, request.transitions, scale.f)
-        show(debug, DebugImages.RINGS) { DebugImages.rings(small, rings) }
+        debug.show(DebugImages.RINGS) { DebugImages.rings(small, rings) }
         val accepted = rings.filter { it.accepted }
         if (accepted.size < 2) {
             return failed(
@@ -161,17 +163,6 @@ class OpenCvFaceRegistrar : FaceRegistrar {
         }
         if (rejections.isEmpty()) rejections += "no two rings with a radius ratio of at most $MAX_PAIR_RATIO"
         return Start(null, rejections)
-    }
-
-    /** Renders a stage only when someone looks, and releases it after the sink. */
-    private fun show(debug: DebugSink, stage: String, render: () -> Mat) {
-        if (debug === DebugSink.NONE) return
-        val image = render()
-        try {
-            debug.image(stage, image)
-        } finally {
-            image.release()
-        }
     }
 
     private fun failed(failure: DetectionFailure, detail: String) =

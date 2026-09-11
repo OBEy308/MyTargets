@@ -16,6 +16,8 @@
 package de.dreier.mytargets.detection
 
 import de.dreier.mytargets.detection.geometry.CameraIntrinsics
+import de.dreier.mytargets.detection.registration.RingTransition
+import org.opencv.core.Mat
 
 /**
  * One detected arrow, in the coordinates `Shot` stores: spot local, centre at
@@ -56,18 +58,21 @@ class DetectionResult(
  * Everything the detector needs that is not the image itself.
  *
  * Deliberately free of Android types so the contract can be exercised in plain
- * JVM tests. The image is supplied by the platform specific sub interface that
- * plan 3 adds.
+ * JVM tests. [transitions] are the colour transitions the registration fits
+ * rings to (Haupt-Spec, stage 2); the app translates them from the target
+ * model.
  */
 data class DetectionRequest(
     val layout: FaceLayout,
     val zoneRadii: List<Double>,
+    val transitions: List<RingTransition>,
     val expectedShots: Int,
     val intrinsics: CameraIntrinsics
 ) {
     init {
         require(zoneRadii.isNotEmpty()) { "at least one zone radius is required" }
         require(zoneRadii.all { it > 0.0 }) { "zone radii must be positive" }
+        require(transitions.isNotEmpty()) { "the registration needs colour transitions" }
         require(expectedShots > 0) { "an end has at least one shot" }
     }
 
@@ -86,8 +91,10 @@ data class DetectionRequest(
  *
  * The interface is narrow on purpose: it is the seam along which the classical
  * pipeline can later be replaced by a learned detector without touching the
- * app.
+ * app. The image comes as an OpenCV Mat so the contract stays testable on the
+ * JVM; the app converts its Bitmap (arrow design, Schnittstelle).
  */
 interface ArrowDetector {
-    fun detect(request: DetectionRequest): DetectionResult
+    /** @param image the original as 8-bit BGR, already turned by its EXIF orientation */
+    fun detect(image: Mat, request: DetectionRequest, debug: DebugSink = DebugSink.NONE): DetectionResult
 }

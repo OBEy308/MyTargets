@@ -276,6 +276,46 @@ class SidecarTruthTest {
         }
     }
 
+    private val identityHomography = "[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]"
+
+    @Test
+    fun readsTheCameraPositionOfTheView() {
+        val json = """
+            { "shots": [], "registration": {
+                "imageToTarget": [$identityHomography],
+                "view": { "focalLength35mm": 23.0, "cameraPositionFaceUnits": [0.998, 0.145, -3.303] }
+            } }
+        """.trimIndent()
+
+        val registration = SidecarTruth.parse("a.jpg", json).registration!!
+
+        assertThat(registration.cameraPositionFaceUnits).containsExactly(0.998, 0.145, -3.303).inOrder()
+    }
+
+    @Test
+    fun aRegistrationWithoutAViewHasNoCameraPosition() {
+        val json = """{ "shots": [], "registration": { "imageToTarget": [$identityHomography] } }"""
+
+        assertThat(SidecarTruth.parse("a.jpg", json).registration!!.cameraPositionFaceUnits).isNull()
+    }
+
+    @Test
+    fun aCameraPositionOfTheWrongLengthNamesThePhotograph() {
+        val json = """
+            { "shots": [], "registration": {
+                "imageToTarget": [$identityHomography], "view": { "cameraPositionFaceUnits": [1.0, 2.0] }
+            } }
+        """.trimIndent()
+
+        try {
+            SidecarTruth.parse("a.jpg", json)
+            throw AssertionError("expected IllegalArgumentException")
+        } catch (expected: IllegalArgumentException) {
+            assertThat(expected).hasMessageThat().contains("a.jpg")
+            assertThat(expected).hasMessageThat().contains("cameraPositionFaceUnits")
+        }
+    }
+
     @Test
     fun aTrailingCommaNamesTheImageRatherThanPassingANull() {
         // Gson reads leniently: [a, b,] comes back as [a, b, null]. A hand
@@ -291,7 +331,10 @@ class SidecarTruthTest {
             "imageToTarget row" to
                 """{ "shots": [], "registration": { "imageToTarget": [[1.0, 0.0,], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]] } }""",
             "imagedCentre" to
-                """{ "shots": [], "registration": { "imageToTarget": [$identityRows], "imagedCentre": [1.0,] } }"""
+                """{ "shots": [], "registration": { "imageToTarget": [$identityRows], "imagedCentre": [1.0,] } }""",
+            "cameraPositionFaceUnits" to
+                """{ "shots": [], "registration": { "imageToTarget": [$identityRows],
+                    "view": { "cameraPositionFaceUnits": [1.0, 2.0,] } } }"""
         )
 
         for ((case, json) in cases) {

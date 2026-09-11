@@ -15,6 +15,7 @@
 
 package de.dreier.mytargets.detection.registration
 
+import de.dreier.mytargets.detection.DebugSink
 import org.opencv.core.Mat
 import org.opencv.imgcodecs.Imgcodecs
 import java.io.File

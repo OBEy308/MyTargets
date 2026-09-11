@@ -82,6 +82,22 @@ class ShaftSearchTest {
     }
 
     @Test
+    fun aShaftBeyondTheOldFixedReachIsFound() {
+        // |Q| = 2.8; the stripe runs from 3.5 to 3.8 from Q, beyond the old
+        // MAX_REACH of 3.5, but still within the far side of the square.
+        val farFoot = Vec2(2.8, 0.0)
+        val entry = Vec2(-0.7, 0.0)
+        val far = Vec2(-1.0, 0.0)
+        val face = FacePainter(0.9f).stripe(entry, far, 0.012, 0.15f).build()
+
+        val runs = ShaftSearch.find(face, farFoot, rings)
+
+        assertThat(runs).hasSize(1)
+        assertThat(runs[0].tip.distanceTo(entry)).isAtMost(0.01)
+        assertThat(runs[0].far.distanceTo(far)).isAtMost(0.01)
+    }
+
+    @Test
     fun aGreyShaftOnTheBlackRingIsFound() {
         val entry = Vec2(-0.65, 0.2)
         val face = FacePainter(0.9f)

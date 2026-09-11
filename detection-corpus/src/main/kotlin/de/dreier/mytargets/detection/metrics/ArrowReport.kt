@@ -186,6 +186,8 @@ object ArrowReport {
             sb.appendLine()
             sb.appendLine("## Photographs, $group")
             sb.appendLine()
+            sb.appendLine("Registration times include writing stage images 1 to 3.")
+            sb.appendLine()
             sb.appendLine(
                 "| Photograph | Outcome | Angle (deg) | Q from centre | Registration error | Q shift | " +
                     "Largest line offset | Common point from Q | Listed | Unresolved | Candidates | " +

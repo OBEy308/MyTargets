@@ -171,7 +171,8 @@ class ArrowCorpusRun {
         }
         return DetectionRequest(
             FaceLayout.singleSpot(), WaFullZones.RADII, RingTransitions.WA_FULL,
-            entry.shotsPerEnd ?: entry.shots.size, intrinsics
+            checkNotNull(entry.shotsPerEnd) { "${entry.imageName}: the sidecar names no shotsPerEnd" },
+            intrinsics
         )
     }
 
@@ -218,6 +219,14 @@ class ArrowCorpusRun {
         return Measured(row, truths, PhotoDiagnosis(entry.imageName, group, null), outcome)
     }
 
+    /**
+     * The candidate diagnosis starts from the metrics' own pairs, so found
+     * minus lost always equals what the metrics matched: step 1 takes the
+     * hits `match` already paired with an accepted find; step 2 matches the
+     * remaining hits against the located candidates the selection did not
+     * accept. Only step 2 involves a fresh `ShotMatching.match` call, and only
+     * over candidates step 1 could not have claimed.
+     */
     private fun analysed(
         entry: CorpusEntry,
         group: String,
@@ -232,27 +241,51 @@ class ArrowCorpusRun {
         val match = ShotMatching.match(entry, detected)
         val outcome = EntryOutcome(entry, match, detected)
 
-        // The matching of the metrics over every candidate on the face: what the
-        // search had before the selection. Ranks count all candidates by score.
-        val located = analysis.candidates.withIndex().filter { it.value.located != null }
-        val all = ShotMatching.match(entry, located.map { record(it.value.located!!) })
-        val byTruth = all.pairs.associateBy { it.truthIndex }
+        fun candidateOf(located: Candidate) = analysis.candidates.first { it.located === located }
+
+        // Step 1: hits the metrics matched to an accepted find. `detected[k]`
+        // is `accepted[k]`'s record, so `match.pairs[*].detectedIndex` indexes
+        // `accepted` directly.
+        val foundAndAccepted = match.pairs.associate { pair ->
+            pair.truthIndex to (candidateOf(accepted[pair.detectedIndex]) to true)
+        }
+
+        // Step 2: the remaining hits, matched against the located candidates
+        // the selection did not accept -- on a copy of the entry that lists
+        // only those hits, with a map back to their original index.
+        val remainingIndices = match.unmatchedTruth
+        val remainingEntry = entry.copy(shots = remainingIndices.map { entry.shots[it] })
+        val notAccepted = analysis.candidates.filter { c ->
+            c.located != null && accepted.none { it === c.located }
+        }
+        val notAcceptedRecords = notAccepted.map { record(it.located!!) }
+        val remainingMatch = ShotMatching.match(remainingEntry, notAcceptedRecords)
+        val foundButLost = remainingMatch.pairs.associate { pair ->
+            remainingIndices[pair.truthIndex] to (notAccepted[pair.detectedIndex] to false)
+        }
+
+        val hits = foundAndAccepted + foundButLost
         val truths = entry.shots.indices.map { t ->
-            val hit = byTruth[t]?.let { located[it.detectedIndex] }
+            val hit = hits[t]
             TruthDiagnosis(
                 imageName = entry.imageName,
                 group = group,
                 truthIndex = t,
-                rank = hit?.let { it.index + 1 },
-                confidence = hit?.value?.confidence,
-                lineOffset = hit?.value?.offsetFromFoot,
-                accepted = hit != null && accepted.any { it === hit.value.located }
+                rank = hit?.let { (candidate, _) -> analysis.candidates.indexOfFirst { it === candidate } + 1 },
+                confidence = hit?.first?.confidence,
+                lineOffset = hit?.first?.offsetFromFoot,
+                accepted = hit?.second ?: false
             )
         }
-        val matchedCandidates = all.pairs.map { located[it.detectedIndex].value }
-        val bestFalse = all.unmatchedDetected.maxOfOrNull { located[it].value.confidence }
+
+        // Step 3: false candidates are accepted candidates `match` left
+        // unmatched, plus non-accepted located candidates step 2 left
+        // unmatched.
+        val falseCandidates = match.unmatchedDetected.map { candidateOf(accepted[it]) } +
+            remainingMatch.unmatchedDetected.map { notAccepted[it] }
+        val matchedCandidates = hits.values.map { it.first }
+        val bestFalse = falseCandidates.maxOfOrNull { it.confidence }
         val listedEntries = entry.shots.mapNotNull { shot -> shot.position?.let { Vec2(it.x, it.y) } }
-        val falseCandidates = all.unmatchedDetected.map { located[it].value }
         val falseOnShafts = falseCandidates.count { c -> listedEntries.any { onShaftOf(c, it) } }
 
         val foot = analysis.footPoint
@@ -344,11 +377,12 @@ class ArrowCorpusRun {
 
     private companion object {
         /**
-         * Pinned from the report of 2026-09-11 (arrow design, Schranken):
-         * the block under "Bounds, oblique photographs". When the corpus changes
-         * the run fails and says so; set them again against a new report.
+         * Pinned from the report of 2026-09-11, after the final fix wave (arrow
+         * design, Schranken): the block under "Bounds, oblique photographs". When
+         * the corpus changes the run fails and says so; set them again against a
+         * new report.
          */
-        val PINS = ArrowPins(photographs = 15, listed = 86, matched = 33, falsePositives = 10, correctScores = 21, comparableScores = 23, medianErrorBound = 0.011363, p95ErrorBound = 0.054956)
+        val PINS = ArrowPins(photographs = 15, listed = 86, matched = 30, falsePositives = 11, correctScores = 18, comparableScores = 20, medianErrorBound = 0.012388, p95ErrorBound = 0.057103)
 
         val CYAN = Scalar(255.0, 255.0, 0.0)
         val GREEN = Scalar(0.0, 200.0, 0.0)

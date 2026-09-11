@@ -119,9 +119,10 @@ class ArrowCandidatesTest {
         )
 
         val inside = candidates.first { it.tip == Vec2(0.2, 0.1) }
-        assertThat(inside.located!!.faceIndex).isEqualTo(0)
-        assertThat(inside.located!!.local).isEqualTo(Vec2(0.2, 0.1))
-        assertThat(inside.located!!.confidence).isEqualTo(inside.confidence)
+        val located = checkNotNull(inside.located)
+        assertThat(located.faceIndex).isEqualTo(0)
+        assertThat(located.local).isEqualTo(Vec2(0.2, 0.1))
+        assertThat(located.confidence).isEqualTo(inside.confidence)
         assertThat(candidates.first { it.tip == Vec2(-1.02, 0.3) }.located).isNull()
     }
 }

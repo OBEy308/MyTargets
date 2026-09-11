@@ -331,7 +331,10 @@ class SidecarTruthTest {
             "imageToTarget row" to
                 """{ "shots": [], "registration": { "imageToTarget": [[1.0, 0.0,], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]] } }""",
             "imagedCentre" to
-                """{ "shots": [], "registration": { "imageToTarget": [$identityRows], "imagedCentre": [1.0,] } }"""
+                """{ "shots": [], "registration": { "imageToTarget": [$identityRows], "imagedCentre": [1.0,] } }""",
+            "cameraPositionFaceUnits" to
+                """{ "shots": [], "registration": { "imageToTarget": [$identityRows],
+                    "view": { "cameraPositionFaceUnits": [1.0, 2.0,] } } }"""
         )
 
         for ((case, json) in cases) {

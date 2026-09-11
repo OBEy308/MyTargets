@@ -33,7 +33,9 @@ import org.opencv.core.Mat
 /**
  * The pipeline for a face the registration knows (arrow design): register,
  * rectify, compute the camera's foot point, search the shafts, walk each one to
- * its end, merge and rate the candidates, place them on spots, select.
+ * its end, merge and rate the candidates, place them on spots, select. The
+ * search frame, the black zones and the ring filter assume a single-spot face
+ * (the WAFull faces of v1); other layouts are not supported yet.
  */
 class OpenCvArrowDetector(
     private val registrar: FaceRegistrar = OpenCvFaceRegistrar()

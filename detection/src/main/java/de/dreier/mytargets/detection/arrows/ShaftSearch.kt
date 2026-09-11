@@ -21,6 +21,7 @@ import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.roundToInt
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 /** One shaft the search found: [tip] is the end nearer the foot point, [far] the other. */
 class SearchRun(val tip: Vec2, val far: Vec2, val contrast: Double, val score: Double) {
@@ -41,7 +42,6 @@ object ShaftSearch {
 
     const val ANGLE_STEP = 0.25
     const val SAMPLE_STEP = 0.002
-    const val MAX_REACH = 3.5
     const val SQUARE = 1.05
     val OFFSETS = DoubleArray(17) { -0.04 + 0.005 * it }
     const val THRESHOLD = 0.15
@@ -62,7 +62,9 @@ object ShaftSearch {
 
     private fun sweep(face: RectifiedFace, foot: Vec2, ringRadii: List<Double>): List<SearchRun> {
         val maxIndexGap = (MAX_GAP / SAMPLE_STEP).roundToInt()
-        val reach = (MAX_REACH / SAMPLE_STEP).roundToInt()
+        // Always reaches the far side of the square: any point of it lies
+        // within |Q| + SQUARE * sqrt(2) of Q.
+        val reach = ((hypot(foot.x, foot.y) + SQUARE * sqrt(2.0)) / SAMPLE_STEP).roundToInt() + 1
         val directions = (360.0 / ANGLE_STEP).roundToInt()
         val found = ArrayList<SearchRun>()
         for (a in 0 until directions) {

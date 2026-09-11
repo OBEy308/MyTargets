@@ -59,7 +59,7 @@ object ArrowCandidates {
     const val SAME_LINE_ANGLE = 2.0
     const val SAME_LINE_DISTANCE = 0.01
 
-    /** Start values (arrow design, Offene Punkte); set against the candidate diagnosis in Task 13. */
+    /** Start values (arrow design, Offene Punkte, Zweite Messung); set against the candidate diagnosis. */
     const val LENGTH_SATURATION = 0.3
     const val UNREFINED_FACTOR = 0.5
 

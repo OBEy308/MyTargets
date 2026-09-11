@@ -114,6 +114,26 @@ class OpenCvArrowDetectorTest {
     }
 
     @Test
+    fun theShotsCarryTheAcceptedCandidatesInOrderAndConfidence() {
+        val photo = SyntheticArrows.photograph(at30, 2000, 1500, entries.map { SyntheticArrow(it) })
+        val (analysis, result) = try {
+            detector.analyse(photo, request(at30, entries.size)) to detector.detect(photo, request(at30, entries.size))
+        } finally {
+            photo.release()
+        }
+
+        assertWithMessage("outcome of the registration").that(analysis).isInstanceOf(ArrowAnalysis.Analysed::class.java)
+        val accepted = (analysis as ArrowAnalysis.Analysed).selection.accepted
+        assertThat(result.shots).hasSize(accepted.size)
+        result.shots.forEachIndexed { i, shot ->
+            assertWithMessage("shot $i").that(shot.faceIndex).isEqualTo(accepted[i].faceIndex)
+            assertWithMessage("shot $i").that(shot.x).isEqualTo(accepted[i].local.x.toFloat())
+            assertWithMessage("shot $i").that(shot.y).isEqualTo(accepted[i].local.y.toFloat())
+            assertWithMessage("shot $i").that(shot.confidence).isEqualTo(accepted[i].confidence.toFloat())
+        }
+    }
+
+    @Test
     fun aBlankPhotographIsNotRegistered() {
         val photo = SyntheticFace.blank(2000, 1500)
         val result = try {

@@ -83,10 +83,15 @@ data class TargetInfo(val model: String, val diameterCm: Double?, val faceCount:
  * [imageToTarget] holds the nine values of a 3x3 homography row by row, mapping
  * pixels of the EXIF-rotated original into target coordinates. [imagedCentre] is
  * where the face's centre lies in that image.
+ *
+ * [cameraPositionFaceUnits] is where register.py put the camera, in target units:
+ * x right, y down, z into the face, so the camera sits at z < 0. Its x and y are
+ * the camera's foot point on the face (arrow design, Verfahren step 2).
  */
 data class Registration(
     val imageToTarget: List<Double>,
-    val imagedCentre: ImagePoint?
+    val imagedCentre: ImagePoint?,
+    val cameraPositionFaceUnits: List<Double>? = null
 ) {
     init {
         require(imageToTarget.size == 9) {

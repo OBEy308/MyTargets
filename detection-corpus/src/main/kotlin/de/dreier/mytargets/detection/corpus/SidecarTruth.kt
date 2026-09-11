@@ -72,11 +72,16 @@ object SidecarTruth {
         var unresolvedArrows: Int? = null
     }
 
+    private class ViewJson {
+        var cameraPositionFaceUnits: List<Double?>? = null
+    }
+
     // The list elements are nullable because gson reads leniently: a trailing
     // comma in a hand edited list, [a, b,], comes back as [a, b, null].
     private class RegistrationJson {
         var imageToTarget: List<List<Double?>?>? = null
         var imagedCentre: List<Double?>? = null
+        var view: ViewJson? = null
     }
 
     private class SidecarJson {
@@ -199,10 +204,15 @@ object SidecarTruth {
         require(centre == null || (centre.size == 2 && null !in centre)) {
             "$imageName: imagedCentre must be two numbers, got $centre"
         }
+        val camera = registration.view?.cameraPositionFaceUnits
+        require(camera == null || (camera.size == 3 && null !in camera)) {
+            "$imageName: cameraPositionFaceUnits must be three numbers, got $camera"
+        }
         // Neither requireNoNulls() can throw any more; they only narrow the type.
         return Registration(
             imageToTarget = rows.requireNoNulls().flatMap { it.requireNoNulls() },
-            imagedCentre = centre?.requireNoNulls()?.let { ImagePoint(it[0], it[1]) }
+            imagedCentre = centre?.requireNoNulls()?.let { ImagePoint(it[0], it[1]) },
+            cameraPositionFaceUnits = camera?.requireNoNulls()
         )
     }
 }

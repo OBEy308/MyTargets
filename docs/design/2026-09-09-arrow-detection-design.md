@@ -90,12 +90,17 @@ Funktionen rechnet. Die Schnittstelle unten macht den Tausch möglich.
 
 ```kotlin
 interface ArrowDetector {
-    fun detect(request: DetectionRequest): DetectionResult
+    fun detect(
+        image: Mat,                     // Original, 8-Bit-BGR, nach EXIF gedreht
+        request: DetectionRequest,
+        debug: DebugSink = DebugSink.NONE
+    ): DetectionResult
 }
 
 data class DetectionRequest(
     val layout: FaceLayout,             // Spot-Anordnung, android-frei aus TargetModelBase
     val zoneRadii: List<Double>,        // Ringradien, spot-lokal
+    val transitions: List<RingTransition>, // Farbübergänge für die Registrierung, siehe Stufe 2
     val expectedShots: Int,             // Round.shotsPerEnd
     val intrinsics: CameraIntrinsics    // Brennweite und Hauptpunkt, siehe Stufe 6
 ) {
@@ -120,8 +125,12 @@ enum class DetectionFailure { FACE_NOT_FOUND, FACE_MISMATCH }
 enum class SelectionReason { COMPLETE, FEWER_THAN_EXPECTED, AMBIGUOUS_SURPLUS, SPOT_OVERFLOW }
 ```
 
-Das Bild selbst kommt über eine Unterschnittstelle mit `Bitmap` dazu, die erst
-mit den Wahrnehmungsstufen entsteht. `DetectionRequest` bleibt bewusst frei von
+Das Bild kommt als OpenCV-`Mat`, nicht als `Bitmap`; die Umwandlung aus
+`Bitmap` gehört zur Integration. So bleibt der Vertrag in JVM-Tests prüfbar,
+und ein gelernter Detektor nimmt ebenfalls ein Bild. Bis zum Pfeilfindungsdesign
+(`docs/design/2026-09-11-detection-arrows-design.md`) stand hier eine eigene
+Unterschnittstelle mit `Bitmap`; eine Schnittstelle ohne Bild hätte aber keine
+Implementierung gehabt. `DetectionRequest` bleibt bewusst frei von
 Android-Typen, damit die Verträge in JVM-Tests prüfbar sind. `FaceLayout` und
 `CameraIntrinsics` sind die Typen aus dem Geometrieplan
 (`docs/plans/2026-09-09-detection-geometry-core.md`), der diese Schnittstelle
@@ -230,6 +239,13 @@ Quadrat warpen, das die Auflage mit Rand abdeckt (Vollauflage `[-1.1, 1.1]²`,
 nach der im Original verfügbaren Pixeldichte, nicht nach einem festen Wert. Ab
 hier arbeitet alles in Auflagenkoordinaten.
 
+*Stand 2026-09-11:* Für schräge Aufnahmen ersetzt Plan 3b die Stufen 4 und 5
+durch eine Schaftsuche im entzerrten Bild. Sie sucht dunkle Linien durch den
+Fußpunkt der Kamera und braucht weder Farbfeld noch Residuum (siehe
+Pfeilfindungsdesign, `docs/design/2026-09-11-detection-arrows-design.md`). Die
+beiden folgenden Stufen bleiben als möglicher Weg für frontale Aufnahmen
+beschrieben, bei denen die Schäfte zu kurz für diese Suche werden.
+
 **Stufe 4 — Farbabgleich.** Eine Referenzmaske derselben Auflösung wird direkt
 aus den Zonenradien und `facePositions` gerechnet: Für jedes Pixel ist bekannt,
 welche **Farbklasse** (Gelb, Rot, Blau, Schwarz, Weiß) dort liegen muss. Die
@@ -272,6 +288,12 @@ das Einschussloch. Also gilt:
 Das deckt sich damit, dass Pfeile auf Scheibenfotos nach außen zu spreizen
 scheinen: Was nach außen zeigt, sind die Nocks — sie liegen vom Fluchtpunkt
 weiter entfernt. Damit ist die Zuordnung berechenbar statt heuristisch.
+
+*Im entzerrten Bild* lautet dieselbe Regel: Das Bild des Fluchtpunkts `v` unter
+der Homographie ist der Fußpunkt `Q` der Kamera auf der Auflagenebene. Jeder
+senkrecht steckende Schaft liegt dort auf einer Geraden durch `Q`, und der
+Einschuss ist sein Ende näher an `Q`. Plan 3b sucht die Schäfte genau so
+(Pfeilfindungsdesign, *Verfahren*).
 
 *Korrektur vom 2026-09-09.* Bis zur Gesamtprüfung des Geometrieplans stand hier
 die umgekehrte Regel, und der Absatz über das Spreizen widerlegte sie bereits.
@@ -597,8 +619,9 @@ Spot. Das ist **Pflicht, kein Extra** — ohne die Ansicht lässt sich ein
 Fehler nicht lokalisieren, nur erraten.
 
 Bis zur Integration übernimmt der Korpuslauf diese Aufgabe: Er schreibt für
-jedes Foto ein Bild je Stufe (siehe Registrierungsdesign). Der Bildschirm in
-der App entsteht mit der Integration, weil er sie voraussetzt.
+jedes Foto ein Bild je Stufe (siehe Registrierungsdesign, für Kandidaten,
+Einschüsse und Wahrheit das Pfeilfindungsdesign). Der Bildschirm in der App
+entsteht mit der Integration, weil er sie voraussetzt.
 
 ## Reihenfolge der Umsetzung
 
@@ -610,7 +633,10 @@ der App entsteht mit der Integration, weil er sie voraussetzt.
    verrauscht, überlappend, frontal und mehrere Auflagen ab — nicht aber die
    von dieser Spec bevorzugte leicht schräge Aufnahme, verkantete Bilder oder
    3-Spot-Auflagen. Eigene Fotos ergänzen genau diese Lücken;
-   Originalauflösung behalten.
+   Originalauflösung behalten. Seit 2026-09-11 liegt die Serie vom 2026-09-10
+   im Korpus: zwölf annotierte Vollauflagen, zehn davon schräg. Es fehlen
+   weiterhin verkantete Bilder und annotierte 3-Spot-Auflagen; für die
+   vertikale liegen zwei Platzhalter ohne Wahrheit bereit.
 3. ~~**APK-Zuwachs durch OpenCV messen.**~~ Erledigt am 2026-09-10: OpenCV
    4.14.0 aus Maven, das Release nur für ARM (siehe *Offene Risiken*,
    *APK-Größe*).
@@ -621,8 +647,9 @@ der App entsteht mit der Integration, weil er sie voraussetzt.
 6. Plan 3a: Registrierung aus dem Bild (Stufen 1 bis 3), gegen den Korpus
    gemessen, mit Debug-Bildern aus dem Korpuslauf. Design:
    `docs/design/2026-09-10-detection-registration-design.md`.
-7. Plan 3b: Pfeilfindung (Stufen 4 bis 6) gegen den Korpus, Kennzahlen
-   festschreiben.
+7. Plan 3b: Pfeilfindung (Stufen 6 und 7) gegen den Korpus, Kennzahlen der
+   schrägen Fotos festschreiben. Design:
+   `docs/design/2026-09-11-detection-arrows-design.md`.
 8. Integration in `InputActivity` und `GalleryActivity` samt Fotoablage,
    pending scan, Fehlerfällen und Debug-Bildschirm.
 

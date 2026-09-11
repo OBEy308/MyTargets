@@ -117,6 +117,17 @@ The corpus is not a declared input of the test task, so without `--rerun`
 Gradle reports the task up to date after a photograph or sidecar changes, and
 nothing is written.
 
+The arrow run finds the arrows in every photograph in scope and measures
+them against the listed hits:
+
+```
+./gradlew :detection:testDevDebugUnitTest --tests '*ArrowCorpusRun' --rerun
+```
+
+It writes `detection/build/reports/detection/arrows.md` and, beside it, one
+folder of stage images per photograph. It measures and does not judge; the
+bounds for the oblique photographs come in a later step.
+
 ## Build
 
 ```

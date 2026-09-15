@@ -55,12 +55,13 @@ class RealCorpusTest {
         // Stronger than the brief's isNotEmpty(): the failure this task exists
         // to catch loaded 16 entries perfectly happily while dropping the four
         // annotated wa-full photographs, so an isNotEmpty() assertion would
-        // have passed for it too. Pin the exact total (16 inherited + 16
+        // have passed for it too. Pin the exact total (16 inherited + 50
         // wa-full + 2 placeholder photographs of a 3-spot face, at the corpus
-        // state observed on 2026-09-11) and name files from three folders
-        // explicitly, so a loader that quietly reverted to reading only a
-        // subfolder fails here instead of nowhere.
-        assertThat(result.entries).hasSize(34)
+        // state observed on 2026-09-14, when the 34 photographs of the nine
+        // ends of 14.9. arrived) and name files from three folders explicitly,
+        // so a loader that quietly reverted to reading only a subfolder fails
+        // here instead of nowhere.
+        assertThat(result.entries).hasSize(68)
         assertThat(result.entries.map { it.imageName }).containsAtLeast(
             "2026-06-06_sonne_leicht-schraeg_01.jpg",
             "2026-08-04_sonne_stark-schraeg_01.jpg",
@@ -83,10 +84,12 @@ class RealCorpusTest {
         // 2026-09-10 every photograph in the corpus carries a sidecar; the two
         // 3-spot placeholders (wa-3spot-vertikal, 2026-09-11) deliberately
         // carry no target block, because the tools cannot register that face
-        // yet, so they are entries but not annotated ones: 16 wa-full plus 16
-        // inherited.
-        assertThat(annotated).hasSize(32)
-        assertThat(result.entries.count { it.target == null }).isEqualTo(2)
+        // yet, so they are entries but not annotated ones: 49 wa-full plus 16
+        // inherited. The third such entry is
+        // 2026-09-14_sonne_stark-schraeg_25, the extreme side view of 14.9.,
+        // which register.py cannot register either.
+        assertThat(annotated).hasSize(65)
+        assertThat(result.entries.count { it.target == null }).isEqualTo(3)
 
         assertThat(annotated.all { it.isAnnotated }).isTrue()
         // Not `hasPositions`, which change 4 retired: requiring every listed
@@ -103,7 +106,7 @@ class RealCorpusTest {
         assertThat(annotated.all { it.registration != null }).isTrue()
         // Five inherited photographs (the four WA6Ring ones and the hall shot)
         // have no EXIF at all; every other photograph names its focal length.
-        assertThat(annotated.count { it.camera?.focalLength35mm != null }).isEqualTo(27)
+        assertThat(annotated.count { it.camera?.focalLength35mm != null }).isEqualTo(60)
     }
 
     @Test

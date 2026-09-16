@@ -176,6 +176,28 @@ class CorpusLoaderTest {
     }
 
     @Test
+    fun hiddenDirectoriesAreNotWalked() {
+        // The corpus directory also holds tool workspaces: `learn/.venv` is a
+        // Python environment whose packages ship test images (sklearn's
+        // china.jpg, networkx's test_display_*.png). Before this rule the
+        // loader walked into it and reported them as unrecognised images, and
+        // RealCorpusTest failed on a corpus that was entirely in order. A
+        // dot-directory is never a corpus folder, so it is skipped as a whole,
+        // sidecars included: nothing under it becomes an entry, an ignored
+        // image or an orphan.
+        write("wa-full/a6_998877.jpg")
+        write(".venv/lib/sklearn/datasets/images/china.jpg")
+        write(".venv/lib/networkx/tests/test_display_empty_graph.png")
+        write(".venv/stray.json", sidecar())
+
+        val result = CorpusLoader.load(folder.root)
+
+        assertThat(result.entries.map { it.imageName }).containsExactly("a6_998877.jpg")
+        assertThat(result.ignored).isEmpty()
+        assertThat(result.orphanSidecars).isEmpty()
+    }
+
+    @Test
     fun subdirectoriesAreRead() {
         write("wa-full/2026-06-06_sonne_frontal_01.jpg")
         write("wa-full/2026-06-06_sonne_frontal_01.json", sidecar())

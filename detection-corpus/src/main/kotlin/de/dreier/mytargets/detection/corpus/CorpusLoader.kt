@@ -124,7 +124,10 @@ object CorpusLoader {
         usedSidecars.addAll(exemptFromOrphanCheck)
 
         for (child in children.sortedBy { it.name }) {
-            if (child.isDirectory) {
+            // A dot-directory (`.git`, a tool's `.venv` under `learn/`) is
+            // never a corpus folder; the images its packages ship would
+            // otherwise be reported as unrecognised. Skipped whole.
+            if (child.isDirectory && !child.name.startsWith(".")) {
                 loadDirectory(child, entries, ignored, orphans, folderOfImage)
             }
         }

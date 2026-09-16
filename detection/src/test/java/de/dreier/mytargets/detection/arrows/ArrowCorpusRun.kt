@@ -377,11 +377,19 @@ class ArrowCorpusRun {
 
     private companion object {
         /**
-         * Pinned from the report of 2026-09-14: the block under "Bounds,
+         * Pinned from the report of 2026-09-16: the block under "Bounds,
          * oblique photographs". When the corpus changes the run fails and says
          * so; set them again against a new report.
          *
-         * These replace the pins of 2026-09-11, which stood on 15 oblique
+         * The series of 15.9. (49 photographs of 16 ends, overcast, 10 m and
+         * 25 m, 30 of them oblique with 174 listed hits) brought the oblique
+         * group from 40 photographs and 227 hits to 70 and 401. The rate
+         * moved from 22.9 % (52 of 227) to 21.2 % (85 of 401): the new views
+         * alone come to 19 % (33 of 174), and they are the corpus's first
+         * photographs in the 15 to 30 degree band, on 10 m with six shafts
+         * packed into the gold. False positives grew from 26 to 62.
+         *
+         * The pins of 2026-09-14 replaced the pins of 2026-09-11, which stood on 15 oblique
          * photographs with 86 listed hits, 30 of them matched -- a detection
          * rate of 34.9 %. The nine ends of 14.9. brought the oblique group to
          * 40 photographs and 227 hits, and the rate fell to 22.9 % (52 of 227).
@@ -394,7 +402,7 @@ class ArrowCorpusRun {
          * in the others. Read the rate as the honest one and the old as
          * optimistic, not as a regression of the finder.
          */
-        val PINS = ArrowPins(photographs = 40, listed = 227, matched = 52, falsePositives = 26, correctScores = 30, comparableScores = 32, medianErrorBound = 0.013380, p95ErrorBound = 0.068543)
+        val PINS = ArrowPins(photographs = 70, listed = 401, matched = 85, falsePositives = 62, correctScores = 46, comparableScores = 48, medianErrorBound = 0.014172, p95ErrorBound = 0.063337)
 
         val CYAN = Scalar(255.0, 255.0, 0.0)
         val GREEN = Scalar(0.0, 200.0, 0.0)

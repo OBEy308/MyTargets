@@ -92,6 +92,26 @@ Die vollständige Tabelle je Ansicht steht am Ende.
    zwischen Suchdecke und Ergebnis; die gelernte Auswahl auf dem gewachsenen
    Korpus ist der nächste Schritt.
 
+## Umgesetzt (16.9.2026)
+
+Punkt 1 der Folgerung ist umgesetzt: `TruthShot.tipPixel` liest
+`shots[i].tipPx`, `CorpusEntry.truthInView(homography)` setzt die Position
+jedes Treffers mit Spitze durch die Homographie des laufenden Registrars, und
+`ArrowCorpusRun` gleicht gegen diese Kopie ab. 414 der 618 gelisteten Treffer
+der registrierten Fotos haben eine eigene Spitze. Auf demselben Korpus und
+demselben Finder:
+
+| schräge Gruppe, 70 Fotos, 401 Pfeile | vorher | jetzt |
+|---|---|---|
+| gefunden | 85 (21.2 %) | 95 (23.7 %) |
+| Fehlfunde | 62 | 53 |
+| richtiger Ringwert | 46 von 48 | 48 von 51 |
+| Positionsfehler, Median / p95 | 0.014 / 0.063 | 0.012 / 0.058 |
+| Suchdecke | 62.3 % | 71.1 % |
+
+Der Positionsfehler ist jetzt erstmals der des Finders, nicht Rolle plus
+Finder. Die Pins in `ArrowCorpusRun` stehen auf diesen Werten.
+
 ## Tabelle je Ansicht
 
 Rolle in Grad, Rest in Radien (Median der Abstände eigene Ablesung zu

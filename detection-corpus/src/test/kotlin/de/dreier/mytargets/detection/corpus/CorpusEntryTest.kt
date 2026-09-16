@@ -16,6 +16,7 @@
 package de.dreier.mytargets.detection.corpus
 
 import com.google.common.truth.Truth.assertThat
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class CorpusEntryTest {
@@ -39,6 +40,45 @@ class CorpusEntryTest {
     )
 
     private fun ringShot(ring: Int) = TruthShot(scoringRing = ring)
+
+    @Test
+    fun truthInViewMovesTheShotsThatCarryATipAndLeavesTheOthers() {
+        // The metric matches a detector run against the truth of the end,
+        // which lives in the frame of the steepest view. Where a view carries
+        // its own clicked tip, that tip through the RUN's homography is where
+        // the detector can see the arrow in this view; the carried truth is
+        // only right up to the roll of the registration. Shots without a tip
+        // keep the carried truth.
+        val withTip = TruthShot(
+            scoringRing = 1, position = SpotPosition(0, 0.1, 0.2), positionTolerance = 0.02,
+            tipPixel = ImagePoint(1500.0, 1000.0)
+        )
+        val without = TruthShot(scoringRing = 3, position = SpotPosition(0, 0.3, 0.4))
+        val e = entry(listOf(withTip, without))
+        // pixel -> face: scale by 0.001, then shift so that (1500, 1000) lands on the centre
+        val homography = doubleArrayOf(0.001, 0.0, -1.5, 0.0, 0.001, -1.0, 0.0, 0.0, 1.0)
+
+        val seen = e.truthInView(homography)
+
+        assertThat(seen.shots[0].position!!.faceIndex).isEqualTo(0)
+        assertThat(seen.shots[0].position!!.x).isWithin(1e-9).of(0.0)
+        assertThat(seen.shots[0].position!!.y).isWithin(1e-9).of(0.0)
+        assertThat(seen.shots[0].copy(position = withTip.position)).isEqualTo(withTip)
+        assertThat(seen.shots[1]).isEqualTo(without)
+        assertThat(seen.copy(shots = e.shots)).isEqualTo(e)
+        assertThat(e.shots[0].position).isEqualTo(SpotPosition(0, 0.1, 0.2))
+    }
+
+    @Test
+    fun truthInViewRefusesATipThatMapsToInfinity() {
+        val e = entry(listOf(TruthShot(scoringRing = 1, position = SpotPosition(0, 0.1, 0.2), tipPixel = ImagePoint(1.0, 1.0))))
+        // third row makes w = 0 for (1, 1)
+        val homography = doubleArrayOf(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, -1.0, 0.0)
+
+        val error = assertThrows(IllegalArgumentException::class.java) { e.truthInView(homography) }
+
+        assertThat(error).hasMessageThat().contains("t.jpg")
+    }
 
     @Test
     fun printedScoreCharactersMapToPrintedValues() {

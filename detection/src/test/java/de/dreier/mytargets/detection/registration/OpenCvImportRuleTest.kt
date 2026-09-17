@@ -39,7 +39,19 @@ class OpenCvImportRuleTest {
     }
 
     @Test
-    fun theMainSourcesImportOnlyCoreAndImgproc() {
+    fun dnnIsAllowedUnderArrowsAndNowhereElse() {
+        val sources = mapOf(
+            "arrows/LearnedArrowDetector.kt" to "import org.opencv.dnn.Dnn\nimport org.opencv.dnn.Net\n",
+            "arrows\\OnWindows.kt" to "import org.opencv.dnn.Dnn\n",
+            "registration/Registrar.kt" to "import org.opencv.dnn.Net\n"
+        )
+
+        assertThat(OpenCvImports.forbidden(sources))
+            .containsExactly("registration/Registrar.kt: org.opencv.dnn.Net")
+    }
+
+    @Test
+    fun theMainSourcesImportOnlyTheAllowedPackages() {
         // Gradle runs unit tests with the module directory as working directory.
         val root = File("src/main/java")
         assertThat(root.isDirectory).isTrue()

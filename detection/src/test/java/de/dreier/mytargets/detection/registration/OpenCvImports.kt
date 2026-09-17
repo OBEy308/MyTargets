@@ -17,21 +17,27 @@ package de.dreier.mytargets.detection.registration
 
 /**
  * The main code compiles against the desktop jar, which carries modules the
- * Android AAR lacks (org.opencv.highgui). Only these two packages are safe on
- * both.
+ * Android AAR lacks (org.opencv.highgui). core and imgproc are safe on both
+ * everywhere; dnn is in the AAR too (design 3d, decision 3) and only the
+ * learned finder under arrows/ may use it.
  */
 object OpenCvImports {
 
-    private val allowed = listOf("org.opencv.core.", "org.opencv.imgproc.")
+    private val allowedEverywhere = listOf("org.opencv.core.", "org.opencv.imgproc.")
+    private val allowedUnderArrows = listOf("org.opencv.dnn.")
     private val importLine =
         Regex("""^\s*import\s+(org\.opencv\.[A-Za-z0-9_.]*)""", RegexOption.MULTILINE)
 
-    /** "file: imported name" for every import outside the allowed packages. */
+    /** "file: imported name" for every import outside the packages allowed for that file. */
     fun forbidden(sources: Map<String, String>): List<String> =
         sources.flatMap { (name, text) ->
+            val underArrows = name.replace('\\', '/').startsWith("arrows/")
             importLine.findAll(text)
                 .map { it.groupValues[1] }
-                .filter { imported -> allowed.none { imported.startsWith(it) } }
+                .filter { imported ->
+                    allowedEverywhere.none { imported.startsWith(it) } &&
+                        !(underArrows && allowedUnderArrows.any { imported.startsWith(it) })
+                }
                 .map { "$name: $it" }
                 .toList()
         }.sorted()

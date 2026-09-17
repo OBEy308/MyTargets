@@ -239,7 +239,8 @@ Dieselben 100 Ansichten wie r3, Konfiguration von r2 (768 px, Ausschnitte
 |---|---|---|---|---|
 | r3 (512 px), Schwelle je Fold | 64,6 % | 1,6 | 89 % | 0,007 |
 | **r4 (768 px), Schwelle je Fold** | **71,3 %** (286 / 401) | **1,06** | 93 % | 0,005 |
-| r4, gemeinsame Schwelle 0,12 | **62,1 %** | **0,59** | 92 % | 0,005 |
+| **r4, Schwelle je Fold mit Fehlfund-Grenze 0,65** | **63,3 %** (254 / 401) | **0,64** | 92 % | 0,005 |
+| r4, gemeinsame Schwelle 0,12 | 62,1 % | 0,59 | 92 % | 0,005 |
 | r4, gemeinsame Schwelle 0,10 | 68,6 % | 0,89 | 92 % | 0,005 |
 
 Jeder Fold liegt auf oder über r3 (58 → 61, 68 → 74, 51 → 71, 74 → 82,
@@ -247,12 +248,13 @@ Jeder Fold liegt auf oder über r3 (58 → 61, 68 → 74, 51 → 71, 74 → 82,
 
 **Das vor dem ersten Training gesetzte Kriterium (mindestens 60 % bei
 höchstens 0,65 Fehlfunden je Ansicht, Ring nicht schlechter, Fehler-Median
-höchstens 0,02) ist bei Schwelle 0,12 erreicht.** Einschränkung: Diese
-Schwelle ist im Nachhinein gemeinsam gewählt; die je Fold auf den
-Trainingsansichten gewählten Schwellen geben 71 % bei 1,06. Der saubere
-Beleg ist eine Schwellenwahl mit Fehlfund-Grenze in `train.py` und eine
-weitere Messung; die Kurve ist flach genug, dass sie in derselben Gegend
-landen sollte.
+höchstens 0,02) ist erreicht, ohne Einschränkung.** Die Schwelle mit
+Fehlfund-Grenze wird seit dem Abend des 17.9. je Fold auf den
+Trainingsansichten gewählt, so wie die App sie wählen müsste, und für r4 aus
+den gespeicherten Modellen nachgerechnet (`train.py --rethreshold`): 0,10 bis
+0,12 je Fold, **63,3 % bei 0,64 Fehlfunden je Ansicht**, Ring 91,7 %,
+Fehler-Median 0,005. Die gemeinsame Schwelle 0,12 aus der Tabelle war die
+Vorschau darauf.
 
 Von r1 über r3 zu r4: 51 → 65 → 71 % bei 2,8 → 1,6 → 1,06 Fehlfunden. Der
 erste Schritt waren die Daten, der zweite die Auflösung, beide sind nicht

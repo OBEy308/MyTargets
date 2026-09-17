@@ -19,6 +19,12 @@ cp ../../MyTargets-learn/runs/r4/model_fold3_512_fp16.onnx ../../MyTargets/detec
 cp ../../MyTargets-learn/data/2026-09-15_bedeckt_stark-schraeg_07.png ../../MyTargets/detection/src/androidTest/assets/face_768.png
 ```
 
+Since design 3d, `export_onnx.py` exports the wrapper with ImageNet
+normalisation and sigmoid inside the graph. Assets produced with it are
+normalised a second time by this test's own `blobFromImage`; the timing is
+unaffected, the printed maximum is then a probability rather than a logit.
+`export_onnx.py` now needs `--fold N` or `--all` explicitly.
+
 Run with the phone attached (USB debugging on):
 
 ```

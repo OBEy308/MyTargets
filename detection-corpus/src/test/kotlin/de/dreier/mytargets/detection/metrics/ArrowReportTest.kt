@@ -162,4 +162,19 @@ class ArrowReportTest {
 
         assertThat(report).contains("| a6_x.jpg | three faces |")
     }
+
+    @Test
+    fun aPrefaceStandsRightUnderTheTitle() {
+        val report = ArrowReport.render("Learned", emptyList(), emptyList(), emptyList(), emptyList(), emptyList(),
+            preface = "Trained on these photographs: an upper bound.")
+
+        assertThat(report).startsWith("# Learned\n\nTrained on these photographs: an upper bound.\n\n0 photographs in scope")
+    }
+
+    @Test
+    fun withoutAPrefaceTheReportIsUnchanged() {
+        val report = ArrowReport.render("Arrows", emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
+
+        assertThat(report).startsWith("# Arrows\n\n0 photographs in scope")
+    }
 }

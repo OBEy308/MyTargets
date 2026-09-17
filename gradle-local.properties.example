@@ -12,3 +12,7 @@ PLAY_STORE_JSON=../googlePlayAndroidDeveloper.json
 # Optional: test photo corpus for the arrow detection, kept outside the repository.
 # Leave unset to skip the corpus tests. See BUILDING.md, section 4.
 DETECTION_CORPUS_DIR=../MyTargets-corpus
+
+# Optional: folder with the learned arrow finder's model (model.onnx and
+# model.json, design 3d). Leave unset to skip the tests that need it. See BUILDING.md, section 4.
+DETECTION_MODEL_DIR=../MyTargets-corpus/models/arrows/r4-all-2026-09

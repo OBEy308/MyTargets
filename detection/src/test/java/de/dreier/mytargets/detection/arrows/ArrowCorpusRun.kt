@@ -18,11 +18,7 @@ package de.dreier.mytargets.detection.arrows
 import com.google.common.truth.Truth.assertWithMessage
 import de.dreier.mytargets.detection.Candidate
 import de.dreier.mytargets.detection.DetectionRequest
-import de.dreier.mytargets.detection.FaceLayout
 import de.dreier.mytargets.detection.corpus.CorpusEntry
-import de.dreier.mytargets.detection.corpus.CorpusLoader
-import de.dreier.mytargets.detection.corpus.SpotPosition
-import de.dreier.mytargets.detection.geometry.CameraIntrinsics
 import de.dreier.mytargets.detection.geometry.CommonPoint
 import de.dreier.mytargets.detection.geometry.FootPoint
 import de.dreier.mytargets.detection.geometry.Mat3
@@ -33,7 +29,6 @@ import de.dreier.mytargets.detection.metrics.ArrowMeasurement
 import de.dreier.mytargets.detection.metrics.ArrowPins
 import de.dreier.mytargets.detection.metrics.ArrowReport
 import de.dreier.mytargets.detection.metrics.ArrowRow
-import de.dreier.mytargets.detection.metrics.DetectedShotRecord
 import de.dreier.mytargets.detection.metrics.EntryOutcome
 import de.dreier.mytargets.detection.metrics.Metrics
 import de.dreier.mytargets.detection.metrics.PhotoDiagnosis
@@ -42,22 +37,13 @@ import de.dreier.mytargets.detection.metrics.ShotMatching
 import de.dreier.mytargets.detection.metrics.StageMillis
 import de.dreier.mytargets.detection.metrics.TruthDiagnosis
 import de.dreier.mytargets.detection.registration.CorpusPhotos
-import de.dreier.mytargets.detection.registration.FaceWarp
 import de.dreier.mytargets.detection.registration.OpenCvRule
 import de.dreier.mytargets.detection.registration.PngDebugSink
-import de.dreier.mytargets.detection.registration.RingTransitions
-import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
-import org.opencv.core.Mat
-import org.opencv.core.Point
-import org.opencv.core.Scalar
-import org.opencv.imgcodecs.Imgcodecs
-import org.opencv.imgproc.Imgproc
 import java.io.File
 import kotlin.math.abs
-import kotlin.math.roundToInt
 
 /**
  * Finds the arrows in every annotated photograph in scope and writes the
@@ -69,70 +55,43 @@ class ArrowCorpusRun {
     @get:Rule
     val openCv = OpenCvRule()
 
-    private lateinit var root: File
-    private lateinit var reportDir: File
+    private lateinit var dirs: ArrowCorpusRuns.Dirs
 
     private val detector = OpenCvArrowDetector()
 
     @Before
     fun requireCorpus() {
-        val configured = System.getProperty("detection.corpus.dir")
-        assumeTrue("DETECTION_CORPUS_DIR is not configured", configured != null)
-        root = File(configured!!)
-        assumeTrue("corpus directory does not exist: $configured", root.isDirectory)
-        reportDir = File(
-            checkNotNull(System.getProperty("detection.report.dir")) {
-                "detection.report.dir is not set; run this through testDevDebugUnitTest"
-            }
-        )
+        dirs = ArrowCorpusRuns.dirs()
     }
 
     @Test
     fun findsTheArrowsAndWritesTheReport() {
-        val entries = CorpusLoader.load(root).entries
-        val files = CorpusPhotos.filesByName(root, entries)
-        val imagesDir = File(reportDir, "arrows")
-        imagesDir.deleteRecursively()
-        imagesDir.mkdirs()
-
         val rows = ArrayList<ArrowRow>()
         val truths = ArrayList<TruthDiagnosis>()
         val photos = ArrayList<PhotoDiagnosis>()
         val outcomes = ArrayList<EntryOutcome>()
-        val outOfScope = ArrayList<Pair<String, String>>()
 
-        for (entry in entries) {
-            val reason = entry.outOfScope
-            if (reason != null) {
-                outOfScope += entry.imageName to reason
-                continue
-            }
-            if (!entry.isAnnotated) continue
-            val file = CorpusPhotos.imageFileOf(root, entry.imageName, files[entry.imageName].orEmpty())
-            val image = Imgcodecs.imread(file.absolutePath)
-            try {
-                check(!image.empty()) { "${entry.imageName}: cannot be decoded" }
-                CorpusPhotos.checkDecodedSize(entry, image)
-                val folder = File(imagesDir, file.nameWithoutExtension).apply { mkdirs() }
-                val request = requestFor(entry, image.cols(), image.rows())
-                val analysis = detector.analyse(image, request, PngDebugSink(folder))
-                val measured = measure(entry, analysis, request, image.cols(), image.rows())
-                rows += measured.row
-                truths += measured.truths
-                photos += measured.photo
-                outcomes += measured.outcome
-                if (analysis is ArrowAnalysis.Analysed) {
-                    val reference = entry.registration?.imageToTarget
-                    if (reference != null) {
-                        CorpusPhotos.writeRectified(
-                            image, analysis.registration.imageToTarget, reference, entry.imageName,
-                            File(folder, "4-entzerrt.png")
-                        )
-                    }
-                    writeTruth(image, analysis, measured.outcome, File(folder, "7-wahrheit.png"))
+        val outOfScope = ArrowCorpusRuns.forEachInScope(dirs, "arrows") { photo ->
+            val entry = photo.entry
+            val image = photo.image
+            val request = ArrowCorpusRuns.requestFor(entry, image.cols(), image.rows())
+            val analysis = detector.analyse(image, request, PngDebugSink(photo.folder))
+            val measured = measure(entry, analysis, request, image.cols(), image.rows())
+            rows += measured.row
+            truths += measured.truths
+            photos += measured.photo
+            outcomes += measured.outcome
+            if (analysis is ArrowAnalysis.Analysed) {
+                val reference = entry.registration?.imageToTarget
+                if (reference != null) {
+                    CorpusPhotos.writeRectified(
+                        image, analysis.registration.imageToTarget, reference, entry.imageName,
+                        File(photo.folder, "4-entzerrt.png")
+                    )
                 }
-            } finally {
-                image.release()
+                ArrowCorpusRuns.writeTruth(
+                    image, analysis.registration.imageToTarget, measured.outcome, File(photo.folder, "7-wahrheit.png")
+                )
             }
         }
 
@@ -143,7 +102,7 @@ class ArrowCorpusRun {
             (oblique.flatMap { it.entry.shots }.mapNotNull { it.positionTolerance }.maxOrNull() ?: 0.0)
         val listedInScope = outcomes.flatMap { it.entry.shots }
         val ownTips = listedInScope.count { it.tipPixel != null }
-        val report = File(reportDir, "arrows.md")
+        val report = File(dirs.reportDir, "arrows.md")
         report.writeText(
             ArrowReport.render("Arrows against the corpus", rows, truths, photos, outcomes, outOfScope) +
                 "\n## Truth per view\n\n$ownTips of ${listedInScope.size} listed hits in scope " +
@@ -165,29 +124,6 @@ class ArrowCorpusRun {
         val truths: List<TruthDiagnosis>,
         val photo: PhotoDiagnosis,
         val outcome: EntryOutcome
-    )
-
-    /** Arrow design, Korpuslauf: the size of the end, not the number of listed hits; the fallback focal length without EXIF. */
-    private fun requestFor(entry: CorpusEntry, width: Int, height: Int): DetectionRequest {
-        val focal = entry.camera?.focalLength35mm
-        val intrinsics = if (focal != null) {
-            CameraIntrinsics.from35mmEquivalent(width, height, focal)
-        } else {
-            CameraIntrinsics.approximate(width, height)
-        }
-        return DetectionRequest(
-            FaceLayout.singleSpot(), WaFullZones.RADII, RingTransitions.WA_FULL,
-            checkNotNull(entry.shotsPerEnd) { "${entry.imageName}: the sidecar names no shotsPerEnd" },
-            intrinsics
-        )
-    }
-
-    /** A find as the metrics take it, its ring value from the pure radius like the sidecars'. */
-    private fun record(c: Candidate) = DetectedShotRecord(
-        scoringRing = WaFullZones.zoneOf(c.local.length),
-        printedScore = null,
-        position = SpotPosition(c.faceIndex, c.local.x, c.local.y),
-        confidence = c.confidence
     )
 
     private fun measure(
@@ -243,7 +179,7 @@ class ArrowCorpusRun {
         millis: StageMillis
     ): Measured {
         val accepted = analysis.selection.accepted
-        val detected = accepted.map { record(it) }
+        val detected = accepted.map { ArrowCorpusRuns.record(it) }
         // The truth as this view shows it: a hit with a clicked tip of its
         // own is matched where THIS run's homography puts that tip, not where
         // the truth of the end (measured in the steepest view) lands after a
@@ -270,7 +206,7 @@ class ArrowCorpusRun {
         val notAccepted = analysis.candidates.filter { c ->
             c.located != null && accepted.none { it === c.located }
         }
-        val notAcceptedRecords = notAccepted.map { record(it.located!!) }
+        val notAcceptedRecords = notAccepted.map { ArrowCorpusRuns.record(it.located!!) }
         val remainingMatch = ShotMatching.match(remainingEntry, notAcceptedRecords)
         val foundButLost = remainingMatch.pairs.associate { pair ->
             remainingIndices[pair.truthIndex] to (notAccepted[pair.detectedIndex] to false)
@@ -339,43 +275,6 @@ class ArrowCorpusRun {
     }
 
     /**
-     * Stage image 7: the rectified face with every listed hit and its budget as
-     * a cyan circle, every accepted find as a green dot, and matched pairs joined
-     * in white. Only the run knows the truth.
-     */
-    private fun writeTruth(image: Mat, analysis: ArrowAnalysis.Analysed, outcome: EntryOutcome, file: File) {
-        val imageToTarget = analysis.registration.imageToTarget
-        val edge = FaceWarp.edgeFor(imageToTarget)
-        val warped = FaceWarp.warp(image, imageToTarget, edge)
-        try {
-            val k = edge / (2.0 * FaceWarp.EXTENT)
-            for (shot in outcome.entry.shots) {
-                val position = shot.position ?: continue
-                val budget = ShotMatching.DEFAULT_POSITION_TOLERANCE + (shot.positionTolerance ?: 0.0)
-                Imgproc.circle(warped, point(position, edge), (budget * k).roundToInt(), CYAN, 2)
-            }
-            for (found in outcome.detected) {
-                Imgproc.circle(warped, point(found.position, edge), 6, GREEN, Imgproc.FILLED)
-            }
-            for (pair in outcome.match.pairs) {
-                val truth = outcome.entry.shots[pair.truthIndex].position ?: continue
-                Imgproc.line(
-                    warped, point(truth, edge), point(outcome.detected[pair.detectedIndex].position, edge), WHITE, 2
-                )
-            }
-            check(Imgcodecs.imwrite(file.absolutePath, warped)) { "cannot write $file" }
-        } finally {
-            warped.release()
-        }
-    }
-
-    /** On WAFull, spot-local and target coordinates coincide. */
-    private fun point(p: SpotPosition, edge: Int): Point {
-        val px = FaceWarp.pixelOf(Vec2(p.x, p.y), edge)
-        return Point(px.x, px.y)
-    }
-
-    /**
      * Whether [candidate] lies on the shaft of the hit at [entryPoint]: its line
      * passes within SHAFT_LINE_DISTANCE of the hit, and the hit lies ahead of its
      * tip, towards Q (arrow design, Korpuslauf und Bericht, point 3). Spot-local
@@ -423,10 +322,6 @@ class ArrowCorpusRun {
          * optimistic, not as a regression of the finder.
          */
         val PINS = ArrowPins(photographs = 70, listed = 401, matched = 95, falsePositives = 53, correctScores = 48, comparableScores = 51, medianErrorBound = 0.012174, p95ErrorBound = 0.058149)
-
-        val CYAN = Scalar(255.0, 255.0, 0.0)
-        val GREEN = Scalar(0.0, 200.0, 0.0)
-        val WHITE = Scalar(255.0, 255.0, 255.0)
 
         /** How close a candidate's line passes a hit for the candidate to count as a piece of its shaft. */
         const val SHAFT_LINE_DISTANCE = 0.02

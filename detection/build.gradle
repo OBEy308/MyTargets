@@ -30,6 +30,7 @@ android {
     defaultConfig {
         minSdkVersion libs.versions.minSdk.get().toInteger()
         compileSdk libs.versions.compileSdk.get().toInteger()
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
     // Must mirror the flavors of :shared, otherwise the dependency cannot be resolved.
@@ -63,6 +64,15 @@ dependencies {
     testImplementation project(':detection-corpus')
     testImplementation libs.junit4
     testImplementation libs.truth
+
+    // On the device the Android AAR provides OpenCV, dnn included. Used only
+    // by the timing test of the learned finder (androidTest/README.md); the
+    // app wires the same artifact in at integration.
+    androidTestImplementation libs.opencv.android
+    androidTestImplementation libs.junit4
+    androidTestImplementation libs.truth
+    androidTestImplementation libs.androidx.test.runner
+    androidTestImplementation libs.androidx.test.junit
 }
 
 // The corpus run and its report are wired into one variant only; otherwise

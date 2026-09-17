@@ -120,11 +120,16 @@ object ArrowReport {
         truths: List<TruthDiagnosis>,
         photos: List<PhotoDiagnosis>,
         outcomes: List<EntryOutcome>,
-        outOfScope: List<Pair<String, String>>
+        outOfScope: List<Pair<String, String>>,
+        preface: String? = null
     ): String {
         val sb = StringBuilder()
         sb.appendLine("# $title")
         sb.appendLine()
+        if (preface != null) {
+            sb.appendLine(preface)
+            sb.appendLine()
+        }
         val registered = rows.count { it.registered }
         sb.appendLine(
             "${rows.size} photographs in scope, $registered registered, ${rows.size - registered} not. " +

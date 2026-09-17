@@ -72,6 +72,17 @@ class FaceWarpTest {
         }
     }
 
+    @Test
+    fun targetOfInvertsPixelOf() {
+        val edge = 768
+        for (target in listOf(Vec2(0.0, 0.0), Vec2(-1.1, -1.1), Vec2(0.37, -0.82))) {
+            val back = FaceWarp.targetOf(FaceWarp.pixelOf(target, edge), edge)
+            assertThat(back.distanceTo(target)).isLessThan(1e-12)
+        }
+        // Pixel 383.5 of 768 is the face centre: k = 768 / 2.2, k * 1.1 - 0.5 = 383.5.
+        assertThat(FaceWarp.targetOf(Vec2(383.5, 383.5), edge).length).isLessThan(1e-12)
+    }
+
     private fun close(bgr: DoubleArray, colour: Scalar) =
         (0..2).all { abs(bgr[it] - colour.`val`[it]) < 30.0 }
 }

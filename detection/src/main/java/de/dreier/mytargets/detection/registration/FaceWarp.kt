@@ -57,6 +57,12 @@ object FaceWarp {
         return Vec2(k * (target.x + EXTENT) - 0.5, k * (target.y + EXTENT) - 0.5)
     }
 
+    /** Inverse of [pixelOf]: the target point whose image is pixel [px] of a warped image of [edge] px. */
+    fun targetOf(px: Vec2, edge: Int): Vec2 {
+        val k = edge / (2.0 * EXTENT)
+        return Vec2((px.x + 0.5) / k - EXTENT, (px.y + 0.5) / k - EXTENT)
+    }
+
     /** A new [edge] x [edge] image; the caller releases it. */
     fun warp(original: Mat, imageToTarget: Mat3, edge: Int = edgeFor(imageToTarget)): Mat {
         val k = edge / (2.0 * EXTENT)

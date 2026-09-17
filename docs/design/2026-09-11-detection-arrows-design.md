@@ -786,3 +786,26 @@ Mit diesem Dokument geändert:
   sich berührende Schäfte zusammen. Das ist die bekannte Grenze *Stark
   überlappende Schäfte* der Haupt-Spec; die Kandidatendiagnose zeigt die
   betroffenen Treffer als nicht gefunden.
+
+## Nachtrag 2026-09-17: Korpusgeometrie neu gepinnt
+
+Der Test *Korpusgeometrie* war seit den Serien vom 14. und 15.9. rot: statt
+23 tragen 105 Fotos im Umfang einen `view`-Block, und auf 28 davon, alle
+stark schräg, liegen `Q` aus Homographie und Brennweite und
+`cameraPositionFaceUnits` aus `register.py` weiter als 0,04 auseinander, bis
+zu 0,22 Radien bei 54 Grad. Nachgerechnet in Python: `Q` der App ist auf vier
+Stellen der exakte Fluchtpunktweg `H · (K Kᵀ) Hᵀ (0, 0, 1)` mit derselben
+Brennweitenkonvention wie `register.py`; die Referenz ist die Näherung mit
+getrennt normierten Posenspalten, und deren Fehler wächst mit dem Abstand des
+Fußpunkts vom Zentrum (höchstens 7,3 % davon). Eine Brennweite, die die
+Spalten gleich lang macht, gibt es nicht: der Faktor streut je Foto von 0,77
+bis 1,10, und mit ihm wird die Referenz schlechter. Die Homographien der
+Serie vom 14.9. weichen also selbst um rund 7 % von einer starren
+Ebenenabbildung ab, ein Befund für den Roll-Anker im Registrar. Welcher der
+beiden Fußpunkte näher an der Wahrheit liegt, entscheiden die geklickten
+Pfeillinien nicht: ihr Schnittpunkt liegt wegen der Pfeilneigung 0,5 bis 1,6
+Radien von beiden entfernt (die App ist in 44 von 55 Ansichten näher).
+
+Neue Schranke: 0,04 (das Fenster der Suche), wo die Referenz trägt, sonst
+10 % des Abstands des Fußpunkts vom Zentrum; die Zählung folgt dem
+committeten Korpusstand.

@@ -141,9 +141,15 @@ class ArrowCorpusRun {
         // The worst a matched error can be: the detector's budget plus the largest annotation tolerance.
         val worstBudget = ShotMatching.DEFAULT_POSITION_TOLERANCE +
             (oblique.flatMap { it.entry.shots }.mapNotNull { it.positionTolerance }.maxOrNull() ?: 0.0)
+        val listedInScope = outcomes.flatMap { it.entry.shots }
+        val ownTips = listedInScope.count { it.tipPixel != null }
         val report = File(reportDir, "arrows.md")
         report.writeText(
             ArrowReport.render("Arrows against the corpus", rows, truths, photos, outcomes, outOfScope) +
+                "\n## Truth per view\n\n$ownTips of ${listedInScope.size} listed hits in scope " +
+                "carry a clicked tip of their own view (`shots[i].tipPx`) and are matched where this run's " +
+                "homography puts that tip; the rest are matched against the truth of the end, carried from " +
+                "the steepest view. See docs/design/2026-09-16-roll-in-the-measurement.md.\n" +
                 ArrowReport.pinsSection(ArrowBounds.pinsFor(measurement, worstBudget))
         )
         println("Arrow report: ${report.absolutePath}")
@@ -238,6 +244,12 @@ class ArrowCorpusRun {
     ): Measured {
         val accepted = analysis.selection.accepted
         val detected = accepted.map { record(it) }
+        // The truth as this view shows it: a hit with a clicked tip of its
+        // own is matched where THIS run's homography puts that tip, not where
+        // the truth of the end (measured in the steepest view) lands after a
+        // registration turned by the camera's roll. See
+        // docs/design/2026-09-16-roll-in-the-measurement.md.
+        val entry = entry.truthInView(CorpusPhotos.values(analysis.registration.imageToTarget).toDoubleArray())
         val match = ShotMatching.match(entry, detected)
         val outcome = EntryOutcome(entry, match, detected)
 
@@ -377,9 +389,17 @@ class ArrowCorpusRun {
 
     private companion object {
         /**
-         * Pinned from the report of 2026-09-16: the block under "Bounds,
-         * oblique photographs". When the corpus changes the run fails and says
-         * so; set them again against a new report.
+         * Pinned from the report of 2026-09-16 (second run of that day): the
+         * block under "Bounds, oblique photographs". When the corpus changes
+         * the run fails and says so; set them again against a new report.
+         *
+         * Since that second run the hits are matched against each view's own
+         * clicked tip where the sidecar has one (`truthInView`), so a
+         * registration turned by the camera's roll no longer counts a
+         * correctly found arrow as a miss plus a false positive. On the same
+         * corpus that took the oblique group from 85 matched and 62 false
+         * positives to 95 and 53, and the search ceiling from 62 % to 71 %;
+         * see docs/design/2026-09-16-roll-in-the-measurement.md.
          *
          * The series of 15.9. (49 photographs of 16 ends, overcast, 10 m and
          * 25 m, 30 of them oblique with 174 listed hits) brought the oblique
@@ -402,7 +422,7 @@ class ArrowCorpusRun {
          * in the others. Read the rate as the honest one and the old as
          * optimistic, not as a regression of the finder.
          */
-        val PINS = ArrowPins(photographs = 70, listed = 401, matched = 85, falsePositives = 62, correctScores = 46, comparableScores = 48, medianErrorBound = 0.014172, p95ErrorBound = 0.063337)
+        val PINS = ArrowPins(photographs = 70, listed = 401, matched = 95, falsePositives = 53, correctScores = 48, comparableScores = 51, medianErrorBound = 0.012174, p95ErrorBound = 0.058149)
 
         val CYAN = Scalar(255.0, 255.0, 0.0)
         val GREEN = Scalar(0.0, 200.0, 0.0)

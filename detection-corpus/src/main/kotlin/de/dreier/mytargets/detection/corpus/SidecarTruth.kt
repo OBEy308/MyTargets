@@ -39,6 +39,7 @@ object SidecarTruth {
         var positionTolerance: Double? = null
         var nearRingBoundary: Boolean? = null
         var uncertain: Boolean? = null
+        var tipPx: List<Double?>? = null
     }
 
     private class ImageJson {
@@ -162,6 +163,10 @@ object SidecarTruth {
         require(position != null || shot.faceIndex == null) {
             "$imageName: shot $index gives faceIndex without x and y"
         }
+        val tipPx = shot.tipPx
+        require(tipPx == null || (tipPx.size == 2 && null !in tipPx)) {
+            "$imageName: shot $index: tipPx must be two numbers, got $tipPx"
+        }
 
         return naming("$imageName: shot $index") {
             TruthShot(
@@ -173,7 +178,8 @@ object SidecarTruth {
                 position = position,
                 positionTolerance = shot.positionTolerance,
                 nearRingBoundary = shot.nearRingBoundary ?: false,
-                uncertain = shot.uncertain ?: false
+                uncertain = shot.uncertain ?: false,
+                tipPixel = tipPx?.let { ImagePoint(it[0]!!, it[1]!!) }
             )
         }
     }

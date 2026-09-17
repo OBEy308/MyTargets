@@ -17,6 +17,7 @@ package de.dreier.mytargets.detection.corpus
 
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class SidecarTruthTest {
@@ -102,6 +103,43 @@ class SidecarTruthTest {
         // Image pixels, not spot-local coordinates: a type of its own, so it
         // cannot be compared with a hit by accident.
         assertThat(r.imagedCentre).isEqualTo(ImagePoint(1145.77, 1775.66))
+    }
+
+    @Test
+    fun readsTheTipOfTheViewInImagePixels() {
+        // The series of 15.9.2026 clicks every arrow's tip in every view
+        // (`shots[i].tipPx`, pixels of the EXIF-turned original). It is the
+        // view's own reading of the same arrow; x and y stay the truth of the
+        // end. A shot without it has no tip of its own.
+        val json = """
+            {
+              "shots": [
+                { "x": 0.0725, "y": 0.0445, "scoringRing": 1, "tipPx": [983.1, 1579.0] },
+                { "x": -0.014, "y": -0.2733, "scoringRing": 3 }
+              ]
+            }
+        """.trimIndent()
+
+        val e = SidecarTruth.parse("a.jpg", json)
+
+        assertThat(e.shots[0].tipPixel).isEqualTo(ImagePoint(983.1, 1579.0))
+        assertThat(e.shots[0].position!!.x).isWithin(1e-9).of(0.0725)
+        assertThat(e.shots[1].tipPixel).isNull()
+    }
+
+    @Test
+    fun aTipOfTheWrongLengthNamesTheShot() {
+        val json = """
+            { "shots": [ { "x": 0.1, "y": 0.1, "scoringRing": 2, "tipPx": [983.1] } ] }
+        """.trimIndent()
+
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            SidecarTruth.parse("a.jpg", json)
+        }
+
+        assertThat(error).hasMessageThat().contains("a.jpg")
+        assertThat(error).hasMessageThat().contains("shot 0")
+        assertThat(error).hasMessageThat().contains("tipPx")
     }
 
     @Test

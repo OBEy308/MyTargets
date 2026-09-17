@@ -15,6 +15,7 @@
 
 package de.dreier.mytargets.detection.corpus
 
+import kotlin.math.abs
 import kotlin.math.hypot
 
 /**
@@ -93,7 +94,18 @@ data class TruthShot(
     val position: SpotPosition? = null,
     val positionTolerance: Double? = null,
     val nearRingBoundary: Boolean = false,
-    val uncertain: Boolean = false
+    val uncertain: Boolean = false,
+    /**
+     * This view's own reading of the same arrow: its tip in pixels of the
+     * EXIF-turned original photograph (`shots[i].tipPx`), where the
+     * annotator clicked it. [position] is the truth of the END, measured in
+     * the steepest view and carried to every view of that end; through a
+     * registration turned by the camera's roll it lands beside the arrow.
+     * The tip does not: mapped through the homography of the run that is
+     * being measured, it is where that run can see the arrow. See
+     * [CorpusEntry.truthInView].
+     */
+    val tipPixel: ImagePoint? = null
 ) {
     init {
         require(scoringRing != null || printedScore != null) {
@@ -160,4 +172,39 @@ data class CorpusEntry(
     /** The capture conditions, used to break the metrics down by difficulty. */
     val tags: Set<String>
         get() = setOfNotNull(capture?.lighting, capture?.angle)
+
+    /**
+     * The truth as THIS view shows it: every shot that carries a
+     * [TruthShot.tipPixel] gets its position from that tip through
+     * [imageToTarget], the row-major 3x3 homography of the run being
+     * measured (pixels of the EXIF-turned original to spot-local face
+     * coordinates); shots without a tip keep the carried truth. The face
+     * index is kept, the entry is otherwise unchanged.
+     *
+     * Why: the truth of an end lives in the frame of the steepest view. A
+     * registration turned by the camera's roll puts it beside the arrow, and
+     * a correctly found arrow then counts as a miss plus a false positive.
+     * Matching against the view's own tip takes the roll out of the
+     * measurement without touching the registrar.
+     *
+     * @throws IllegalArgumentException naming the photograph when a tip maps
+     *         to infinity, which means the homography is not one of this
+     *         photograph.
+     */
+    fun truthInView(imageToTarget: DoubleArray): CorpusEntry {
+        require(imageToTarget.size == 9) { "$imageName: a homography has nine values, got ${imageToTarget.size}" }
+        val h = imageToTarget
+        return copy(shots = shots.map { shot ->
+            val tip = shot.tipPixel ?: return@map shot
+            val w = h[6] * tip.x + h[7] * tip.y + h[8]
+            require(abs(w) > 1e-12) { "$imageName: the tip at (${tip.x}, ${tip.y}) maps to infinity; not this photograph's homography" }
+            shot.copy(
+                position = SpotPosition(
+                    faceIndex = shot.position?.faceIndex ?: 0,
+                    x = (h[0] * tip.x + h[1] * tip.y + h[2]) / w,
+                    y = (h[3] * tip.x + h[4] * tip.y + h[5]) / w
+                )
+            )
+        })
+    }
 }

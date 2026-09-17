@@ -46,23 +46,26 @@ class LearnedModelSmokeTest {
         assumeTrue("DETECTION_MODEL_DIR is not configured", configured != null)
         dir = File(configured!!)
         assumeTrue("model directory does not exist: $configured", dir.isDirectory)
-        assumeTrue("no model.onnx in $configured", File(dir, "model.onnx").isFile)
+        assumeTrue("no ${ArrowModel.ONNX_FILE} in $configured", File(dir, ArrowModel.ONNX_FILE).isFile)
+        assumeTrue("no ${ArrowModel.META_FILE} in $configured", File(dir, ArrowModel.META_FILE).isFile)
     }
 
     @Test
     fun theDesktopJarReadsTheModelAndRunsIt() {
-        val net = Dnn.readNetFromONNX(File(dir, "model.onnx").absolutePath)
+        val model = ArrowModel.load(dir)
+        val size = model.meta.inputSize
+        val net = Dnn.readNetFromONNX(model.onnx.absolutePath)
         assertThat(net.empty()).isFalse()
 
-        val input = Mat.zeros(768, 768, CvType.CV_8UC3)
-        val blob = Dnn.blobFromImage(input, 1.0 / 255.0, Size(768.0, 768.0), Scalar(0.0, 0.0, 0.0), true, false)
+        val input = Mat.zeros(size, size, CvType.CV_8UC3)
+        val blob = Dnn.blobFromImage(input, 1.0 / 255.0, Size(size.toDouble(), size.toDouble()), Scalar(0.0, 0.0, 0.0), true, false)
         try {
             net.setInput(blob)
             val out = net.forward()
             try {
                 assertThat(out.dims()).isEqualTo(4)
                 assertThat(listOf(out.size(0), out.size(1), out.size(2), out.size(3)))
-                    .containsExactly(1, 2, 384, 384).inOrder()
+                    .containsExactly(1, 2, model.meta.outputSize, model.meta.outputSize).inOrder()
                 assertThat(out.type()).isEqualTo(CvType.CV_32F)
             } finally {
                 out.release()

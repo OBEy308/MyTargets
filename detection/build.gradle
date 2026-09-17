@@ -53,6 +53,10 @@ android {
 dependencies {
     implementation libs.kotlin.stdlib.jdk7
 
+    // The learned finder's model folder carries a JSON sidecar (design 3d,
+    // Ablageformat); :app and :detection-corpus read JSON with Gson already.
+    implementation libs.gson
+
     // The Java bindings of the desktop build. The app ships
     // org.opencv:opencv 4.14.0; compiling against 4.9 means an API that 4.9
     // lacks fails here rather than in a test (registration design,

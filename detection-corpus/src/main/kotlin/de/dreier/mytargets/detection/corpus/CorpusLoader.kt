@@ -43,11 +43,21 @@ import java.io.File
  * An image name has to be unique across all folders, because entries,
  * `out-of-scope.json` and the report identify a photograph by its name alone.
  * A second image of the same name is fatal.
+ *
+ * `models/` at the root holds the learned finder's weights and is not read;
+ * see [MODELS_DIR].
  */
 object CorpusLoader {
 
     private val IMAGE_EXTENSIONS = setOf("jpg", "jpeg", "png")
     private const val OUT_OF_SCOPE_FILE = "out-of-scope.json"
+
+    /**
+     * The learned arrow finder's model folders (design 3d, Ablageformat):
+     * weights, a JSON sidecar per model and parity references. Not a corpus
+     * folder; only skipped directly under the root.
+     */
+    const val MODELS_DIR = "models"
 
     private val gson = Gson()
 
@@ -67,7 +77,8 @@ object CorpusLoader {
         val orphans = mutableListOf<String>()
         loadDirectory(
             root, entries, ignored, orphans, folderOfImage = mutableMapOf(),
-            exemptFromOrphanCheck = setOf(OUT_OF_SCOPE_FILE)
+            exemptFromOrphanCheck = setOf(OUT_OF_SCOPE_FILE),
+            skipDirectories = setOf(MODELS_DIR)
         )
 
         val matchedNames = mutableSetOf<String>()
@@ -116,7 +127,8 @@ object CorpusLoader {
         ignored: MutableList<String>,
         orphans: MutableList<String>,
         folderOfImage: MutableMap<String, File>,
-        exemptFromOrphanCheck: Set<String> = emptySet()
+        exemptFromOrphanCheck: Set<String> = emptySet(),
+        skipDirectories: Set<String> = emptySet()
     ) {
         val children = directory.listFiles() ?: return
         val images = children.filter { it.isFile && it.isImage() }
@@ -126,8 +138,9 @@ object CorpusLoader {
         for (child in children.sortedBy { it.name }) {
             // A dot-directory (`.git`, a tool's `.venv` under `learn/`) is
             // never a corpus folder; the images its packages ship would
-            // otherwise be reported as unrecognised. Skipped whole.
-            if (child.isDirectory && !child.name.startsWith(".")) {
+            // otherwise be reported as unrecognised. Skipped whole, as is
+            // the models folder at the root.
+            if (child.isDirectory && !child.name.startsWith(".") && child.name !in skipDirectories) {
                 loadDirectory(child, entries, ignored, orphans, folderOfImage)
             }
         }

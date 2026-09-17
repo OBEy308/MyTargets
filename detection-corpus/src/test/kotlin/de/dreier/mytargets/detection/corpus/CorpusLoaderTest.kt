@@ -367,6 +367,30 @@ class CorpusLoaderTest {
     }
 
     @Test
+    fun theModelsFolderAtTheRootIsNoCorpusFolder() {
+        // Design 3d, Ablageformat: the learned finder's weights and their JSON
+        // sidecars live under models/; none of it is a photograph or a sidecar.
+        write("wa-full/a6_998877.jpg")
+        write("models/arrows/r4-all/model.json", "{}")
+        write("models/arrows/r4-all/model.onnx")
+        write("models/arrows/r4-all/parity/view.json", "{}")
+        write("models/arrows/r4-all/preview.png")
+
+        val result = CorpusLoader.load(folder.root)
+
+        assertThat(result.entries.map { it.imageName }).containsExactly("a6_998877.jpg")
+        assertThat(result.ignored).isEmpty()
+        assertThat(result.orphanSidecars).isEmpty()
+    }
+
+    @Test
+    fun aModelsFolderBelowTheRootIsAnOrdinaryFolder() {
+        write("wa-full/models/stray.json", "{}")
+
+        assertThat(CorpusLoader.load(folder.root).orphanSidecars).containsExactly("stray.json")
+    }
+
+    @Test
     fun aSidecarMustMatchItsImageNameExactlyIncludingCase() {
         // Windows finds photo.json for Photo.jpg and Linux does not. Matching
         // the name exactly makes both behave like Linux: the photograph has no

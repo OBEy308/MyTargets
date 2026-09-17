@@ -18,7 +18,12 @@ package de.dreier.mytargets.detection.arrows
 import de.dreier.mytargets.detection.SelectionReason
 import de.dreier.mytargets.detection.registration.RegistrationOutcome
 
-/** Wall time per stage in milliseconds; the corpus report shows them as registration / warp / search / walk. */
+/**
+ * Wall time per stage in milliseconds: registration, warp (with pre-shrink),
+ * the network's forward pass, and peak finding together with the placement
+ * on spots; the corpus report shows them in its registration / warp / search
+ * / walk columns.
+ */
 class LearnedTimings(val registrationMs: Long, val warpMs: Long, val networkMs: Long, val peaksMs: Long)
 
 /** Everything the learned detector produced, for the corpus run and the debug screen; the app gets only the DetectionResult. */

@@ -49,6 +49,7 @@ object ArrowCorpusRuns {
 
     class Dirs(val root: File, val reportDir: File)
 
+    /** One decoded photograph; [image] is valid only while the action of [forEachInScope] runs and is released right after. */
     class Photograph(val entry: CorpusEntry, val image: Mat, val folder: File)
 
     /** Skips the calling test without DETECTION_CORPUS_DIR; the report dir comes from testDevDebugUnitTest. */

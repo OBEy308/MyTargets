@@ -74,7 +74,7 @@ class LearnedArrowDetectorTest {
         assertWithMessage("outcome of the registration").that(analysis).isInstanceOf(LearnedAnalysis.Analysed::class.java)
         analysis as LearnedAnalysis.Analysed
         assertThat(analysis.peaks.map { it.value }).isInOrder(Comparator.reverseOrder<Double>())
-        assertThat(analysis.peaks.all { it.value >= model.meta.threshold }).isTrue()
+        assertThat(analysis.peaks.all { it.value.toFloat() >= model.meta.threshold.toFloat() }).isTrue()
         assertThat(analysis.kept.size).isAtMost(entries.size)
         assertThat(analysis.kept).containsExactlyElementsIn(analysis.peaks.take(analysis.kept.size)).inOrder()
         assertThat(analysis.onFace.size + analysis.outsideFace.size).isEqualTo(analysis.kept.size)

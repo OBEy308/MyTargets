@@ -150,12 +150,13 @@ class LearnedArrowDetector(
                     out.dims() == 4 && out.size(0) == 1 && out.size(1) >= 1 &&
                         out.size(2) == expected && out.size(3) == expected && out.type() == CvType.CV_32F
                 ) {
-                    "${model.onnx.path}: expected a float output of 1 x 2 x $expected x $expected for inputSize $size " +
-                        "and stride ${model.meta.stride}, got ${shapeOf(out)}"
+                    "${model.onnx.path}: expected a float output of 1 x C x $expected x $expected (C >= 1) for " +
+                        "inputSize $size and stride ${model.meta.stride}, got ${shapeOf(out)}"
                 }
                 val height = out.size(2)
                 val width = out.size(3)
                 // The output is continuous; as one 2D matrix its first height rows are channel 0.
+                check(out.isContinuous()) { "${model.onnx.path}: the network output is not continuous, cannot read channel 0" }
                 val values = FloatArray(width * height)
                 val flat = out.reshape(1, out.size(1) * height)
                 try {

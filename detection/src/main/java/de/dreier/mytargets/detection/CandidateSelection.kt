@@ -96,7 +96,7 @@ object CandidateSelection {
         val cappedAccepted = mutableListOf<Candidate>()
         var overflow = false
         for (c in confidenceOutcome.accepted) {
-            val n = perSpotCount.getOrDefault(c.faceIndex, 0)
+            val n = perSpotCount[c.faceIndex] ?: 0
             if (n >= maxPerSpot) {
                 overflow = true
             } else {

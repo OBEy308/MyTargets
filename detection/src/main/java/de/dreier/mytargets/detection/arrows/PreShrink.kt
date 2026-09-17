@@ -22,13 +22,14 @@ import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
 import kotlin.math.max
 import kotlin.math.min
-import java.lang.Math.rint
+import kotlin.math.round
 
 /**
  * The pre-shrink of prepare.py (design 3d, step 2): the longest side of the
  * original down to [maxSide] pixels with INTER_AREA before the warp, so the
  * warp samples the pixels the model was trained on. The size rounds half to
- * even like Python's round(), which Math.rint does and roundToInt does not.
+ * even like Python's round(); kotlin.math.round does the same (it is
+ * Math.rint on the JVM), and roundToInt would not.
  */
 class PreShrink private constructor(val factor: Double, val width: Int, val height: Int) {
 
@@ -58,7 +59,7 @@ class PreShrink private constructor(val factor: Double, val width: Int, val heig
             require(width > 0 && height > 0) { "an image has positive size, got $width x $height" }
             require(maxSide > 0) { "maxSide is positive, got $maxSide" }
             val factor = min(1.0, maxSide.toDouble() / max(width, height))
-            return PreShrink(factor, rint(width * factor).toInt(), rint(height * factor).toInt())
+            return PreShrink(factor, round(width * factor).toInt(), round(height * factor).toInt())
         }
     }
 }

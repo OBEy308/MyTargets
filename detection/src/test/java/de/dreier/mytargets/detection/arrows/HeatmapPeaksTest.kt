@@ -88,7 +88,7 @@ class HeatmapPeaksTest {
     fun peaksComeHighestFirstAndAreCutToMaxCount() {
         val heat = heat(20, 20, Triple(2, 2, 0.3f), Triple(10, 2, 0.9f), Triple(2, 10, 0.6f), Triple(10, 10, 0.2f))
 
-        // Values come from float32 pixels; compare as Float so 0.4f does not have to equal the Double 0.4.
+        // Compared as Float for the same reason as above.
         assertThat(find(heat).map { it.value.toFloat() }).containsExactly(0.9f, 0.6f, 0.3f, 0.2f).inOrder()
         assertThat(find(heat, maxCount = 2).map { it.value.toFloat() }).containsExactly(0.9f, 0.6f).inOrder()
         assertThat(find(heat, maxCount = 0)).isEmpty()

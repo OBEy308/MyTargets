@@ -60,7 +60,7 @@ object LearnedSelection {
         val accepted = ArrayList<LearnedFind>()
         var overflow = false
         for (find in onFace) {
-            val n = perSpot.getOrDefault(find.candidate.faceIndex, 0)
+            val n = perSpot[find.candidate.faceIndex] ?: 0
             if (n >= maxPerSpot) {
                 overflow = true
             } else {

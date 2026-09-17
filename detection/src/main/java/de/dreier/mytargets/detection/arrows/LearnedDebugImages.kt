@@ -16,6 +16,7 @@
 package de.dreier.mytargets.detection.arrows
 
 import de.dreier.mytargets.detection.registration.releaseIfThrows
+import org.opencv.core.CvType
 import org.opencv.core.Mat
 import org.opencv.core.Point
 import org.opencv.core.Scalar
@@ -42,6 +43,7 @@ object LearnedDebugImages {
     /** The tip heatmap as a red glow: each pixel blends towards pure red by its probability. */
     fun heatmap(warped: Mat, heat: Heatmap, stride: Int): Mat =
         warped.clone().releaseIfThrows { mat ->
+            require(warped.type() == CvType.CV_8UC3) { "the rectified input is 8-bit BGR, got type ${warped.type()}" }
             val width = mat.cols()
             val height = mat.rows()
             val bytes = ByteArray(width * height * 3)

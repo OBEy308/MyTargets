@@ -70,12 +70,14 @@ class LearnedFinderTimingTest {
             "ABI ${Build.SUPPORTED_ABIS.joinToString("/")}, cores ${Runtime.getRuntime().availableProcessors()}, " +
             "OpenCV ${Core.VERSION}")
         for (res in intArrayOf(768, 512)) {
-            measure(res)
+            for (winograd in booleanArrayOf(true, false)) {
+                measure(res, winograd)
+            }
         }
         writeReport()
     }
 
-    private fun measure(res: Int) {
+    private fun measure(res: Int, winograd: Boolean) {
         val ctx = InstrumentationRegistry.getInstrumentation().context
         val cacheDir = ctx.cacheDir
         val modelName = "model_fold3_${res}_fp16.onnx"
@@ -89,12 +91,15 @@ class LearnedFinderTimingTest {
 
         val tLoad = SystemClock.elapsedRealtime()
         val net = Dnn.readNetFromONNX(modelFile.absolutePath)
+        net.enableWinograd(winograd)
         val loadMs = SystemClock.elapsedRealtime() - tLoad
-        report("$res px: model ${modelFile.length() / 1e6} MB read in ${loadMs / 1000.0} s")
+        val variant = "$res px, winograd ${if (winograd) "on" else "off"}"
+        report("$variant: model ${modelFile.length() / 1e6} MB read in ${loadMs / 1000.0} s")
 
-        for (threads in intArrayOf(1, 0)) {
+        // Core.setNumThreads(0) runs sequentially; a negative value restores the default (all cores).
+        for (threads in intArrayOf(1, -1)) {
             Core.setNumThreads(threads)
-            val label = if (threads == 0) "all threads" else "1 thread"
+            val label = if (threads < 0) "all cores" else "1 thread"
             net.setInput(blob)
             val tFirst = SystemClock.elapsedRealtime()
             val out = net.forward()
@@ -109,16 +114,21 @@ class LearnedFinderTimingTest {
             }
             val perPass = (SystemClock.elapsedRealtime() - tRep) / 1000.0 / REPEATS
             val maxLogit = Core.minMaxLoc(out.reshape(1, 1)).maxVal
-            report("$res px, $label: first forward ${firstMs / 1000.0} s, then ${"%.2f".format(perPass)} s per pass, " +
+            report("$variant, $label: first forward ${firstMs / 1000.0} s, then ${"%.2f".format(perPass)} s per pass, " +
                 "output ${out.size(1)}x${out.size(2)}x${out.size(3)}, max logit ${"%.2f".format(maxLogit)}")
             out.release()
         }
         val pssAfter = pssMb()
         val nativeAfter = Debug.getNativeHeapAllocatedSize() / 1e6
-        report("$res px: PSS ${"%.0f".format(pssBefore)} -> ${"%.0f".format(pssAfter)} MB (+${"%.0f".format(pssAfter - pssBefore)}), " +
+        report("$variant: PSS ${"%.0f".format(pssBefore)} -> ${"%.0f".format(pssAfter)} MB (+${"%.0f".format(pssAfter - pssBefore)}), " +
             "native heap ${"%.0f".format(nativeBefore)} -> ${"%.0f".format(nativeAfter)} MB")
         blob.release()
         modelFile.delete()
+        // The Java Net frees its native memory from its finalizer; nudge the GC so the
+        // next variant starts from a baseline and report what is left.
+        System.gc()
+        Thread.sleep(500)
+        report("$variant: PSS after gc ${"%.0f".format(pssMb())} MB")
     }
 
     /** The corpus face rendered at 768 px, resized to [res], ImageNet-normalised like train.py. */

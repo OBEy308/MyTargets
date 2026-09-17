@@ -1,7 +1,7 @@
 # Gelernte Pfeilfindung — der Preis des Wegs in die App
 
 Datum: 2026-09-17
-Status: Messung, keine Umsetzung
+Status: Messung, keine Umsetzung; Telefonzahlen vom Abend des 17.9. ergänzt
 Basis: Master `95a00a11`, Korpus `0e30f18`, Modell r4 Fold 3 (`../MyTargets-learn/runs/r4/model_fold3.pt`)
 Vorgänger: `2026-09-15-learned-selection-findings.md` (Nachträge vom 17.9.)
 
@@ -12,8 +12,8 @@ Das Heatmap-Modell des PoC erreicht auf zurückgehaltenen schrägen Ansichten
 hinter die `ArrowDetector`-Schnittstelle kommt (Haupt-Spec, *Upgrade-Pfad zu
 Ansatz C*), ist zu beziffern, was das kostet: welche Laufzeitbibliothek, wie
 viel APK, wie viel Zeit und Speicher auf dem Telefon, und was F-Droid dazu
-sagt. Gemessen am PC (Ryzen 5000, ein Thread, sofern nicht anders gesagt);
-die Zahlen vom Telefon fehlen noch, siehe *Was nicht gemessen ist*.
+sagt. Gemessen am PC (Ryzen 5000, ein Thread, sofern nicht anders gesagt)
+und, seit dem Abend des 17.9., auf einem Telefon (Abschnitt 3a).
 
 ## Befunde
 
@@ -33,10 +33,9 @@ Was sich ändert: Die Regel des Registrierungs-Designs, dass `:detection` nur
 (`org.openpnp:opencv` 4.9.0), hat `dnn` ebenfalls, die Kompilierprüfung bleibt
 also erhalten.
 
-Zwei Einschränkungen: Getestet ist der Import mit opencv-python 5.0.0 am PC,
-die App hat 4.14.0; die Operatoren sind schlicht (Conv mit eingefalteter
-BatchNorm, ReLU, MaxPool, Resize bilinear, Concat, Sigmoid), der Import auf
-dem Gerät ist aber zu prüfen. Und der Export ist **auf eine Eingabegröße
+Der Import auf dem Gerät ist geprüft: OpenCV 4.14.0 auf dem Telefon liest
+den fp16-Export in 0,05 s und liefert die erwartete Ausgabe (Abschnitt 3a).
+Eine Einschränkung bleibt: Der Export ist **auf eine Eingabegröße
 festgelegt**, weil die Resize-Größen im Graphen stehen: ein 768-px-Export
 nimmt keine 512-px-Eingabe. Je gewählter Auflösung ein Export.
 
@@ -70,15 +69,47 @@ dreizehnmal langsamer als fp32 (16,7 s), kein Weg. Ein kleineres Rückgrat
 | Trefferquote schräg (r3 bzw. r4, Schwelle je Fold nach F1) | 65 % bei 1,6 FP | 71 % bei 1,06 FP |
 | Trefferquote schräg mit Fehlfund-Grenze 0,65 | – | 63 % bei 0,64 FP |
 
-Auf das Telefon übertragen, ohne Messung: Ein großer ARM-Kern eines
-Mittelklasse-Telefons rechnet fp32-Faltungen etwa zwei- bis viermal langsamer
-als der PC-Kern, also **grob 2,5 bis 5 s je Foto bei 768 px auf einem Thread,
-1 bis 2 s auf vier Kernen**; bei 512 px die Hälfte. Das ist für einen Schritt,
-der nach dem Foto einmal läuft, tragbar, aber nicht nebenbei. Der Speicher ist
-das größere Risiko (das Design nennt ihn unter *Tempo und Speicher auf dem
-Handy*): 270 MB zusätzlich bei 768 px, davon 58 MB Gewichte (mit fp16 29 MB),
-der Rest Aktivierungen der U-Net-Skip-Verbindungen bei 384 × 384 × 64
-Kanälen. Auf einem Telefon mit 4 GB ist das machbar, auf einem mit 2 GB knapp.
+### 3a. Auf dem Telefon gemessen
+
+Samsung Galaxy S25 (SM-S931B, Snapdragon 8 Elite, 8 Kerne, Android 16,
+arm64-v8a), OpenCV 4.14.0 aus dem AAR, fp16-Export von r4 Fold 3, Eingabe
+eine entzerrte Korpus-Auflage. Instrumentierungstest
+`LearnedFinderTimingTest` in `detection/src/androidTest` (README dort); drei
+Durchläufe je Zelle nach einem Aufwärmdurchlauf.
+
+| | 768 px | 512 px |
+|---|---|---|
+| Modell lesen | 0,05 s | 0,04 s |
+| Winograd an, ein Thread | 0,90 s | 0,42 s |
+| **Winograd an, alle Kerne** | **0,53 s** | **0,23 s** |
+| Winograd aus, ein Thread | 2,41 s | 1,10 s |
+| Winograd aus, alle Kerne | 1,23 s | 0,58 s |
+| Nativer Heap mit geladenem Netz nach dem Durchlauf, Winograd an | rund 700 MB | rund 550 MB |
+| dito, Winograd aus | rund 400 MB | rund 250 MB |
+
+Lesart:
+
+- **Zeit ist kein Thema.** Ein Foto kostet auf diesem Telefon eine halbe
+  Sekunde bei 768 px auf allen Kernen, ein Kern allein ist schneller als ein
+  PC-Kern. Ein Mittelklasse-Telefon liegt vielleicht beim Dreifachen, also
+  1,5 s: für einen Schritt, der nach dem Foto einmal läuft, tragbar.
+- **Speicher ist das Thema, und Winograd ist die Stellschraube.** OpenCV DNN
+  rechnet 3×3-Faltungen mit Winograd-Puffern, die bei 768 px rund 300 MB
+  zusätzlich kosten. Mit Winograd (Voreinstellung) hält das Netz rund 700 MB
+  nativen Speicher, ohne rund 400 MB, bei 2,3-facher Zeit (1,2 s auf allen
+  Kernen). 700 MB sind auf einem Telefon mit 8 oder 12 GB unauffällig, auf
+  einem mit 4 GB ein Grund, im Hintergrund beendet zu werden; 400 MB sind auf
+  4 GB machbar. `Net.enableWinograd(false)` ist ein Aufruf; die App kann ihn
+  von `ActivityManager.getMemoryClass()` oder dem Gesamtspeicher abhängig
+  machen.
+- Die Speicherzahlen sind Momentaufnahmen des nativen Heaps in einem
+  Prozess, der nacheinander vier Netze lud; die Java-Hülle gibt den nativen
+  Teil erst im Finalizer frei, und der PSS fiel während der zweiten Variante
+  sichtbar, als das erste Netz verschwand. Die Größenordnung und der
+  Winograd-Unterschied sind belastbar, die letzte Stelle nicht. Für eine
+  exakte Zahl je Variante bräuchte es einen Prozess je Variante.
+- Die PC-Messung hatte den Speicher unterschätzt (+269 MB gegen rund 700 MB
+  mit Winograd auf dem Telefon); die Zeit hatte sie richtig eingeordnet.
 
 ### 4. F-Droid
 
@@ -116,21 +147,18 @@ Nachhinein gesetzte.
 |---|---|
 | Neue Abhängigkeit | keine, `dnn` steckt im vorhandenen OpenCV-AAR |
 | APK | +29 MB (fp16), gegen rund 50 MB heute |
-| Laufzeit je Foto | geschätzt 1 bis 5 s bei 768 px, halb so viel bei 512 px; zu messen |
-| Speicher | +270 MB bei 768 px, +160 MB bei 512 px; zu messen |
+| Laufzeit je Foto | 0,5 s bei 768 px auf einem S25 (alle Kerne), 1,2 s ohne Winograd; Mittelklasse geschätzt das Dreifache |
+| Speicher | rund 700 MB nativ bei 768 px mit Winograd, rund 400 MB ohne; 512 px 550 / 250 MB |
 | Genauigkeit | 71 % bei 1,06 FP oder 63 % bei 0,64 FP, gegen 25 % bei 0,9 FP heute |
 | F-Droid | offen wie bisher (AAR), Gewichte kommen als zweite offene Frage dazu |
 | Code | eine `ArrowDetector`-Implementierung, rund 150 Zeilen, plus Assets |
 
 ## Was nicht gemessen ist
 
-- **Zeit und Speicher auf dem Telefon.** Das ist die eine Zahl, die noch
-  fehlt, und sie ist billig zu holen: ein Instrumentierungstest oder ein
-  Knopf im Debug-Bildschirm, der das fp16-ONNX aus den Assets lädt und
-  `net.forward()` auf einem 768-px-Bild stoppt, auf dem Telefon, mit dem die
-  Korpusfotos entstanden sind.
-- Der ONNX-Import von OpenCV 4.14.0 (getestet: 5.0.0 am PC).
-- Ein kleineres Rückgrat für unter 15 MB.
+- Zeit und Speicher auf einem Mittelklasse-Telefon; gemessen ist ein
+  Spitzengerät (S25). Der Test läuft auf jedem angeschlossenen Gerät.
+- Der Speicher je Variante in einem eigenen Prozess (siehe 3a).
+- Ein kleineres Rückgrat für unter 15 MB und unter 400 MB Speicher.
 - Ob 512 px mit den Fehlfunden von r3 (1,6 je Ansicht) am Telefon den
   Zeitgewinn wert ist; bei 768 px und Fehlfund-Grenze ist das Kriterium erst
   erfüllt.
@@ -138,8 +166,10 @@ Nachhinein gesetzte.
 ## Empfehlung
 
 Der Weg ist billiger als angenommen: keine neue Bibliothek, kein TFLite-Export,
-29 MB Assets. Zuerst die Telefonmessung (ein Nachmittag), dann die
-Entscheidung über die Auflösung, dann die `ArrowDetector`-Implementierung
-gegen den Korpus gemessen. Der klassische Finder bleibt als Rückfall und als
+29 MB Assets, eine halbe Sekunde je Foto auf dem gemessenen Telefon. Die
+Auflösung kann 768 px sein, weil erst dort das Kriterium erfüllt ist und die
+Zeit es erlaubt; der Speicher wird über Winograd gesteuert (aus auf Geräten
+mit wenig Speicher, 1,2 s statt 0,5 s). Nächster Schritt ist die
+`ArrowDetector`-Implementierung gegen den Korpus gemessen. Der klassische Finder bleibt als Rückfall und als
 Lieferant der Kandidatenmerkmale erhalten; die Schnittstelle sieht den Tausch
 seit dem ersten Design vor.

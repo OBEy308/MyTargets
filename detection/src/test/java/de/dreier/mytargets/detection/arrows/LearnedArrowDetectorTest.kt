@@ -17,10 +17,12 @@ package de.dreier.mytargets.detection.arrows
 
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
+import de.dreier.mytargets.detection.DebugSink
 import de.dreier.mytargets.detection.DetectionFailure
 import de.dreier.mytargets.detection.DetectionRequest
 import de.dreier.mytargets.detection.FaceLayout
 import de.dreier.mytargets.detection.geometry.Vec2
+import de.dreier.mytargets.detection.registration.DebugImages
 import de.dreier.mytargets.detection.registration.OpenCvRule
 import de.dreier.mytargets.detection.registration.RegistrationOutcome
 import de.dreier.mytargets.detection.registration.RingTransitions
@@ -157,5 +159,25 @@ class LearnedArrowDetectorTest {
         } catch (e: IllegalStateException) {
             assertThat(e).hasMessageThat().contains("does-not-exist.onnx")
         }
+    }
+
+    @Test
+    fun theDetectorShowsTheHeatmapAndThePeaksOnTheRectifiedInput() {
+        val shown = ArrayList<Triple<String, Int, Int>>()
+        val photo = SyntheticArrows.photograph(camera, 2000, 1500, entries.map { SyntheticArrow(it) })
+        try {
+            LearnedArrowDetector(model).analyse(photo, request(entries.size), DebugSink { stage, image ->
+                shown += Triple(stage, image.cols(), image.rows())
+            })
+        } finally {
+            photo.release()
+        }
+
+        val size = model.meta.inputSize
+        assertThat(shown.map { it.first }).containsExactly(
+            DebugImages.CLASSES, DebugImages.DISCS, DebugImages.RINGS,
+            LearnedDebugImages.HEATMAP, LearnedDebugImages.PEAKS
+        ).inOrder()
+        assertThat(shown.drop(3).map { it.second to it.third }).containsExactly(size to size, size to size)
     }
 }

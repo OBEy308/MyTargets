@@ -257,3 +257,46 @@ Der Einbau in die App (Kamera, Assets, Anzeige, Korrektur), der Roll-Anker im
 Registrar (Voraussetzung für die Gruppenanzeige, eigener Plan), ein kleineres
 Rückgrat, Copy-Paste-Augmentierung und neue Fotos, die Trennung dichter
 Gruppen.
+
+## Nachtrag 2026-09-17: umgesetzt und gemessen
+
+Plan `docs/plans/2026-09-17-detection-learned-arrows.md`. Der Rauchtest im
+Desktop-Jar 4.9 lief im ersten Anlauf grün: der fp16-Export lädt und rechnet,
+Ausgabe 1×2×384×384. Der Paritätstest hält auf beiden Ansichten gegen das
+ausgelieferte Modell innerhalb der Schranken 0,5 px und 0,01; fein gemessen
+gegen Fold 3 von r4 waren es 0,0069 px und 0,0023. Modell `r4-all-2026-09`
+(60 Epochen auf 100 Ansichten mit 574 Pfeilen; die Beilage nennt Korpus-Commit
+5dcc2e6, der Modellordner selbst liegt im Korpus als Commit c6aa504),
+Schwelle 0,12.
+
+Korpuslauf, schräge Gruppe (70 Fotos, 401 gelistete Treffer, Trainingsfotos,
+Obergrenze): 264 gefunden (65,8 %), 11 Fehlfunde (0,157 je Ansicht), Ring
+98,2 % (166/169), Fehler Median 0,0044, p95 0,0155. Frontal: 41,0 % bei 0,289
+Fehlfunden je Ansicht. Der klassische Finder auf demselben Umfang: 95 von 401
+gefunden bei 53 Fehlfunden. Kreuzvalidierung des PoC daneben: 71,3 % bei 1,06
+und 63,3 % bei 0,64. Von 108 Fotos im Umfang registrieren 103; die fünf
+FACE_NOT_FOUND (vier davon schräg) sind dieselben wie im klassischen Lauf,
+ohne diese vier liegt die schräge Rate bei 69,8 %. Zeiten je Foto auf dem PC:
+Registrierung 643 ms (einschließlich der Stufenbilder 1 bis 3), Warp 3,3 ms,
+Netz 324 ms, Spitzen 0,1 ms.
+
+Die 65,8 % liegen unter der Erwartung des Plans von deutlich über 71,3 %, aber
+diese Marke ist die Kreuzvalidierung mit den F1-Schwellen; die ausgelieferte
+Schwelle 0,12 gehört zur FP-begrenzten Kreuzvalidierung mit 63,3 % bei 0,64
+Fehlfunden je Ansicht, und dieser Lauf liegt darüber, bei einem Fünftel der
+Fehlfunde. Dass die Kette stimmt, zeigen der Paritätstest und die Stichprobe
+der Stufenbilder: das Leuchten sitzt auf den Spitzen, die grünen Ringe liegen
+in den cyanfarbenen Budgets. Der Rest des Abstands zu einer Obergrenze auf
+Trainingsfotos entsteht vor dem Netz: vier schräge Registrierungen scheitern,
+der Roll des Registrars kostet rund 3 Punkte (gemessen am 17.9.,
+`docs/design/2026-09-16-roll-in-the-measurement.md`), und das Budget-Matching
+des Korpus ist strenger als der Pixelradius des PoC. Auf der Fehlfundseite
+sieht 0,12 richtig aus: 0,157 je Ansicht schräg gegen 53 Fehlfunde des
+klassischen Finders. Die nicht gefundenen Pfeile entstehen laut Bericht fast
+nur daraus, dass gar kein Kandidat über der Schwelle steht: die Auswahl
+verliert genau einen der 265 schrägen Kandidaten im Budget, und fast jedes
+Foto endet auf FEWER_THAN_EXPECTED. Wie weit die Heatmap-Werte an diesen
+Stellen unter 0,12 liegen, zeigt der Bericht nicht, denn unterhalb der
+Schwelle entsteht kein Kandidat. Die besten Fehlfunde liegen dagegen dicht über der Schwelle (0,125
+bis 0,174), eine niedrigere Schwelle kauft Treffer also mit Fehlfunden. Für
+Schritt 8 heißt das: 0,12 behalten und zuerst den Registrar angehen.

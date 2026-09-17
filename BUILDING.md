@@ -129,6 +129,26 @@ folder of stage images per photograph. It fails when a metric of the oblique
 photographs gets worse than its bound, or when the oblique group of the
 corpus has changed; the end of the report then shows the values to pin anew.
 
+The learned arrow finder (`docs/design/2026-09-17-learned-arrow-detector-design.md`)
+reads its weights from a model folder of the corpus repository. Point to it
+from `gradle-local.properties`:
+
+```properties
+DETECTION_MODEL_DIR=../MyTargets-corpus/models/arrows/r4-all-2026-09
+```
+
+Without the entry the tests that need the model skip themselves. With it, the
+learned run measures the finder against the corpus and writes
+`detection/build/reports/detection/learned-arrows.md`:
+
+```
+./gradlew :detection:testDevDebugUnitTest --tests '*LearnedArrowCorpusRun' --rerun
+```
+
+The model was trained on the corpus photographs, so this report is an upper
+bound and a regression guard; the report's preface says so and names the
+cross-validation numbers that estimate the quality on new photographs.
+
 ## Build
 
 ```

@@ -15,6 +15,7 @@
 
 package de.dreier.mytargets.detection.arrows
 
+import com.google.common.truth.Truth.assertWithMessage
 import de.dreier.mytargets.detection.Candidate
 import de.dreier.mytargets.detection.FaceLayout
 import de.dreier.mytargets.detection.SpotMapping
@@ -23,6 +24,7 @@ import de.dreier.mytargets.detection.geometry.Vec2
 import de.dreier.mytargets.detection.metrics.ArrowBounds
 import de.dreier.mytargets.detection.metrics.ArrowGroups
 import de.dreier.mytargets.detection.metrics.ArrowMeasurement
+import de.dreier.mytargets.detection.metrics.ArrowPins
 import de.dreier.mytargets.detection.metrics.ArrowReport
 import de.dreier.mytargets.detection.metrics.ArrowRow
 import de.dreier.mytargets.detection.metrics.EntryOutcome
@@ -119,6 +121,11 @@ class LearnedArrowCorpusRun {
                 ArrowReport.pinsSection(ArrowBounds.pinsFor(measurement, worstBudget))
         )
         println("Learned arrow report: ${report.absolutePath}")
+
+        // Checked after writing, so a failing run still leaves its report.
+        val broken = ArrowBounds.violations(measurement, PINS)
+        assertWithMessage("bounds of the oblique photographs (training photographs, upper bound):\n" + broken.joinToString("\n"))
+            .that(broken).isEmpty()
     }
 
     /** The preface of the report: what this number is and is not (design 3d, Guete und Messung sind getrennt). */
@@ -268,5 +275,17 @@ class LearnedArrowCorpusRun {
             PhotoDiagnosis(entry.imageName, group, falseFinds.maxOfOrNull { it.peak.value }, 0, falseFinds.size),
             outcome
         )
+    }
+
+    private companion object {
+        /**
+         * Pinned from the report of 2026-09-17, model r4-all-2026-09. The model
+         * trained on these photographs: the pins are an upper bound and a
+         * regression guard for the chain warp, network, peaks, not the quality
+         * on new photographs (that is the PoC's cross-validation, 71.3 % at
+         * 1.06 FP/view and 63.3 % at 0.64). When the corpus or the model
+         * changes the run fails and says so; set them again against a new report.
+         */
+        val PINS = ArrowPins(photographs = 70, listed = 401, matched = 264, falsePositives = 11, correctScores = 166, comparableScores = 169, medianErrorBound = 0.006454, p95ErrorBound = 0.017686)
     }
 }

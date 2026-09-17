@@ -1,7 +1,7 @@
 # Plan 3d: Gelernter Pfeilfinder hinter `ArrowDetector` — Design
 
 Datum: 2026-09-17
-Status: Design, abgestimmt; gegengelesen am 17.9. gegen Code, Korpus-Repo und `runs/r4` (Entscheidungen 4 und 5, Vorverkleinerung, Paritätstest); Plan folgt in `docs/plans/`
+Status: Design, abgestimmt; gegengelesen am 17.9. gegen Code, Korpus-Repo und `runs/r4` (Entscheidungen 4 und 5, Vorverkleinerung, Paritätstest); Plan: `docs/plans/2026-09-17-detection-learned-arrows.md`
 Basis: Master `e1dc042b` (Befunde des PoC bis zur Telefonmessung), Korpus `e4fb964` (Lauf r4, `export_onnx.py`)
 Vorgänger: `2026-09-15-learned-selection-findings.md`, `2026-09-17-learned-finder-app-path.md`
 

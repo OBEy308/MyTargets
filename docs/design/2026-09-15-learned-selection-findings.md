@@ -150,3 +150,82 @@ kleinsten Form, die dort hilft. Reihenfolge:
 | `../MyTargets-corpus/learn/` | `prepare.py`, `train.py`, `evaluate.py`, `scorer.py`, `metrics.py`, README mit allen Zahlen |
 | `../MyTargets-learn/` | alles Erzeugte: entzerrte Bilder, Modelle, Heatmaps, `candidates.json`, `scorer_report.md`. **Bewusst außerhalb des Korpus:** `CorpusLoader` durchsucht jeden Unterordner und nimmt jedes Bild als Korpusfoto |
 | `detection/src/test/.../arrows/ArrowCandidateExport.kt` | schreibt `candidates.json` in den Berichtsordner, läuft über `testDevDebugUnitTest --tests "*ArrowCandidateExport*"` |
+
+## Nachtrag 2026-09-17: beide Teile auf dem gewachsenen Korpus
+
+Basis: Korpus `1f42ac1` (Serie vom 15.9. dazu, 100 Ansichten, 574 Pfeile,
+70 schräge Ansichten mit 401 Pfeilen, 53 Passen). Die Korpusmessung der App
+misst seit PR #7 ebenfalls gegen die Spitzen je Ansicht (`TruthShot.tipPixel`);
+damit stehen die Zahlen auf derselben Messlatte.
+
+**Gelernter Bewerter, wiederholt (16.9.) und um Passen-Merkmale erweitert
+(17.9.), schräge Ansichten, out of fold:**
+
+| Auswahl | 15.9. (38 Ansichten) | 16.9. (66 Ansichten) | 17.9. plus Passen-Merkmale |
+|---|---|---|---|
+| heutige `CandidateSelection` | 27,3 %, 0,74 FP | 25,1 %, 0,92 FP | dieselbe |
+| Orakel der Suche | 81,0 % | 75,1 % | dieselbe |
+| logistische Regression, F1 | 64,4 %, 1,42 FP | 59,0 %, 1,8 FP | 59,3 %, 1,9 FP |
+| logistische Regression, Fehlfund-Grenze 0,65 | 56,5 %, 0,61 FP | 41,3 %, 0,58 FP | 42,3 %, 0,61 FP |
+| Gradient Boosting, F1 | 60,2 % | 51,6 % | 55,8 % |
+
+Die Out-of-fold-Kurve der Regression liegt an allen Schwellen innerhalb eines
+Punktes auf der vom 15.9. **75 % mehr Daten haben den Bewerter nicht bewegt:
+die Merkmale sind die Grenze, nicht die Datenmenge.** Der scheinbare Rückgang
+gegen den 15.9. ist der schwerere Korpus (10 m, sechs Schäfte dicht im Gold),
+nicht ein schlechteres Modell; die heutige Auswahl fällt genauso.
+
+Die Passen-Merkmale (Abstand der Schaftlinie vom gemeinsamen Fußpunkt der
+Passe, Winkel gegen die Median-Richtung, Länge und Schaftkontrast relativ zum
+Median, Rang über der Sollzahl) sind kein Hebel: ein Punkt für die Regression,
+vier für die Bäume. Gemessen warum: aus den *wahren* Schäften bestimmt trennt
+der Fußpunkt-Abstand gut (AUC 0,76), aber aus den Kandidaten lässt er sich
+nicht scharf schätzen. Unter den besten `shotsPerEnd` nach Score ist nur die
+Hälfte wahr, und das ferne Ende eines Kandidaten liegt dort, wo der Schaftlauf
+endete, nicht an der Nocke; selbst mit Orakel-Gewichten bliebe das Merkmal bei
+AUC 0,69. Details im Korpus-README (`learn/README.md`, Teil 2).
+
+**Heatmap-Modell r3 (17.9.): dieselbe Konfiguration wie r1 auf 100 statt 53
+Ansichten:**
+
+| | gefunden schräg | Fehlfunde je Ansicht | Ring richtig | Positionsfehler Median |
+|---|---|---|---|---|
+| r1 (15.9., 53 Ansichten) | 116 / 227 = 51,1 % | 2,8 | 85 % | 0,009 |
+| r3 (17.9., 100 Ansichten), Schwelle je Fold | 259 / 401 = **64,6 %** | 1,6 | 89 % | 0,007 |
+| r3, Schwelle 0,13 (Fehlfund-Grenze 0,65) | **48,1 %** | 0,64 | 88 % | 0,007 |
+| r3 auf genau den 40 schrägen Ansichten von r1 | 65,6 % (r1 dort: 51,1 %) | 0,9 (r1: 2,8) | 87 % | 0,009 |
+
+Je Fold 68, 58, 51, 74, 68 %. Was übrig bleibt: dichte Gruppen (fünf Spitzen
+auf wenigen Pixeln geben einen Gipfel) und die geerbten frontalen Fotos.
+
+## Befunde, ergänzt
+
+7. **"Der Datensatz ist die Grenze" hat sich bestätigt.** 75 % mehr Ansichten
+   gaben dem Heatmap-Modell 14 Punkte auf identischen Fotos und halbierten
+   seine Fehlfunde. Dem Bewerter gaben dieselben Daten nichts.
+8. **Bei gleichen Fehlfunden liegt die Heatmap jetzt vor dem Bewerter** (48 %
+   gegen 42 % bei 0,65 je Ansicht; 65 % gegen 59 % bei rund 1,8), und ihre
+   Obergrenze ist nicht die Suchreichweite des klassischen Finders (75 %).
+   Das Kriterium des PoC (60 % bei höchstens 0,65 Fehlfunden je Ansicht) ist
+   in der Quote erreicht, in den Fehlfunden noch nicht.
+9. **Die Passen-Ebene ist kein Hebel für den Bewerter**, solange die Kandidaten
+   die Richtung so ungenau tragen (Befund oben). Nicht mit anderen Gewichtungen
+   wiederholen; ein schärferer Fußpunkt braucht Bildmaterial bis zur Nocke.
+
+## Empfehlung, angepasst
+
+Die Empfehlung vom 15.9. stand auf "Bewerter zuerst, Heatmap erst mit mehr
+Daten". Die Daten sind da, und sie haben die Rangfolge gedreht: Der Bewerter
+ist mit seinen Merkmalen am Ende, die Heatmap wächst mit jedem Foto. Was
+jetzt zu entscheiden ist, bevor eines von beiden in die App geht:
+
+- **Fehlfunde der Heatmap** auf 0,65 je Ansicht drücken, ohne die Quote zu
+  verlieren: höhere Auflösung (r2 hat sie bei 768 px halbiert), kleinere
+  Sigma für dichte Gruppen, Copy-Paste-Augmentierung der annotierten Schäfte,
+  Fotos der Fotoliste. Jeder Schritt out of fold gemessen wie bisher.
+- **Preis des Wegs in die App** beziffern: TFLite-Export, Modellgröße
+  (ResNet-18-U-Net rund 60 MB float32, 15 MB quantisiert, kleineres Rückgrat
+  prüfen), Laufzeit auf dem Telefon, F-Droid-Verträglichkeit der Gewichte.
+- Der Bewerter bleibt als **günstiger Zwischenschritt** ohne neue Abhängigkeit
+  möglich (59 % bei 1,8 Fehlfunden statt 25 % bei 0,9), wenn der App-Weg der
+  Heatmap zu teuer ist; die Radius-Falle aus Befund 3 gilt weiter.

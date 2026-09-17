@@ -31,7 +31,10 @@ object OpenCvImports {
     /** "file: imported name" for every import outside the packages allowed for that file. */
     fun forbidden(sources: Map<String, String>): List<String> =
         sources.flatMap { (name, text) ->
-            val underArrows = name.replace('\\', '/').startsWith("arrows/")
+            // The sweep over the main sources passes paths relative to src/main/java, so
+            // arrows/ sits in the middle of them; the unit tests pass it as the first segment.
+            val path = name.replace('\\', '/')
+            val underArrows = path.startsWith("arrows/") || path.contains("/arrows/")
             importLine.findAll(text)
                 .map { it.groupValues[1] }
                 .filter { imported ->

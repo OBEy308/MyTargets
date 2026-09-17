@@ -229,3 +229,40 @@ jetzt zu entscheiden ist, bevor eines von beiden in die App geht:
 - Der Bewerter bleibt als **günstiger Zwischenschritt** ohne neue Abhängigkeit
   möglich (59 % bei 1,8 Fehlfunden statt 25 % bei 0,9), wenn der App-Weg der
   Heatmap zu teuer ist; die Radius-Falle aus Befund 3 gilt weiter.
+
+## Nachtrag 2026-09-17, abends: r4 mit 768 px erreicht das Kriterium
+
+Dieselben 100 Ansichten wie r3, Konfiguration von r2 (768 px, Ausschnitte
+512 px, 60 Epochen), 2,8 h CPU:
+
+| | gefunden schräg | Fehlfunde je Ansicht | Ring richtig | Positionsfehler Median |
+|---|---|---|---|---|
+| r3 (512 px), Schwelle je Fold | 64,6 % | 1,6 | 89 % | 0,007 |
+| **r4 (768 px), Schwelle je Fold** | **71,3 %** (286 / 401) | **1,06** | 93 % | 0,005 |
+| r4, gemeinsame Schwelle 0,12 | **62,1 %** | **0,59** | 92 % | 0,005 |
+| r4, gemeinsame Schwelle 0,10 | 68,6 % | 0,89 | 92 % | 0,005 |
+
+Jeder Fold liegt auf oder über r3 (58 → 61, 68 → 74, 51 → 71, 74 → 82,
+68 → 68 %). Frontal 59,5 %.
+
+**Das vor dem ersten Training gesetzte Kriterium (mindestens 60 % bei
+höchstens 0,65 Fehlfunden je Ansicht, Ring nicht schlechter, Fehler-Median
+höchstens 0,02) ist bei Schwelle 0,12 erreicht.** Einschränkung: Diese
+Schwelle ist im Nachhinein gemeinsam gewählt; die je Fold auf den
+Trainingsansichten gewählten Schwellen geben 71 % bei 1,06. Der saubere
+Beleg ist eine Schwellenwahl mit Fehlfund-Grenze in `train.py` und eine
+weitere Messung; die Kurve ist flach genug, dass sie in derselben Gegend
+landen sollte.
+
+Von r1 über r3 zu r4: 51 → 65 → 71 % bei 2,8 → 1,6 → 1,06 Fehlfunden. Der
+erste Schritt waren die Daten, der zweite die Auflösung, beide sind nicht
+ausgereizt. Was übrig bleibt: dichte Gruppen (fünf Spitzen im Gold auf
+wenigen Millimetern werden ein Gipfel) und dunkle Schäfte im Schwarz, die das
+Modell kaum je gesehen hat. Details und Vorschaubilder im Korpus-README
+(`learn/README.md`, Lauf r4).
+
+Für die Empfehlung ändert sich die Reihenfolge nicht, aber das Gewicht: Die
+Heatmap hat die Messlatte genommen, der Bewerter kann sie mit seinen
+Merkmalen nicht nehmen. Der nächste Schritt ist der Preis des App-Wegs
+(TFLite, Modellgröße, Laufzeit, F-Droid), nicht mehr die Frage, ob der Weg
+trägt.

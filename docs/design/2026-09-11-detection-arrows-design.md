@@ -701,6 +701,12 @@ Mit diesem Dokument geändert:
   Einschüsse auf dem schwarzen Ring unsichtbar sind, zeigt erst eine
   Auszählung wie nach der ersten Messung. Die Schranken schreiben diesen
   Stand fest.
+- **Befund des PoC zur gelernten Pfeilfindung (2026-09-15),** siehe
+  `2026-09-15-learned-selection-findings.md`: Gegen die Wahrheit je Ansicht
+  hat die Suche für 81 % der schrägen Treffer einen Kandidaten, die Auswahl
+  behält 27 %. Ein gelernter Bewerter über den Kandidatenmerkmalen behält
+  56,5 % bei gleicher Fehlfundrate. Der Folgeplan für die Auswahl sollte
+  dort ansetzen; 116 der 315 falschen Kandidaten liegen im Weiß.
 - **Weniger Kandidaten als Pfeile.** Liegen weniger georte Kandidaten vor als
   `expectedShots`, nimmt `CandidateSelection` alle an, gleich welche
   Zuversicht sie tragen -- die Abstandsregel aus Stufe 7 läuft dann gar nicht

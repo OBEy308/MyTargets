@@ -300,3 +300,33 @@ Stellen unter 0,12 liegen, zeigt der Bericht nicht, denn unterhalb der
 Schwelle entsteht kein Kandidat. Die besten Fehlfunde liegen dagegen dicht über der Schwelle (0,125
 bis 0,174), eine niedrigere Schwelle kauft Treffer also mit Fehlfunden. Für
 Schritt 8 heißt das: 0,12 behalten und zuerst den Registrar angehen.
+
+## Nachtrag 2026-09-21: die ersten ungesehenen Fotos
+
+Die Serie vom 17.9.2026 (23 Fotos, zehn Passen auf 25 m, Korpus-Commit
+ac64539) kam nach dem Training von `r4-all-2026-09` in den Korpus. Ihre Fotos
+sind damit die ersten im Korpuslauf, die das Modell nicht gesehen hat. Gemessen
+mit derselben Schwelle 0,12:
+
+| Gruppe | Ansichten | gefunden | Rate | Fehlfunde je Ansicht |
+|---|---|---|---|---|
+| schräg, ungesehen (16 bis 22 Grad) | 8 | 23 / 44 | 52,3 % | 0,25 |
+| schräg, Trainingsfotos | 70 | 264 / 401 | 65,8 % | 0,16 |
+| frontal, ungesehen | 15 | 44 / 82 | 53,7 % | 0,67 |
+| frontal, Trainingsfotos | 38 | 89 / 217 | 41,0 % | 0,29 |
+
+Eine der acht schrägen Ansichten (`leicht-schraeg_07`) registriert nicht; auf
+den sieben registrierten sind es 23 von 38, also 60,5 %. Das liegt nahe an den
+63,3 % der FP-begrenzten Kreuzvalidierung und bestätigt sie im Rahmen dessen,
+was acht Ansichten hergeben. Der klassische Finder kommt auf denselben acht
+Ansichten auf 12 von 44. Auffällig ist die frontale Gruppe: die Rate liegt
+über der der Trainingsfotos, die Fehlfunde aber auch. Sie häufen sich nicht
+in einzelnen Fotos: zehn der 15 Ansichten haben einen oder zwei, quer durch
+helle und dämmrige Aufnahmen.
+Die Serie hat keine stark schräge Ansicht; über 30 Grad sagt sie nichts.
+
+Die Pins in `LearnedArrowCorpusRun` und `ArrowCorpusRun` stehen jetzt auf 78
+Fotos und 445 Treffern. Das Vorwort des gelernten Berichts nennt weiter alle
+Fotos Trainingsfotos; für diese 23 stimmt das nicht mehr, bis ein neues Modell
+sie einschließt.
+

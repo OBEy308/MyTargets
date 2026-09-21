@@ -285,7 +285,16 @@ class LearnedArrowCorpusRun {
          * on new photographs (that is the PoC's cross-validation, 71.3 % at
          * 1.06 FP/view and 63.3 % at 0.64). When the corpus or the model
          * changes the run fails and says so; set them again against a new report.
+         *
+         * Set again on 2026-09-21 (corpus ac64539) with the series of 17.9.,
+         * which the model has NOT seen: its eight oblique views (16 to 22
+         * degrees, 44 hits) are the first held-out photographs in this run.
+         * 23 of 44 matched (52.3 %; 23 of 38 on the seven registered views) at
+         * two false positives, against 264 of 401 (65.8 %) on the training
+         * photographs. The 15 frontal views: 44 of 82 at ten false positives.
+         * So the pins below are an upper bound for 70 photographs and a
+         * measurement for eight.
          */
-        val PINS = ArrowPins(photographs = 70, listed = 401, matched = 264, falsePositives = 11, correctScores = 166, comparableScores = 169, medianErrorBound = 0.006454, p95ErrorBound = 0.017686)
+        val PINS = ArrowPins(photographs = 78, listed = 445, matched = 287, falsePositives = 13, correctScores = 180, comparableScores = 183, medianErrorBound = 0.006337, p95ErrorBound = 0.017624)
     }
 }

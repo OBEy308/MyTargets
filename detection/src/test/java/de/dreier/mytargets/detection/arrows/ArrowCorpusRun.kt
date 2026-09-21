@@ -320,8 +320,13 @@ class ArrowCorpusRun {
          * from several sides, so a weakness that one lucky view hid now shows
          * in the others. Read the rate as the honest one and the old as
          * optimistic, not as a regression of the finder.
+         *
+         * Set again on 2026-09-21 (corpus ac64539): the ten ends of 17.9. add
+         * eight oblique views of 16 to 22 degrees with 44 hits, 12 of them
+         * matched (27.3 %) at three false positives; the older 70 stay at 95
+         * of 401. One of the eight, leicht-schraeg_07, is not registered.
          */
-        val PINS = ArrowPins(photographs = 70, listed = 401, matched = 95, falsePositives = 53, correctScores = 48, comparableScores = 51, medianErrorBound = 0.012174, p95ErrorBound = 0.058149)
+        val PINS = ArrowPins(photographs = 78, listed = 445, matched = 107, falsePositives = 56, correctScores = 54, comparableScores = 57, medianErrorBound = 0.012174, p95ErrorBound = 0.056333)
 
         /** How close a candidate's line passes a hit for the candidate to count as a piece of its shaft. */
         const val SHAFT_LINE_DISTANCE = 0.02

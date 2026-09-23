@@ -262,11 +262,13 @@ Nachtrag.
 - **Schritt 5 (Histogramm):** nicht mehr modulo 90, sondern modulo 180. Die
   beiden Kantenrichtungen werden getrennt gesucht: die stärkere Spitze, dann
   ihr Partner im Fenster 90 ± 20 Grad daneben. Jede wird per Schwerpunkt
-  (±10 Grad) verfeinert, und die Rollung ist ihr Mittel modulo 90. Auf
-  steilen Aufnahmen ist das entzerrte Papier um 5 bis 10 Grad gegen ein
-  Rechteck geschert; ein gemeinsamer Gipfel modulo 90 mittelt dann beide
-  Familien nach ihrem Gewicht, das Mittel der zwei getrennten Richtungen hebt
-  die Scherung in erster Ordnung auf.
+  (±10 Grad) verfeinert, und die Rollung ist ihr nach Spitzenhöhe gewichtetes
+  Mittel modulo 90. Auf steilen Aufnahmen ist das entzerrte Papier um 5 bis
+  10 Grad gegen ein Rechteck geschert; ein gemeinsamer Gipfel modulo 90
+  mittelt dann beide Familien nach ihrem Gewicht, das Mittel der zwei
+  getrennten Richtungen hebt die Scherung in erster Ordnung auf. Weil es nur
+  ein Mittel ist, hebt es sie nur teilweise auf: der geschert getestete Fall
+  liefert 8,72 statt der eingesetzten 8 Grad.
 - **Schritt 7 (Stärke):** die niedrigere der beiden Spitzen durch das Mittel
   des Histogramms. Ohne sichtbaren Partner bleibt sie klein.
 

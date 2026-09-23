@@ -198,6 +198,12 @@ data class CorpusEntry(
      * coordinates: x' = cos * x - sin * y, y' = sin * x + cos * y. The default
      * 0.0 keeps the carried truth as it is.
      *
+     * For a view whose truth was carried from another view, the "sidecar's
+     * frame" above is effectively that other view's own frame, since the
+     * sidecars agree with it. The turn removes only the registration's roll
+     * against this view's sidecar and restores the behaviour from before the
+     * anchor; it does not fix any relative roll between the views' sidecars.
+     *
      * @throws IllegalArgumentException naming the photograph when a tip maps
      *         to infinity, which means the homography is not one of this
      *         photograph.

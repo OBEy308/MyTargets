@@ -38,7 +38,8 @@ import kotlin.math.atan2
  * best rotation from the carried truth to that reading is the view's roll.
  * The truth is the same for every view of an end, so the spread of the rolls
  * over an end's anchored views is what the anchor leaves over. Without the
- * anchor it is the relative roll of the 16.9. measurement, up to 36 degrees.
+ * anchor it is the relative roll of the 16.9. measurement, 39.7 degrees on
+ * the corpus of 2026-09-23 (as the run reports).
  */
 class RollAnchorCorpusRun {
 
@@ -224,7 +225,7 @@ class RollAnchorCorpusRun {
          */
         const val KNOWN_NON_RIGID_END = "2026-09-14_sonne_stark-schraeg_20"
 
-        /** Measured 5.1 degrees on 2026-09-23, rounded up to one decimal plus 0.1. */
+        /** Measured 5.1 (printed to one decimal) plus 0.1. */
         const val KNOWN_NON_RIGID_SPREAD_DEGREES = 5.2
 
         /**

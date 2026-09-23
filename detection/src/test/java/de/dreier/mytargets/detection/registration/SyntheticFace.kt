@@ -78,8 +78,8 @@ object SyntheticFace {
      * roll anchor sees it on real photographs; null leaves the background
      * bare as before. [paperShearDegrees]: the paper's corners sheared by
      * x' = x + tan(shear) y before the turn, as a rectification that is not
-     * quite rigid leaves it; without paper it does nothing. [shafts]: dark lines drawn over the face, from and to
-     * in target coordinates.
+     * quite rigid leaves it; without paper it does nothing. [shafts]: dark
+     * lines drawn over the face, from and to in target coordinates.
      */
     fun photograph(
         width: Int,

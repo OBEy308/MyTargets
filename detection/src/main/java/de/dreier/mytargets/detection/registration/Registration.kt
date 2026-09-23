@@ -60,7 +60,9 @@ class RingFit(
  * What the roll anchor made of the photograph. [measuredDegrees], [strength]
  * and [pixels] are the measurement whether or not it anchored; the
  * registration was turned by [correctionDegrees], which is 0 when [anchored]
- * is false and "up in the image" still pins the rotation.
+ * is false and "up in the image" still pins the rotation. The sign: edges
+ * measured at [correctionDegrees] were turned onto the axes, i.e. target
+ * coordinates are rotated by −correctionDegrees against "up in the image".
  */
 class Roll(
     val anchored: Boolean,

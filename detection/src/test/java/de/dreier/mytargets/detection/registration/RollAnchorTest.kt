@@ -139,8 +139,9 @@ class RollAnchorTest {
 
     @Test
     fun theEdgeOfTheWarpIsNoAnchor() {
-        // Face in the corner of the photograph: most of the ring 1.02..1.6 lies
-        // outside, and the black border of the warp would be a perfect straight line.
+        // Face in the corner of the photograph: most of the ring 1.02..1.3
+        // (RollAnchor.INNER_RADIUS..OUTER_RADIUS) lies outside, and the black
+        // border of the warp would be a perfect straight line.
         val corner = SyntheticFace.view(0.0, 300.0, Vec2(250.0, 250.0))
         val photo = SyntheticFace.photograph(1600, 1200, corner)
         val m = try {

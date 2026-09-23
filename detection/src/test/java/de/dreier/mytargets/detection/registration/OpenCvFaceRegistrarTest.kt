@@ -27,7 +27,6 @@ import org.junit.Test
 import org.opencv.core.CvType
 import org.opencv.core.Mat
 
-
 class OpenCvFaceRegistrarTest {
 
     @get:Rule

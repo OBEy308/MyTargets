@@ -89,15 +89,18 @@ object RollAnchor {
      * visible at all": views without a visible paper edge, e.g. a paper whose
      * sides lie outside the photograph, fall far below it (0.13). At 2.0,
      * 68 of 90 views are anchored; the largest spread of the roll within an
-     * end is 39.7 degrees before the anchor and 5.1 degrees anchored.
+     * end is 39.7 degrees before the anchor and, anchored, 5.1 on the one
+     * known end (see RollAnchorCorpusRun), at most 4.6 elsewhere.
      */
     const val MIN_STRENGTH = 2.0
     const val STAGE = "4-rollanker"
 
     /**
      * A 1-px step, as the resampling leaves it, is a staircase to the 3x3
-     * Sobel: its angles scatter by 15 degrees and lean towards the axes. The
-     * blur makes the step a ramp the Sobel reads to a fraction of a degree.
+     * Sobel: the measured figure is a 12-degree edge read as 8.6 degrees
+     * without the blur (a 3x3 Sobel on an aliased edge leans toward the
+     * axes). The blur makes the step a ramp the Sobel reads to a fraction of
+     * a degree.
      */
     private const val BLUR_SIGMA = 1.5
     private const val BLUR_RADIUS = 4
@@ -153,19 +156,24 @@ object RollAnchor {
 
     /** 255 where the warp saw the photograph, eroded: the warp's border is black and perfectly straight. */
     private fun validPixels(grey: Mat, imageToTarget: Mat3): ByteArray {
+        // ones and kernel are each released in their own finally, so a throw
+        // while allocating the second does not leak the first.
         val ones = Mat(grey.rows(), grey.cols(), CvType.CV_8UC1, Scalar(255.0))
-        val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(3.0, 3.0))
         try {
-            val mask = FaceWarp.warp(ones, imageToTarget, EDGE, EXTENT)
+            val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(3.0, 3.0))
             try {
-                Imgproc.erode(mask, mask, kernel, Point(-1.0, -1.0), ERODE_ITERATIONS)
-                return ByteArray(EDGE * EDGE).also { mask.get(0, 0, it) }
+                val mask = FaceWarp.warp(ones, imageToTarget, EDGE, EXTENT)
+                try {
+                    Imgproc.erode(mask, mask, kernel, Point(-1.0, -1.0), ERODE_ITERATIONS)
+                    return ByteArray(EDGE * EDGE).also { mask.get(0, 0, it) }
+                } finally {
+                    mask.release()
+                }
             } finally {
-                mask.release()
+                kernel.release()
             }
         } finally {
             ones.release()
-            kernel.release()
         }
     }
 

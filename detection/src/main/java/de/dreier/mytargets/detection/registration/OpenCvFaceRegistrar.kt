@@ -22,6 +22,7 @@ import de.dreier.mytargets.detection.geometry.Orientation
 import de.dreier.mytargets.detection.geometry.Rectification
 import de.dreier.mytargets.detection.geometry.Vec2
 import de.dreier.mytargets.detection.show
+import org.opencv.core.CvException
 import org.opencv.core.CvType
 import org.opencv.core.Mat
 import org.opencv.core.Size
@@ -116,7 +117,13 @@ class OpenCvFaceRegistrar : FaceRegistrar {
         val oriented = Orientation.orient(refined.homography, rectified.imagedCentre)
             ?: return failed(DetectionFailure.FACE_NOT_FOUND, "the refined homography cannot be oriented")
 
-        val measurement = RollAnchor.measure(small, oriented, debug)
+        // The anchor never fails the registration (spec decision 4): a native
+        // OpenCV failure during the measurement falls back to no measurement.
+        val measurement = try {
+            RollAnchor.measure(small, oriented, debug)
+        } catch (e: CvException) {
+            null
+        }
         val anchored = measurement != null && measurement.isAnchor
         val turned = if (anchored) Mat3.rotation(-measurement!!.radians) * oriented else oriented
         val roll = Roll(anchored, measurement?.degrees, measurement?.strength, measurement?.pixels ?: 0)

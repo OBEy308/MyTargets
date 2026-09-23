@@ -43,15 +43,15 @@ class RegistrarDebugImagesTest {
     }
 
     @Test
-    fun showsTheFirstThreeStagesInOrderAtTheWorkingSize() {
+    fun showsTheFirstFourStagesInOrderAtTheWorkingSize() {
         val view = SyntheticFace.view(30.0, 800.0, Vec2(1600.0, 1200.0))
 
         val stages = stagesOf(SyntheticFace.photograph(3200, 2400, view))
 
         assertThat(stages.map { it.first }).containsExactly(
-            DebugImages.CLASSES, DebugImages.DISCS, DebugImages.RINGS
+            DebugImages.CLASSES, DebugImages.DISCS, DebugImages.RINGS, RollAnchor.STAGE
         ).inOrder()
-        assertThat(stages.map { it.second }).containsExactly(1600, 1600, 1600)
+        assertThat(stages.map { it.second }).containsExactly(1600, 1600, 1600, RollAnchor.EDGE)
     }
 
     @Test

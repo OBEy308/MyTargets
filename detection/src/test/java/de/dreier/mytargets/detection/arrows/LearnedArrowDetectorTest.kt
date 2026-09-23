@@ -26,6 +26,7 @@ import de.dreier.mytargets.detection.registration.DebugImages
 import de.dreier.mytargets.detection.registration.OpenCvRule
 import de.dreier.mytargets.detection.registration.RegistrationOutcome
 import de.dreier.mytargets.detection.registration.RingTransitions
+import de.dreier.mytargets.detection.registration.RollAnchor
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
@@ -175,9 +176,9 @@ class LearnedArrowDetectorTest {
 
         val size = model.meta.inputSize
         assertThat(shown.map { it.first }).containsExactly(
-            DebugImages.CLASSES, DebugImages.DISCS, DebugImages.RINGS,
+            DebugImages.CLASSES, DebugImages.DISCS, DebugImages.RINGS, RollAnchor.STAGE,
             LearnedDebugImages.HEATMAP, LearnedDebugImages.PEAKS
         ).inOrder()
-        assertThat(shown.drop(3).map { it.second to it.third }).containsExactly(size to size, size to size)
+        assertThat(shown.drop(4).map { it.second to it.third }).containsExactly(size to size, size to size)
     }
 }

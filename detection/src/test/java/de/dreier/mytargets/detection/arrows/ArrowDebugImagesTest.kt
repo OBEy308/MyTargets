@@ -24,6 +24,7 @@ import de.dreier.mytargets.detection.registration.DebugImages
 import de.dreier.mytargets.detection.registration.FaceWarp
 import de.dreier.mytargets.detection.registration.OpenCvRule
 import de.dreier.mytargets.detection.registration.RingTransitions
+import de.dreier.mytargets.detection.registration.RollAnchor
 import org.junit.Rule
 import org.junit.Test
 
@@ -51,9 +52,9 @@ class ArrowDebugImagesTest {
 
         val edge = FaceWarp.edgeFor((analysis as ArrowAnalysis.Analysed).registration.imageToTarget)
         assertThat(shown.map { it.first }).containsExactly(
-            DebugImages.CLASSES, DebugImages.DISCS, DebugImages.RINGS,
+            DebugImages.CLASSES, DebugImages.DISCS, DebugImages.RINGS, RollAnchor.STAGE,
             ArrowDebugImages.CANDIDATES, ArrowDebugImages.ENTRY_POINTS
         ).inOrder()
-        assertThat(shown.drop(3).map { it.second to it.third }).containsExactly(edge to edge, edge to edge)
+        assertThat(shown.drop(4).map { it.second to it.third }).containsExactly(edge to edge, edge to edge)
     }
 }

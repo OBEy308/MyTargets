@@ -429,6 +429,46 @@ Die Konfidenz steuert intern die Auswahl der besten Kandidaten und den Text der
 Snackbar. Sie färbt in v1 nichts ein; eine optische Markierung unsicherer Treffer
 ist nachrüstbar, falls sie im Gebrauch vermisst wird.
 
+*Nachtrag vom 2026-09-23: Foto als Korrekturebene.* Der Satz „keine neue
+Korrektur-UI“ gilt für den Korrekturweg, nicht mehr für die Anzeige. Der
+gelernte Finder trifft auf schrägen Fotos gut die Hälfte bis zwei Drittel der
+Pfeile (52 % auf der ersten ungesehenen Serie, 66 % als Obergrenze auf dem
+Korpus). Nachtragen und Verschieben ist damit der Regelfall, nicht die
+Ausnahme — und in der reinen Trefferansicht lässt sich nur raten, wo der
+fehlende Pfeil steckt. Deshalb zeigt der `TargetView` das Foto der Passe als
+**zuschaltbare Ebene unter den Treffern**:
+
+- Das gespeicherte, unverzerrte Foto wird zur Anzeige mit der Homographie der
+  Erkennung in Auflagenkoordinaten (−1..1) gezogen und über dieselbe
+  `fullMatrix` gezeichnet wie die Auflage, halbtransparent zwischen
+  Auflagenzeichnung und Treffern. Deckkraft per Regler, ein Schalter blendet
+  die Ebene aus. Die Lupe beim Verschieben (`drawZoomedInTarget`) zeigt die
+  Ebene mit, sonst verliert man die Spitze genau dann, wenn man sie braucht.
+- Der Korrekturweg bleibt der bestehende: antippen, ziehen, fehlende Treffer
+  setzen. Keine eigenen Bedienelemente außer Schalter und Deckkraft.
+- **Die Ebene deckt Registrierungsfehler auf.** Die gezeichneten Ringe der
+  Auflage liegen über den Ringen im Foto; sitzt die Homographie daneben, sieht
+  man es sofort. Das ist genau der Einwand der *Fotoablage* gegen ein
+  gespeichertes entzerrtes Bild, hier ins Gegenteil gewendet: entzerrt wird
+  nur zur Anzeige, gegen eine unabhängige Zeichnung.
+- **Die Rollung deckt sie nicht auf.** Treffer und Foto laufen durch dieselbe
+  Homographie; ist sie um die Kamerarollung verdreht, drehen Foto und Punkte
+  gemeinsam mit, und die Ringe sind rotationssymmetrisch. Die Ebene ersetzt den
+  Roll-Anker im Registrar nicht (`2026-09-16-roll-in-the-measurement.md`;
+  im Design des gelernten Finders als eigener Plan geführt), beide gehören zur
+  Integration.
+- **Woher die Homographie später kommt:** Die Korrektur soll nicht am
+  Schießplatz stattfinden, die Ansicht muss also Tage später dieselbe
+  Homographie haben. Sie wird als kleine Datei neben dem Foto abgelegt
+  (`<fileName>.json`: Homographie, Bildgröße, Auflage, Spot-Zuordnung) — ohne
+  Schemaänderung, gelöscht mit dem Foto. Fehlt sie (Galeriefoto vor der
+  Erkennung, ältere Passe), läuft der Registrar auf dem gespeicherten 2048-px-Bild
+  neu; findet er die Auflage nicht, wird die Ebene nicht angeboten.
+- **Offen:** Mehrspot-Auflagen. Der `TargetView` zeichnet die Spots über
+  `spotMatrices` nach dem eigenen Layout der Auflage; das Foto ist ein Bild für
+  alle Spots. Ob es je Spot ausgeschnitten oder einmal über das Gesamtlayout
+  gelegt wird, entscheidet sich mit den ersten annotierten 3-Spot-Fotos.
+
 ### Fotoablage
 
 Das Foto wird als `EndImage(fileName, endId)` gespeichert — dieselbe Ablage,
@@ -663,7 +703,9 @@ entsteht mit der Integration, weil er sie voraussetzt.
    schrägen Fotos festschreiben. Design:
    `docs/design/2026-09-11-detection-arrows-design.md`.
 8. Integration in `InputActivity` und `GalleryActivity` samt Fotoablage,
-   pending scan, Fehlerfällen und Debug-Bildschirm.
+   pending scan, Fehlerfällen, Debug-Bildschirm und Foto als Korrekturebene
+   (*Anwenden und Korrigieren*, Nachtrag vom 2026-09-23). Voraussetzung: der
+   Roll-Anker im Registrar.
 
 ## Offene Risiken
 

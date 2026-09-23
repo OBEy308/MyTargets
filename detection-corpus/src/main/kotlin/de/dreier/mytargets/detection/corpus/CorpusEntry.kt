@@ -16,7 +16,9 @@
 package de.dreier.mytargets.detection.corpus
 
 import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.hypot
+import kotlin.math.sin
 
 /**
  * A score as it is printed on the face: "X", "10" down to "1", "M" for a miss.
@@ -178,8 +180,9 @@ data class CorpusEntry(
      * [TruthShot.tipPixel] gets its position from that tip through
      * [imageToTarget], the row-major 3x3 homography of the run being
      * measured (pixels of the EXIF-turned original to spot-local face
-     * coordinates); shots without a tip keep the carried truth. The face
-     * index is kept, the entry is otherwise unchanged.
+     * coordinates); shots without a tip keep the carried truth, turned by
+     * [rollDegrees] about the face centre. The face index is kept, the entry
+     * is otherwise unchanged.
      *
      * Why: the truth of an end lives in the frame of the steepest view. A
      * registration turned by the camera's roll puts it beside the arrow, and
@@ -187,15 +190,33 @@ data class CorpusEntry(
      * Matching against the view's own tip takes the roll out of the
      * measurement without touching the registrar.
      *
+     * [rollDegrees] is for the shots without a tip. Their carried truth sits
+     * in the sidecar's frame, where "up in the image" is up. The registrar's
+     * roll anchor (2026-09-23) turns its registration against that frame, by
+     * the angle `RegistrationError.betweenUpToRoll(reference, run).rollDegrees`,
+     * so the same arrow lies turned by that angle in the run's face
+     * coordinates: x' = cos * x - sin * y, y' = sin * x + cos * y. The default
+     * 0.0 keeps the carried truth as it is.
+     *
+     * For a view whose truth was carried from another view, the "sidecar's
+     * frame" above is effectively that other view's own frame, since the
+     * sidecars agree with it. The turn removes only the registration's roll
+     * against this view's sidecar and restores the behaviour from before the
+     * anchor; it does not fix any relative roll between the views' sidecars.
+     *
      * @throws IllegalArgumentException naming the photograph when a tip maps
      *         to infinity, which means the homography is not one of this
      *         photograph.
      */
-    fun truthInView(imageToTarget: DoubleArray): CorpusEntry {
+    fun truthInView(imageToTarget: DoubleArray, rollDegrees: Double = 0.0): CorpusEntry {
         require(imageToTarget.size == 9) { "$imageName: a homography has nine values, got ${imageToTarget.size}" }
         val h = imageToTarget
+        val c = cos(Math.toRadians(rollDegrees))
+        val s = sin(Math.toRadians(rollDegrees))
         return copy(shots = shots.map { shot ->
-            val tip = shot.tipPixel ?: return@map shot
+            val tip = shot.tipPixel ?: return@map if (rollDegrees == 0.0) shot else shot.copy(
+                position = shot.position?.let { p -> p.copy(x = c * p.x - s * p.y, y = s * p.x + c * p.y) }
+            )
             val w = h[6] * tip.x + h[7] * tip.y + h[8]
             require(abs(w) > 1e-12) { "$imageName: the tip at (${tip.x}, ${tip.y}) maps to infinity; not this photograph's homography" }
             shot.copy(

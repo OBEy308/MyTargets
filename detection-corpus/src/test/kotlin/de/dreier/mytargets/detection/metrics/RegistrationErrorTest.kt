@@ -38,6 +38,43 @@ class RegistrationErrorTest {
     private fun times(a: List<Double>, b: List<Double>): List<Double> =
         List(9) { i -> (0..2).sumOf { k -> a[i / 3 * 3 + k] * b[k * 3 + i % 3] } }
 
+    private fun rotation(degrees: Double): List<Double> {
+        val a = Math.toRadians(degrees)
+        return listOf(cos(a), -sin(a), 0.0, sin(a), cos(a), 0.0, 0.0, 0.0, 1.0)
+    }
+
+    @Test
+    fun aRotatedPredictionHasNoErrorUpToRollAndReportsTheRoll() {
+        val predicted = times(rotation(10.0), tilted)
+
+        val error = RegistrationError.betweenUpToRoll(tilted, predicted, 2000, 1800)!!
+
+        assertThat(error.max).isLessThan(1e-9)
+        assertThat(error.rollDegrees).isWithin(1e-6).of(10.0)
+    }
+
+    @Test
+    fun thePlainErrorStillSeesTheRoll() {
+        val predicted = times(rotation(10.0), frontal)
+
+        val error = RegistrationError.between(frontal, predicted, 2000, 1800)!!
+
+        // 2 sin(5 deg) at radius 1.0
+        assertThat(error.max).isWithin(1e-6).of(2.0 * sin(Math.toRadians(5.0)))
+        assertThat(error.rollDegrees).isEqualTo(0.0)
+    }
+
+    @Test
+    fun aScaledPredictionKeepsItsErrorUpToRoll() {
+        val scale = listOf(1.01, 0.0, 0.0, 0.0, 1.01, 0.0, 0.0, 0.0, 1.0)
+        val predicted = times(rotation(-20.0), times(scale, frontal))
+
+        val error = RegistrationError.betweenUpToRoll(frontal, predicted, 2000, 1800)!!
+
+        assertThat(error.max).isWithin(1e-6).of(0.01)
+        assertThat(error.rollDegrees).isWithin(1e-6).of(-20.0)
+    }
+
     @Test
     fun identicalHomographiesHaveNoError() {
         val e = RegistrationError.between(tilted, tilted, 2400, 2000)!!

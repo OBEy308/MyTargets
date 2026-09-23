@@ -242,3 +242,120 @@ Nachtrag dieser Spec beziffert:
 
 Der Lagesensor als Vorrangquelle, der Einbau in die App (Schritt 8 des
 Haupt-Designs, samt Anzeige von `Roll`), Mehrspot-Auflagen und neue Fotos.
+
+## Nachtrag 2026-09-23: umgesetzt und gemessen
+
+Branch `plan/roll-anchor`, Korpus `ac64539`. Die Abschnitte oben bleiben,
+wie sie abgestimmt wurden; wo das Verfahren davon abweicht, gilt dieser
+Nachtrag.
+
+### Was vom Verfahren abweicht
+
+- **Schritt 3 (Gradienten):** Vor dem Sobel wird das entzerrte Graubild mit
+  einem Gauß von σ 1,5 geglättet. Ein 3x3-Sobel auf einer treppigen Kante
+  zieht ihre Richtung zu den Achsen hin; Glätten vor der Richtungsmessung
+  ist üblich und ändert das Kriterium nicht. (Seit Task 4, also schon in
+  der ersten gemessenen Fassung.)
+- **Band:** gezählt wird im Kreisring 1,02 ≤ r ≤ 1,3, nicht bis 1,6. Weiter
+  außen überwiegen Strohkante und Rahmen, die nicht zum Papier parallel
+  liegen.
+- **Schritt 5 (Histogramm):** nicht mehr modulo 90, sondern modulo 180. Die
+  beiden Kantenrichtungen werden getrennt gesucht: die stärkere Spitze, dann
+  ihr Partner im Fenster 90 ± 20 Grad daneben. Jede wird per Schwerpunkt
+  (±10 Grad) verfeinert, und die Rollung ist ihr nach Spitzenhöhe gewichtetes
+  Mittel modulo 90. Auf steilen Aufnahmen ist das entzerrte Papier um 5 bis
+  10 Grad gegen ein Rechteck geschert; ein gemeinsamer Gipfel modulo 90
+  mittelt dann beide Familien nach ihrem Gewicht, das Mittel der zwei
+  getrennten Richtungen hebt die Scherung in erster Ordnung auf. Weil es nur
+  ein Mittel ist, hebt es sie nur teilweise auf: der geschert getestete Fall
+  liefert 8,72 statt der eingesetzten 8 Grad.
+- **Schritt 7 (Stärke):** die niedrigere der beiden Spitzen durch das Mittel
+  des Histogramms. Ohne sichtbaren Partner bleibt sie klein.
+
+### Schwelle
+
+`RollAnchor.MIN_STRENGTH` = 2,0. Die Regel der Spec („die niedrigste Stärke,
+bei der keine verankerte Ansicht das Kriterium verletzt“, im Plan mit 10 %
+Zuschlag) hat nicht getragen: Die Stärke trennt richtige von falschen
+Winkeln auf echten Fotos nicht. Die sichere Schwelle läge bei 4,70 und
+verankerte 39 von 90 Ansichten, mit Zuschlag (5,18) 26 von 90. 2,0 heißt
+jetzt nur noch „ein gepaartes Kantenpaar ist sichtbar“; Ansichten ohne ein
+solches (etwa eng beschnittene Frontalfotos vom 15.9., deren senkrechte
+Papierkanten außerhalb des Bildes liegen) fallen weit darunter (0,13).
+
+### Ergebnis am Korpus (`RollAnchorCorpusRun`)
+
+- 90 Ansichten mit geklickten Spitzen in 34 Passen, davon **68 verankert**.
+- Größte Spannweite der Rollung innerhalb einer Passe: **39,7 Grad vorher**,
+  verankert **höchstens 4,6 Grad** für alle Passen außer einer.
+- **Ausnahme, vom Nutzer abgenommen:** die Passe 14.9.
+  `stark-schraeg_20/_21/_22` mit 5,1 Grad (gepinnt bei 5,2). Ursache: Die
+  steilen Registrierungen vom 14.9. sind etwa 7 % von starr entfernt, die
+  verankerten Rollungen dieses Tages liegen in zwei Gruppen um +3,5 und
+  −3 Grad, und auf `_20` trägt die Strohkante, nicht das Papier, den Gipfel.
+  Die nächste Passe unter dem Kriterium (14.9. `stark-schraeg_05/_06/_07`)
+  liegt bei 4,6 Grad; neue steile Fotos können sie brechen.
+- Die erste gemessene Fassung (ein Gipfel modulo 90, Band bis 1,6) kam auf
+  10,9 Grad.
+
+### Haltepunkte und Entscheidungen
+
+Task 7 hielt zweimal am verbindlichen Haltepunkt (keine sichere Schwelle,
+die mindestens die Hälfte der Ansichten verankert):
+
+1. Erste Fassung: 10,9 Grad bei 2,0; sicher wäre 5,15 gewesen, mit Zuschlag
+   40 von 90 verankert. **Entscheidung des Nutzers:** das Verfahren
+   verbessern (beide Richtungen getrennt, Band 1,02 bis 1,3, Stärke = kleinere
+   Spitze).
+2. Verbesserte Fassung: 5,1 Grad bei 2,0 mit 68 von 90, einzig die Passe
+   `_20/_21/_22` über 5 Grad; sicher wäre 4,70 mit 39 von 90. **Entscheidung
+   des Nutzers:** mit einer dokumentierten Ausnahme abschließen, Schwelle 2,0,
+   Kriterium 5 Grad für alle übrigen Passen.
+
+### Messung repariert: übernommene Wahrheit dreht mit
+
+Die Spec erwartete, dass Treffer ohne eigene Spitze sich gegen die verankerte
+Registrierung verschieben. Das trat ein, und zwar kräftig: Der gelernte Lauf
+fiel von 287 auf 271 gefundene Pfeile und stieg von 13 auf 30 Fehlfunde,
+fast ganz in den 13 schrägen Ansichten ohne `tipPx` (6.6., 4.8., 15.8. und
+zehn vom 10.9.), wo aus Treffern eins zu eins Fehlfunde wurden. Der Finder
+selbst war unverändert (auf den 63 Ansichten mit eigenen Spitzen 231 zu 230
+gefunden, Fehlfunde gleich).
+
+**Entscheidung des Nutzers:** erst die Messung reparieren, dann neu pinnen.
+`CorpusEntry.truthInView(imageToTarget, rollDegrees)` dreht die übernommene
+Position der Treffer ohne eigene Spitze um `rollDegrees` um die
+Scheibenmitte. Beide Pfeilläufe übergeben dafür die Drehung, die
+`RegistrationError.betweenUpToRoll` zwischen der Sidecar-Referenz und dem
+Lauf findet (dieselbe Rechnung, aus der die Spalte „Registration error“
+stammt). Treffer mit eigener Spitze bleiben, wie sie waren.
+
+### Verschiebung der Pfeilpins (schräge Gruppe, 78 Fotos, 445 Einschüsse)
+
+| Lauf | master | Anker, alte Messung | Anker, Messung repariert (gepinnt) |
+|---|---|---|---|
+| gelernt: gefunden / Fehlfunde | 287 / 13 | 271 / 30 | **290 / 12** |
+| gelernt: Ringwerte | 180 / 183 | 160 / 163 | 177 / 179 |
+| klassisch: gefunden / Fehlfunde | 107 / 56 | 90 / 76 | **97 / 69** |
+| klassisch: Ringwerte | 54 / 57 | 53 / 54 | 58 / 60 |
+
+- **Gelernt:** zurück auf dem Stand vor dem Anker, eher etwas darüber. Die
+  13 Ansichten ohne eigene Spitzen: 52 gefunden und 2 Fehlfunde vor dem
+  Anker, 38 und 19 mit Anker und alter Messung, 57 und 1 nach der Reparatur.
+- **Klassisch:** echte Änderung des Finders, nicht der Messung. Auf den 63
+  Ansichten mit eigenen Spitzen, wo der Anker die Wahrheit nicht bewegen
+  kann, von 77 auf 64 gefunden und von 45 auf 57 Fehlfunde. Die Auswahl
+  nimmt einen Satz oder nichts und steht auf diesen Fotos auf der Kippe: 8
+  schräge Ansichten kippen von „angenommen“ zu „nichts“ (−20 gefunden),
+  8 andere umgekehrt (+20 gefunden, +10 Fehlfunde). Sie kippt auch, wo der
+  Anker um 0,0 Grad gedreht hat (15.9. `leicht-schraeg_01`: vorher 5
+  angenommen, jetzt 1), weil schon das Neuabtasten des entzerrten Bildes
+  die Punktzahlen verschiebt. Vom Nutzer so angenommen; der klassische
+  Finder ist seit PR #12 durch den gelernten abgelöst.
+
+### Offen
+
+- `RollAnchorCorpusRun` berichtet nur Ansichten mit geklickten Spitzen. Die
+  Ankerwinkel der Ansichten ohne `tipPx` (die 13 oben und die geerbten Fotos)
+  stehen nirgends; ob der Anker dort richtig liegt, lässt sich heute nur
+  mittelbar aus den Pfeilläufen schließen. Nicht gebaut.

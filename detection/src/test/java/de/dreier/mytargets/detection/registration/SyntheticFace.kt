@@ -20,12 +20,14 @@ import de.dreier.mytargets.detection.geometry.Vec2
 import org.opencv.core.Core
 import org.opencv.core.CvType
 import org.opencv.core.Mat
+import org.opencv.core.MatOfPoint
 import org.opencv.core.Point
 import org.opencv.core.Scalar
 import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
 import kotlin.math.cos
 import kotlin.math.sin
+import kotlin.math.tan
 
 /**
  * Photographs of a WAFull face with an exactly known homography, in print-like
@@ -67,23 +69,67 @@ object SyntheticFace {
         )
     }
 
-    /** The face seen through [targetToPhoto] on a [width] x [height] photograph. The caller releases it. */
-    fun photograph(width: Int, height: Int, targetToPhoto: Mat3): Mat {
+    const val PAPER_HALF_SIDE = 1.1
+    val SHAFT = Scalar(25.0, 25.0, 25.0)
+
+    /**
+     * [paperDegrees]: a white square paper of half side [PAPER_HALF_SIDE]
+     * behind the face, turned by that angle in target coordinates, as the
+     * roll anchor sees it on real photographs; null leaves the background
+     * bare as before. [paperShearDegrees]: the paper's corners sheared by
+     * x' = x + tan(shear) y before the turn, as a rectification that is not
+     * quite rigid leaves it; without paper it does nothing. [shafts]: dark
+     * lines drawn over the face, from and to in target coordinates.
+     */
+    fun photograph(
+        width: Int,
+        height: Int,
+        targetToPhoto: Mat3,
+        paperDegrees: Double? = null,
+        paperShearDegrees: Double = 0.0,
+        shafts: List<Pair<Vec2, Vec2>> = emptyList()
+    ): Mat {
         // Computed before any Mat exists, so a singular matrix leaves nothing to release.
         val photoToTarget = requireNotNull(targetToPhoto.inverse()) { "targetToPhoto is singular" }
-        val side = (2.2 * CANONICAL).toInt() + 1
-        val middle = Point(1.1 * CANONICAL, 1.1 * CANONICAL)
+        // Without paper the canvas is the one of before, so old photographs stay pixel for pixel.
+        val extent = if (paperDegrees == null && shafts.isEmpty()) 1.1 else 1.7
+        val side = (2.0 * extent * CANONICAL).toInt() + 1
+        val middle = Point(extent * CANONICAL, extent * CANONICAL)
         val canvasFromTarget = Mat3.of(
-            CANONICAL, 0.0, 1.1 * CANONICAL,
-            0.0, CANONICAL, 1.1 * CANONICAL,
+            CANONICAL, 0.0, extent * CANONICAL,
+            0.0, CANONICAL, extent * CANONICAL,
             0.0, 0.0, 1.0
         )
         val canvas = Mat(side, side, CvType.CV_8UC3, BACKGROUND)
         val map = OpenCvMats.of(canvasFromTarget * photoToTarget)
         val photo = Mat()
         try {
+            if (paperDegrees != null) {
+                val turn = Mat3.rotation(Math.toRadians(paperDegrees))
+                val shear = tan(Math.toRadians(paperShearDegrees))
+                val corners = listOf(-1.0 to -1.0, 1.0 to -1.0, 1.0 to 1.0, -1.0 to 1.0).map { (sx, sy) ->
+                    val x = sx * PAPER_HALF_SIDE
+                    val y = sy * PAPER_HALF_SIDE
+                    val p = requireNotNull((canvasFromTarget * turn).mapPoint(Vec2(x + shear * y, y)))
+                    Point(p.x, p.y)
+                }
+                val polygon = MatOfPoint(*corners.toTypedArray())
+                try {
+                    Imgproc.fillConvexPoly(canvas, polygon, WHITE, Imgproc.LINE_AA)
+                } finally {
+                    polygon.release()
+                }
+            }
             for ((r, colour) in RINGS) {
                 Imgproc.circle(canvas, middle, (r * CANONICAL).toInt(), colour, Imgproc.FILLED, Imgproc.LINE_AA)
+            }
+            for ((from, to) in shafts) {
+                val a = requireNotNull(canvasFromTarget.mapPoint(from))
+                val b = requireNotNull(canvasFromTarget.mapPoint(to))
+                Imgproc.line(
+                    canvas, Point(a.x, a.y), Point(b.x, b.y), SHAFT,
+                    (0.015 * CANONICAL).toInt(), Imgproc.LINE_AA
+                )
             }
             // WARP_INVERSE_MAP: the matrix takes a photograph pixel to the canvas.
             Imgproc.warpPerspective(

@@ -52,23 +52,26 @@ object FaceWarp {
     }
 
     /** Pixel of [target] in a warped image of [edge] px; pixel centres at integers. */
-    fun pixelOf(target: Vec2, edge: Int): Vec2 {
-        val k = edge / (2.0 * EXTENT)
-        return Vec2(k * (target.x + EXTENT) - 0.5, k * (target.y + EXTENT) - 0.5)
+    fun pixelOf(target: Vec2, edge: Int, extent: Double = EXTENT): Vec2 {
+        val k = edge / (2.0 * extent)
+        return Vec2(k * (target.x + extent) - 0.5, k * (target.y + extent) - 0.5)
     }
 
     /** Inverse of [pixelOf]: the target point whose image is pixel [px] of a warped image of [edge] px. */
-    fun targetOf(px: Vec2, edge: Int): Vec2 {
-        val k = edge / (2.0 * EXTENT)
-        return Vec2((px.x + 0.5) / k - EXTENT, (px.y + 0.5) / k - EXTENT)
+    fun targetOf(px: Vec2, edge: Int, extent: Double = EXTENT): Vec2 {
+        val k = edge / (2.0 * extent)
+        return Vec2((px.x + 0.5) / k - extent, (px.y + 0.5) / k - extent)
     }
 
-    /** A new [edge] x [edge] image; the caller releases it. */
-    fun warp(original: Mat, imageToTarget: Mat3, edge: Int = edgeFor(imageToTarget)): Mat {
-        val k = edge / (2.0 * EXTENT)
+    /**
+     * A new [edge] x [edge] image; the caller releases it.
+     * [extent] is the half side of the square in spot radii; [edgeFor] assumes [EXTENT].
+     */
+    fun warp(original: Mat, imageToTarget: Mat3, edge: Int = edgeFor(imageToTarget), extent: Double = EXTENT): Mat {
+        val k = edge / (2.0 * extent)
         val warpedFromTarget = Mat3.of(
-            k, 0.0, k * EXTENT - 0.5,
-            0.0, k, k * EXTENT - 0.5,
+            k, 0.0, k * extent - 0.5,
+            0.0, k, k * extent - 0.5,
             0.0, 0.0, 1.0
         )
         val map = OpenCvMats.of(warpedFromTarget * imageToTarget)

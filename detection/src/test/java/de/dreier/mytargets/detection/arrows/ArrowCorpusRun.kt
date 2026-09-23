@@ -167,7 +167,8 @@ class ArrowCorpusRun {
      * hits `match` already paired with an accepted find; step 2 matches the
      * remaining hits against the located candidates the selection did not
      * accept. Only step 2 involves a fresh `ShotMatching.match` call, and only
-     * over candidates step 1 could not have claimed.
+     * over candidates step 1 could not have claimed. Up to the roll: the
+     * registrar anchors it, the sidecar reference assumes up in the image.
      */
     private fun analysed(
         entry: CorpusEntry,
@@ -184,8 +185,14 @@ class ArrowCorpusRun {
         // own is matched where THIS run's homography puts that tip, not where
         // the truth of the end (measured in the steepest view) lands after a
         // registration turned by the camera's roll. See
-        // docs/design/2026-09-16-roll-in-the-measurement.md.
-        val entry = entry.truthInView(CorpusPhotos.values(analysis.registration.imageToTarget).toDoubleArray())
+        // docs/design/2026-09-16-roll-in-the-measurement.md. A hit without a
+        // tip keeps the carried truth, turned by the roll between the sidecar
+        // reference and this run (the registrar anchors the roll since
+        // 2026-09-23, the sidecar assumes up in the image).
+        val runValues = CorpusPhotos.values(analysis.registration.imageToTarget)
+        val reference = entry.registration?.imageToTarget
+        val upToRoll = reference?.let { RegistrationError.betweenUpToRoll(it, runValues, width, height) }
+        val entry = entry.truthInView(runValues.toDoubleArray(), rollDegrees = upToRoll?.rollDegrees ?: 0.0)
         val match = ShotMatching.match(entry, detected)
         val outcome = EntryOutcome(entry, match, detected)
 
@@ -237,7 +244,6 @@ class ArrowCorpusRun {
         val falseOnShafts = falseCandidates.count { c -> listedEntries.any { onShaftOf(c, it) } }
 
         val foot = analysis.footPoint
-        val reference = entry.registration?.imageToTarget
         val referenceFoot = reference?.let { FootPoint.of(Mat3.of(*it.toDoubleArray()), request.intrinsics) }
         val common = CommonPoint.of(
             matchedCandidates.filter { it.refinement != TipRefinement.NO_SHAFT }.map { it.line }
@@ -249,9 +255,7 @@ class ArrowCorpusRun {
             outcome = ArrowRow.REGISTERED,
             detail = null,
             footPointFromCentre = foot?.length,
-            registrationError = reference?.let {
-                RegistrationError.between(it, CorpusPhotos.values(analysis.registration.imageToTarget), width, height)?.max
-            },
+            registrationError = upToRoll?.max,
             footPointShift = if (foot != null && referenceFoot != null) foot.distanceTo(referenceFoot) else null,
             largestLineOffset = matchedCandidates.maxOfOrNull { abs(it.offsetFromFoot) },
             commonPointFromFoot = if (foot != null && common != null) common.distanceTo(foot) else null,
@@ -325,8 +329,28 @@ class ArrowCorpusRun {
          * eight oblique views of 16 to 22 degrees with 44 hits, 12 of them
          * matched (27.3 %) at three false positives; the older 70 stay at 95
          * of 401. One of the eight, leicht-schraeg_07, is not registered.
+         *
+         * Re-pinned 2026-09-23 after the roll anchor: 97 matched and 69 false
+         * positives (before 107 and 56), ring values 58 of 60 (before 54 of
+         * 57). The corpus is unchanged. Two things moved. First the metric:
+         * hits without a clicked tip of their own now keep the carried truth
+         * turned by the roll between the sidecar reference and this run
+         * (`truthInView(..., rollDegrees)`); without that repair the run
+         * stood at 90 and 76. Second the finder's selection, which accepts a
+         * set or nothing and sits on a knife edge on these photographs: the
+         * anchor resamples the rectified face, and 8 oblique views went from
+         * accepting to accepting nothing (-20 matched), while 8 others went
+         * the other way (+20 matched, +10 false positives). It flips even
+         * where the anchor turned by 0.0 degrees (15.9. leicht-schraeg_01,
+         * five accepted before, one now) or by 2.2 (14.9. stark-schraeg_01,
+         * three matched before, none now). On the 63 views with their own
+         * tips, where the anchor cannot move the truth, the finder went from
+         * 77 to 64 matched. That is a real change of the classical finder,
+         * not of the measurement; the learned finder shipped since PR #12
+         * does not show it. See the addendum of
+         * docs/design/2026-09-23-registration-roll-anchor-design.md.
          */
-        val PINS = ArrowPins(photographs = 78, listed = 445, matched = 107, falsePositives = 56, correctScores = 54, comparableScores = 57, medianErrorBound = 0.012174, p95ErrorBound = 0.056333)
+        val PINS = ArrowPins(photographs = 78, listed = 445, matched = 97, falsePositives = 69, correctScores = 58, comparableScores = 60, medianErrorBound = 0.010976, p95ErrorBound = 0.059124)
 
         /** How close a candidate's line passes a hit for the candidate to count as a piece of its shaft. */
         const val SHAFT_LINE_DISTANCE = 0.02

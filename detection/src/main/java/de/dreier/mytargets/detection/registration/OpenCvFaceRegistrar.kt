@@ -22,6 +22,7 @@ import de.dreier.mytargets.detection.geometry.Orientation
 import de.dreier.mytargets.detection.geometry.Rectification
 import de.dreier.mytargets.detection.geometry.Vec2
 import de.dreier.mytargets.detection.show
+import org.opencv.core.CvException
 import org.opencv.core.CvType
 import org.opencv.core.Mat
 import org.opencv.core.Size
@@ -31,8 +32,8 @@ import java.util.Locale
 /**
  * Stages 1 and 2 of the Haupt-Spec with the method of register.py: shrink to
  * the working size, classify the colours, find and count the yellow discs,
- * find the rings, rectify from two of them, refine over all, orient, and map
- * back to pixels of the original.
+ * find the rings, rectify from two of them, refine over all, orient, anchor
+ * the roll, and map back to pixels of the original.
  */
 class OpenCvFaceRegistrar : FaceRegistrar {
 
@@ -116,11 +117,22 @@ class OpenCvFaceRegistrar : FaceRegistrar {
         val oriented = Orientation.orient(refined.homography, rectified.imagedCentre)
             ?: return failed(DetectionFailure.FACE_NOT_FOUND, "the refined homography cannot be oriented")
 
+        // The anchor never fails the registration (spec decision 4): a native
+        // OpenCV failure during the measurement falls back to no measurement.
+        val measurement = try {
+            RollAnchor.measure(small, oriented, debug)
+        } catch (e: CvException) {
+            null
+        }
+        val anchored = measurement != null && measurement.isAnchor
+        val turned = if (anchored) Mat3.rotation(-measurement!!.radians) * oriented else oriented
+        val roll = Roll(anchored, measurement?.degrees, measurement?.strength, measurement?.pixels ?: 0)
+
         // Back to the original: H_orig = H_small * S; conics follow the point
         // mapping small -> original, which is S^-1.
         val s = scale.smallFromOriginal
         val originalFromSmall = requireNotNull(s.inverse()) { "the working scale is singular" }
-        val imageToTarget = normalised(oriented * s)
+        val imageToTarget = normalised(turned * s)
         val imagedCentre = imageToTarget.inverse()?.mapPoint(Vec2(0.0, 0.0))
             ?: return failed(DetectionFailure.FACE_NOT_FOUND, "the face centre maps to infinity")
         val fits = refined.rings.map { ring ->
@@ -129,10 +141,10 @@ class OpenCvFaceRegistrar : FaceRegistrar {
                 radius = ring.radius,
                 conic = attempt.fit!!.conic.transformedBy(originalFromSmall),
                 points = ring.points.size,
-                radialRms = HomographyRefinement.radialRms(oriented, ring)
+                radialRms = HomographyRefinement.radialRms(turned, ring)
             )
         }
-        return RegistrationOutcome.Registered(imageToTarget, imagedCentre, fits)
+        return RegistrationOutcome.Registered(imageToTarget, imagedCentre, fits, roll)
     }
 
     private class Start(val result: Rectification.Result?, val rejections: List<String>)

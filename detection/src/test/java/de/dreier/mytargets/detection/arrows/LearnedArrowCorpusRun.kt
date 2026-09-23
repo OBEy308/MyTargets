@@ -193,7 +193,9 @@ class LearnedArrowCorpusRun {
      * Like the classical run's diagnosis: step 1 pairs the metrics made with
      * accepted finds; step 2 matches the remaining hits against the peaks the
      * finder had but did not accept (dropped by the count, by the spot cap);
-     * step 3 counts the rest as false. A peak outside the face is neither.
+     * step 3 counts the rest as false. A peak outside the face is neither. Up
+     * to the roll: the registrar anchors it, the sidecar reference assumes up
+     * in the image.
      */
     private fun analysed(
         entry: CorpusEntry,
@@ -206,7 +208,12 @@ class LearnedArrowCorpusRun {
     ): Measured {
         val accepted = analysis.accepted
         val detected = accepted.map { ArrowCorpusRuns.record(it.candidate) }
-        val entry = entry.truthInView(CorpusPhotos.values(analysis.registration.imageToTarget).toDoubleArray())
+        // A hit without a tip keeps the carried truth, turned by the roll
+        // between the sidecar reference and this run (see ArrowCorpusRun).
+        val runValues = CorpusPhotos.values(analysis.registration.imageToTarget)
+        val reference = entry.registration?.imageToTarget
+        val upToRoll = reference?.let { RegistrationError.betweenUpToRoll(it, runValues, width, height) }
+        val entry = entry.truthInView(runValues.toDoubleArray(), rollDegrees = upToRoll?.rollDegrees ?: 0.0)
         val match = ShotMatching.match(entry, detected)
         val outcome = EntryOutcome(entry, match, detected)
 
@@ -244,7 +251,6 @@ class LearnedArrowCorpusRun {
         // Step 3.
         val falseFinds = match.unmatchedDetected.map { accepted[it] } +
             remainingMatch.unmatchedDetected.map { notAccepted[it] }
-        val reference = entry.registration?.imageToTarget
         val row = ArrowRow(
             imageName = entry.imageName,
             group = group,
@@ -252,9 +258,7 @@ class LearnedArrowCorpusRun {
             outcome = ArrowRow.REGISTERED,
             detail = null,
             footPointFromCentre = null,
-            registrationError = reference?.let {
-                RegistrationError.between(it, CorpusPhotos.values(analysis.registration.imageToTarget), width, height)?.max
-            },
+            registrationError = upToRoll?.max,
             footPointShift = null,
             largestLineOffset = null,
             commonPointFromFoot = null,
@@ -294,7 +298,19 @@ class LearnedArrowCorpusRun {
          * photographs. The 15 frontal views: 44 of 82 at ten false positives.
          * So the pins below are an upper bound for 70 photographs and a
          * measurement for eight.
+         *
+         * Re-pinned 2026-09-23 after the roll anchor: 290 matched and 12
+         * false positives (before 287 and 13), ring values 177 of 179 (before
+         * 180 of 183). The corpus and the model are unchanged. On the 63
+         * oblique views with their own tips the finder is as before (231 to
+         * 230 matched, 11 false positives either way). The anchor first cost
+         * 271 and 30 through the metric alone: 13 oblique views (6.6., 4.8.,
+         * 15.8. and ten of 10.9.) carry no tips, and their truth, in the sidecar's frame, lay
+         * beside arrows that the turned registration placed correctly. Since
+         * `truthInView(..., rollDegrees)` turns that truth by the roll between
+         * the sidecar reference and this run, those views come to 57 matched
+         * and 1 false positive (before the anchor 52 and 2).
          */
-        val PINS = ArrowPins(photographs = 78, listed = 445, matched = 287, falsePositives = 13, correctScores = 180, comparableScores = 183, medianErrorBound = 0.006337, p95ErrorBound = 0.017624)
+        val PINS = ArrowPins(photographs = 78, listed = 445, matched = 290, falsePositives = 12, correctScores = 177, comparableScores = 179, medianErrorBound = 0.006400, p95ErrorBound = 0.016998)
     }
 }

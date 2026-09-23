@@ -56,16 +56,41 @@ class RingFit(
     val radialRms: Double
 )
 
+/**
+ * What the roll anchor made of the photograph. [measuredDegrees], [strength]
+ * and [pixels] are the measurement whether or not it anchored; the
+ * registration was turned by [correctionDegrees], which is 0 when [anchored]
+ * is false and "up in the image" still pins the rotation. The sign: edges
+ * measured at [correctionDegrees] were turned onto the axes, i.e. target
+ * coordinates are rotated by −correctionDegrees against "up in the image".
+ */
+class Roll(
+    val anchored: Boolean,
+    val measuredDegrees: Double?,
+    val strength: Double?,
+    val pixels: Int
+) {
+    val correctionDegrees: Double
+        get() = if (anchored) measuredDegrees ?: 0.0 else 0.0
+
+    companion object {
+        val NOT_MEASURED = Roll(anchored = false, measuredDegrees = null, strength = null, pixels = 0)
+    }
+}
+
 sealed interface RegistrationOutcome {
     /**
      * [imageToTarget] maps pixels of the original to spot-local target
      * coordinates, the convention of registration.imageToTarget in the
      * sidecars; [imagedCentre] is the face centre in the same pixels.
+     * [roll] says whether the rotation about the centre comes from the roll
+     * anchor or from "up in the image".
      */
     class Registered(
         val imageToTarget: Mat3,
         val imagedCentre: Vec2,
-        val rings: List<RingFit>
+        val rings: List<RingFit>,
+        val roll: Roll = Roll.NOT_MEASURED
     ) : RegistrationOutcome
 
     /** [detail] is for reports and debug images, never for the user. */

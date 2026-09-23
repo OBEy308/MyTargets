@@ -113,4 +113,36 @@ class OpenCvFaceRegistrarTest {
         assertThat(RobustConic.sampsonDistance(ring.conic, Vec2(1600.0 + 0.4 * 800.0, 1200.0)))
             .isLessThan(1.0)
     }
+
+    private fun registeredWithPaper(paperDegrees: Double): Pair<Mat3, RegistrationOutcome.Registered> {
+        val view = SyntheticFace.view(30.0, 300.0, Vec2(800.0, 600.0))
+        val outcome = register(SyntheticFace.photograph(1600, 1200, view, paperDegrees = paperDegrees))
+        assertThat(outcome).isInstanceOf(RegistrationOutcome.Registered::class.java)
+        return view to (outcome as RegistrationOutcome.Registered)
+    }
+
+    @Test
+    fun thePaperAnchorsTheRoll() {
+        val (view, registered) = registeredWithPaper(20.0)
+
+        assertThat(registered.roll.anchored).isTrue()
+        assertThat(registered.roll.correctionDegrees).isWithin(1.0).of(20.0)
+        // The paper's frame: the true map turned back by the paper's angle.
+        val paperFrame = Mat3.rotation(Math.toRadians(-20.0)) * view.inverse()!!
+        val error = RegistrationError.betweenUpToRoll(
+            SyntheticFace.values(paperFrame), SyntheticFace.values(registered.imageToTarget), 1600, 1200
+        )!!
+        assertThat(error.rollDegrees).isWithin(1.0).of(0.0)
+        assertThat(error.max).isAtMost(0.005)
+    }
+
+    @Test
+    fun withoutPaperTheRegistrationIsTheOldOne() {
+        val registered = register(
+            SyntheticFace.photograph(1600, 1200, SyntheticFace.view(30.0, 400.0, Vec2(800.0, 600.0)))
+        ) as RegistrationOutcome.Registered
+
+        assertThat(registered.roll.anchored).isFalse()
+        assertThat(registered.roll.correctionDegrees).isEqualTo(0.0)
+    }
 }

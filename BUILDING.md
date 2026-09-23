@@ -149,6 +149,14 @@ The model was trained on the corpus photographs, so this report is an upper
 bound and a regression guard; the report's preface says so and names the
 cross-validation numbers that estimate the quality on new photographs.
 
+The roll run measures whether the views of one end have the same rotation
+after the roll anchor; it writes `detection/build/reports/detection/roll.md`
+and debug images under `roll/`:
+
+```
+./gradlew :detection:testDevDebugUnitTest --tests '*RollAnchorCorpusRun' --rerun
+```
+
 ## Build
 
 ```

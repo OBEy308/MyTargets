@@ -193,7 +193,9 @@ class LearnedArrowCorpusRun {
      * Like the classical run's diagnosis: step 1 pairs the metrics made with
      * accepted finds; step 2 matches the remaining hits against the peaks the
      * finder had but did not accept (dropped by the count, by the spot cap);
-     * step 3 counts the rest as false. A peak outside the face is neither.
+     * step 3 counts the rest as false. A peak outside the face is neither. Up
+     * to the roll: the registrar anchors it, the sidecar reference assumes up
+     * in the image.
      */
     private fun analysed(
         entry: CorpusEntry,
@@ -253,7 +255,7 @@ class LearnedArrowCorpusRun {
             detail = null,
             footPointFromCentre = null,
             registrationError = reference?.let {
-                RegistrationError.between(it, CorpusPhotos.values(analysis.registration.imageToTarget), width, height)?.max
+                RegistrationError.betweenUpToRoll(it, CorpusPhotos.values(analysis.registration.imageToTarget), width, height)?.max
             },
             footPointShift = null,
             largestLineOffset = null,

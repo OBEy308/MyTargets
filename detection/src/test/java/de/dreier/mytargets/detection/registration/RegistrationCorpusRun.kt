@@ -131,8 +131,9 @@ class RegistrationCorpusRun {
             detail = null,
             ringsUsed = outcome.rings.map { it.radius },
             worstRingRms = outcome.rings.maxOfOrNull { it.radialRms },
+            // Up to the roll: the registrar anchors it, the sidecar reference assumes up in the image.
             error = reference?.let {
-                RegistrationError.between(it, CorpusPhotos.values(outcome.imageToTarget), width, height)
+                RegistrationError.betweenUpToRoll(it, CorpusPhotos.values(outcome.imageToTarget), width, height)
             }
         )
         is RegistrationOutcome.Failed -> RegistrationRow(

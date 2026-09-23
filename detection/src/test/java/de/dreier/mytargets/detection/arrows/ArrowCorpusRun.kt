@@ -167,7 +167,8 @@ class ArrowCorpusRun {
      * hits `match` already paired with an accepted find; step 2 matches the
      * remaining hits against the located candidates the selection did not
      * accept. Only step 2 involves a fresh `ShotMatching.match` call, and only
-     * over candidates step 1 could not have claimed.
+     * over candidates step 1 could not have claimed. Up to the roll: the
+     * registrar anchors it, the sidecar reference assumes up in the image.
      */
     private fun analysed(
         entry: CorpusEntry,
@@ -250,7 +251,7 @@ class ArrowCorpusRun {
             detail = null,
             footPointFromCentre = foot?.length,
             registrationError = reference?.let {
-                RegistrationError.between(it, CorpusPhotos.values(analysis.registration.imageToTarget), width, height)?.max
+                RegistrationError.betweenUpToRoll(it, CorpusPhotos.values(analysis.registration.imageToTarget), width, height)?.max
             },
             footPointShift = if (foot != null && referenceFoot != null) foot.distanceTo(referenceFoot) else null,
             largestLineOffset = matchedCandidates.maxOfOrNull { abs(it.offsetFromFoot) },

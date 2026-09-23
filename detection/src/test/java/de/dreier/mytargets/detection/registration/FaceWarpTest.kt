@@ -16,10 +16,15 @@
 package de.dreier.mytargets.detection.registration
 
 import com.google.common.truth.Truth.assertThat
+import de.dreier.mytargets.detection.geometry.Mat3
 import de.dreier.mytargets.detection.geometry.Vec2
 import org.junit.Rule
 import org.junit.Test
+import org.opencv.core.CvType
+import org.opencv.core.Mat
+import org.opencv.core.Point
 import org.opencv.core.Scalar
+import org.opencv.imgproc.Imgproc
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -81,6 +86,31 @@ class FaceWarpTest {
         }
         // Pixel 383.5 of 768 is the face centre: k = 768 / 2.2, k * 1.1 - 0.5 = 383.5.
         assertThat(FaceWarp.targetOf(Vec2(383.5, 383.5), edge).length).isLessThan(1e-12)
+    }
+
+    @Test
+    fun aWiderExtentPutsItsCornersAtTheOuterEdges() {
+        assertThat(FaceWarp.pixelOf(Vec2(-1.6, -1.6), 640, 1.6).distanceTo(Vec2(-0.5, -0.5)))
+            .isLessThan(1e-9)
+        assertThat(FaceWarp.pixelOf(Vec2(1.6, 1.6), 640, 1.6).distanceTo(Vec2(639.5, 639.5)))
+            .isLessThan(1e-9)
+        assertThat(FaceWarp.targetOf(Vec2(319.5, 319.5), 640, 1.6).length).isLessThan(1e-9)
+    }
+
+    @Test
+    fun aWiderExtentWarpsTheCentreToTheMiddle() {
+        // 100 px per radius, centre at (500, 400); a white dot at the centre.
+        val imageToTarget = Mat3.of(0.01, 0.0, -5.0, 0.0, 0.01, -4.0, 0.0, 0.0, 1.0)
+        val image = Mat(800, 1000, CvType.CV_8UC1, Scalar(0.0))
+        Imgproc.circle(image, Point(500.0, 400.0), 3, Scalar(255.0), Imgproc.FILLED)
+        val warped = FaceWarp.warp(image, imageToTarget, 320, 1.6)
+        try {
+            assertThat(warped.get(159, 159)[0]).isGreaterThan(200.0)
+            assertThat(warped.get(10, 10)[0]).isEqualTo(0.0)
+        } finally {
+            image.release()
+            warped.release()
+        }
     }
 
     private fun close(bgr: DoubleArray, colour: Scalar) =

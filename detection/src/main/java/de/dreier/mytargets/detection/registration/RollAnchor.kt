@@ -78,7 +78,19 @@ object RollAnchor {
      */
     const val CENTROID_WINDOW_DEGREES = 10.0
     private const val CENTROID_ITERATIONS = 3
-    /** The lower of the two peaks over the mean of the smoothed histogram. Provisional; set from RollAnchorCorpusRun. */
+    /**
+     * The lower of the two peaks over the mean of the smoothed histogram.
+     *
+     * Set from RollAnchorCorpusRun on 2026-09-23 (corpus ac64539, 90 views
+     * with clicked tips, 34 ends). On real photographs the strength does not
+     * separate right angles from wrong ones: the thresholds that would keep
+     * every end within 5 degrees (4.70, and 5.18 with a 10 % margin) anchor
+     * fewer than half of the views. So 2.0 only asks "is a paired edge
+     * visible at all": views without a visible paper edge, e.g. a paper whose
+     * sides lie outside the photograph, fall far below it (0.13). At 2.0,
+     * 68 of 90 views are anchored; the largest spread of the roll within an
+     * end is 39.7 degrees before the anchor and 5.1 degrees anchored.
+     */
     const val MIN_STRENGTH = 2.0
     const val STAGE = "4-rollanker"
 

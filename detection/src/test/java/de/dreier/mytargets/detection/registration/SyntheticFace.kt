@@ -27,6 +27,7 @@ import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
 import kotlin.math.cos
 import kotlin.math.sin
+import kotlin.math.tan
 
 /**
  * Photographs of a WAFull face with an exactly known homography, in print-like
@@ -75,7 +76,9 @@ object SyntheticFace {
      * [paperDegrees]: a white square paper of half side [PAPER_HALF_SIDE]
      * behind the face, turned by that angle in target coordinates, as the
      * roll anchor sees it on real photographs; null leaves the background
-     * bare as before. [shafts]: dark lines drawn over the face, from and to
+     * bare as before. [paperShearDegrees]: the paper's corners sheared by
+     * x' = x + tan(shear) y before the turn, as a rectification that is not
+     * quite rigid leaves it; without paper it does nothing. [shafts]: dark lines drawn over the face, from and to
      * in target coordinates.
      */
     fun photograph(
@@ -83,6 +86,7 @@ object SyntheticFace {
         height: Int,
         targetToPhoto: Mat3,
         paperDegrees: Double? = null,
+        paperShearDegrees: Double = 0.0,
         shafts: List<Pair<Vec2, Vec2>> = emptyList()
     ): Mat {
         // Computed before any Mat exists, so a singular matrix leaves nothing to release.
@@ -102,10 +106,11 @@ object SyntheticFace {
         try {
             if (paperDegrees != null) {
                 val turn = Mat3.rotation(Math.toRadians(paperDegrees))
+                val shear = tan(Math.toRadians(paperShearDegrees))
                 val corners = listOf(-1.0 to -1.0, 1.0 to -1.0, 1.0 to 1.0, -1.0 to 1.0).map { (sx, sy) ->
-                    val p = requireNotNull(
-                        (canvasFromTarget * turn).mapPoint(Vec2(sx * PAPER_HALF_SIDE, sy * PAPER_HALF_SIDE))
-                    )
+                    val x = sx * PAPER_HALF_SIDE
+                    val y = sy * PAPER_HALF_SIDE
+                    val p = requireNotNull((canvasFromTarget * turn).mapPoint(Vec2(x + shear * y, y)))
                     Point(p.x, p.y)
                 }
                 val polygon = MatOfPoint(*corners.toTypedArray())

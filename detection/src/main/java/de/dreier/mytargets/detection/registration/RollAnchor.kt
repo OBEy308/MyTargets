@@ -29,6 +29,7 @@ import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
+import kotlin.math.sin
 
 /**
  * The roll anchor of the roll-anchor design (2026-09-23): the rotation about
@@ -40,18 +41,44 @@ import kotlin.math.hypot
  * roll of the camera. Only edges across the radius count: shafts run from
  * their hit outwards, almost along the radius, and would otherwise vote with
  * their common lean.
+ *
+ * The paper's two edge directions are measured apart and averaged (task 4b,
+ * after the corpus run): on strongly oblique views the rectification is not
+ * quite rigid, the paper comes out sheared by 5 to 10 degrees, and its edges
+ * are no longer perpendicular. Folded onto one axis they made a broad peak
+ * whose top wandered; a shear turns the two edges in opposite senses, so
+ * their mean cancels it to first order. A single straight edge without a
+ * partner near 90 degrees away is weak.
  */
 object RollAnchor {
 
     const val EXTENT = 1.6
     const val EDGE = 640
     const val INNER_RADIUS = 1.02
+    /**
+     * The paper's edge lies at half side ~1.1; across the radius within
+     * [MAX_ANGLE_TO_RADIUS_DEGREES] it is seen up to 1.1 / cos 30 = 1.27. The
+     * straw and the frame, further out and not in the plane, are left out.
+     */
+    const val OUTER_RADIUS = 1.3
     /** Sobel 3x3 after the blur on 8-bit grey; a sharp step of 10 grey levels gives 19. */
     const val MIN_GRADIENT = 19.0
     const val MAX_ANGLE_TO_RADIUS_DEGREES = 30.0
     const val MIN_PIXELS = 300
-    const val BINS = 90
-    /** Peak over mean of the smoothed histogram. Provisional; set from RollAnchorCorpusRun. */
+    /** One bin per degree of gradient direction modulo 180: a gradient and its opposite are one edge. */
+    const val BINS = 180
+    /** The second edge direction is sought this far either side of the first plus 90 degrees. */
+    const val PAIR_WINDOW_DEGREES = 20.0
+    /**
+     * Each peak is refined to the centroid of the unsmoothed bins this far
+     * either side. The gradients along a straight edge sum to its normal
+     * however the pixels stair-step it; the mode of a staircase leans towards
+     * the image axes (1.7 degrees for an edge 4 degrees off the vertical in
+     * the synthetic photographs), its centroid does not.
+     */
+    const val CENTROID_WINDOW_DEGREES = 10.0
+    private const val CENTROID_ITERATIONS = 3
+    /** The lower of the two peaks over the mean of the smoothed histogram. Provisional; set from RollAnchorCorpusRun. */
     const val MIN_STRENGTH = 2.0
     const val STAGE = "4-rollanker"
 
@@ -69,12 +96,16 @@ object RollAnchor {
     /**
      * [radians] in (-pi/4, pi/4]: the edges lie at this angle in target
      * coordinates, and `Mat3.rotation(-radians)` turns them onto the axes.
+     * [edgeDegrees]: the two gradient peaks in [0, 180), first the higher.
+     * [orthogonality]: their distance minus 90 degrees, a diagnosis only.
      */
     class Measurement(
         val radians: Double,
         val strength: Double,
         val pixels: Int,
-        val histogram: DoubleArray
+        val histogram: DoubleArray,
+        val edgeDegrees: Pair<Double, Double>,
+        val orthogonality: Double
     ) {
         val degrees: Double
             get() = Math.toDegrees(radians)
@@ -154,17 +185,17 @@ object RollAnchor {
                 if (mask[i].toInt() and 0xFF != 255) continue
                 val t = FaceWarp.targetOf(Vec2(col.toDouble(), row.toDouble()), EDGE, EXTENT)
                 val r = t.length
-                if (r < INNER_RADIUS || r > EXTENT) continue
+                if (r < INNER_RADIUS || r > OUTER_RADIUS) continue
                 val x = gx[i].toDouble()
                 val y = gy[i].toDouble()
                 val magnitude = hypot(x, y)
                 if (magnitude < MIN_GRADIENT) continue
                 // The gradient of an edge across the radius points along the radius.
                 if (abs(x * t.x + y * t.y) < across * magnitude * r) continue
-                // A gradient and its edge differ by 90 degrees, which the fold removes.
-                var folded = Math.toDegrees(atan2(y, x)) % 90.0
-                if (folded < 0.0) folded += 90.0
-                bins[minOf(BINS - 1, (folded * BINS / 90.0).toInt())] += magnitude
+                // A gradient and its opposite are the same edge.
+                var folded = Math.toDegrees(atan2(y, x)) % 180.0
+                if (folded < 0.0) folded += 180.0
+                bins[minOf(BINS - 1, (folded * BINS / 180.0).toInt())] += magnitude
                 counted[i] = true
                 pixels++
             }
@@ -173,24 +204,62 @@ object RollAnchor {
         return peakOf(bins, pixels)
     }
 
-    /** The smoothed, cyclic histogram's peak, refined by a parabola through its neighbours. */
+    /**
+     * The two edge directions of the smoothed, cyclic histogram: its highest
+     * peak, and the highest within [PAIR_WINDOW_DEGREES] of that plus 90
+     * degrees, each refined to the centroid around it. The axis is
+     * their mean modulo 90, weighted by their heights; the strength is the
+     * lower peak over the mean.
+     */
     internal fun peakOf(bins: DoubleArray, pixels: Int): Measurement {
         val half = SMOOTHING.size / 2
         val weight = SMOOTHING.sum()
         val smooth = DoubleArray(BINS) { k ->
             (-half..half).sumOf { d -> SMOOTHING[d + half] * bins[Math.floorMod(k + d, BINS)] } / weight
         }
-        val k = smooth.indices.maxBy { smooth[it] }
-        val left = smooth[Math.floorMod(k - 1, BINS)]
-        val centre = smooth[k]
-        val right = smooth[Math.floorMod(k + 1, BINS)]
-        val curvature = left - 2.0 * centre + right
-        val offset = if (curvature < 0.0) 0.5 * (left - right) / curvature else 0.0
-        var degrees = ((k + 0.5 + offset) * 90.0 / BINS) % 90.0
-        if (degrees < 0.0) degrees += 90.0
-        if (degrees > 45.0) degrees -= 90.0
+        val first = smooth.indices.maxBy { smooth[it] }
+        val a = centroid(bins, degreesOf(first + 0.5))
+        val partner = a + 90.0
+        val second = smooth.indices
+            .filter { abs(cyclic(degreesOf(it + 0.5) - partner)) <= PAIR_WINDOW_DEGREES }
+            .maxBy { smooth[it] }
+        val b = centroid(bins, degreesOf(second + 0.5))
+        val weightA = smooth[first]
+        val weightB = smooth[second]
+        // Modulo 90 as angles on a circle: four times the angle modulo 360.
+        val sin4 = weightA * sin(Math.toRadians(4.0 * a)) + weightB * sin(Math.toRadians(4.0 * b))
+        val cos4 = weightA * cos(Math.toRadians(4.0 * a)) + weightB * cos(Math.toRadians(4.0 * b))
+        var degrees = Math.toDegrees(atan2(sin4, cos4)) / 4.0
+        if (degrees <= -45.0) degrees += 90.0
         val mean = smooth.average()
-        val strength = if (mean > 0.0) centre / mean else 0.0
-        return Measurement(Math.toRadians(degrees), strength, pixels, smooth)
+        val strength = if (mean > 0.0) minOf(weightA, weightB) / mean else 0.0
+        val orthogonality = cyclic(b - a - 90.0)
+        return Measurement(Math.toRadians(degrees), strength, pixels, smooth, a to b, orthogonality)
+    }
+
+    /** The weighted centroid of [bins] within [CENTROID_WINDOW_DEGREES] of [start], re-centred; in [0, 180). */
+    private fun centroid(bins: DoubleArray, start: Double): Double {
+        var centre = start
+        repeat(CENTROID_ITERATIONS) {
+            var sum = 0.0
+            var weight = 0.0
+            for (k in bins.indices) {
+                val d = cyclic(degreesOf(k + 0.5) - centre)
+                if (abs(d) > CENTROID_WINDOW_DEGREES) continue
+                sum += bins[k] * d
+                weight += bins[k]
+            }
+            if (weight > 0.0) centre += sum / weight
+        }
+        return ((centre % 180.0) + 180.0) % 180.0
+    }
+
+    private fun degreesOf(bin: Double): Double = bin * 180.0 / BINS
+
+    /** [degrees] onto (-90, 90], the cycle of the histogram. */
+    private fun cyclic(degrees: Double): Double {
+        var d = ((degrees % 180.0) + 180.0) % 180.0
+        if (d > 90.0) d -= 180.0
+        return d
     }
 }

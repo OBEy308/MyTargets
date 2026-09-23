@@ -23,12 +23,17 @@ import org.opencv.imgproc.Imgproc
 import kotlin.math.cos
 import kotlin.math.sin
 
-/** Stage [RollAnchor.STAGE]: the warped surroundings, the counted pixels, the found axes, the histogram. */
+/**
+ * Stage [RollAnchor.STAGE]: the warped surroundings, the counted pixels
+ * between the two circles, the two edge directions in red, the averaged axis
+ * and its perpendicular in yellow, the histogram over 180 degrees.
+ */
 internal object RollAnchorImages {
 
     private const val HISTOGRAM_HEIGHT = 120
     private val COUNTED = Scalar(0.0, 200.0, 0.0)
-    private val AXIS = Scalar(0.0, 0.0, 255.0)
+    private val EDGES = Scalar(0.0, 0.0, 255.0)
+    private val AXIS = Scalar(0.0, 255.0, 255.0)
     private val BAR = Scalar(200.0, 200.0, 200.0)
 
     fun render(warped: Mat, counted: BooleanArray, measurement: RollAnchor.Measurement?): Mat {
@@ -45,12 +50,16 @@ internal object RollAnchorImages {
                 top.release()
             }
             val centre = Point(edge / 2.0, edge / 2.0)
-            Imgproc.circle(out, centre, (edge / 2.0 * RollAnchor.INNER_RADIUS / RollAnchor.EXTENT).toInt(), COUNTED, 1)
+            for (radius in listOf(RollAnchor.INNER_RADIUS, RollAnchor.OUTER_RADIUS)) {
+                Imgproc.circle(out, centre, (edge / 2.0 * radius / RollAnchor.EXTENT).toInt(), COUNTED, 1)
+            }
             if (measurement != null) {
+                // A gradient peak at g is an edge running along g + 90 degrees.
+                for (g in listOf(measurement.edgeDegrees.first, measurement.edgeDegrees.second)) {
+                    line(out, centre, Math.toRadians(g + 90.0), EDGES, 1)
+                }
                 for (quarter in 0 until 2) {
-                    val a = measurement.radians + quarter * Math.PI / 2.0
-                    val d = Point(cos(a) * edge / 2.0, sin(a) * edge / 2.0)
-                    Imgproc.line(out, Point(centre.x - d.x, centre.y - d.y), Point(centre.x + d.x, centre.y + d.y), AXIS, 2)
+                    line(out, centre, measurement.radians + quarter * Math.PI / 2.0, AXIS, 2)
                 }
                 val peak = measurement.histogram.maxOrNull() ?: 0.0
                 val width = edge.toDouble() / measurement.histogram.size
@@ -65,10 +74,19 @@ internal object RollAnchorImages {
                 }
                 Imgproc.putText(
                     out,
-                    String.format(java.util.Locale.ROOT, "%.1f deg  strength %.2f  %d px", measurement.degrees, measurement.strength, measurement.pixels),
+                    String.format(
+                        java.util.Locale.ROOT, "axis %.1f deg  strength %.2f  %d px  orthogonality %.1f deg",
+                        measurement.degrees, measurement.strength, measurement.pixels, measurement.orthogonality
+                    ),
                     Point(8.0, edge + 20.0), Imgproc.FONT_HERSHEY_SIMPLEX, 0.6, AXIS, 1
                 )
             }
         }
+    }
+
+    private fun line(out: Mat, centre: Point, radians: Double, colour: Scalar, thickness: Int) {
+        val half = RollAnchor.EDGE / 2.0
+        val d = Point(cos(radians) * half, sin(radians) * half)
+        Imgproc.line(out, Point(centre.x - d.x, centre.y - d.y), Point(centre.x + d.x, centre.y + d.y), colour, thickness)
     }
 }

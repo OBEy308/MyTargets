@@ -185,8 +185,14 @@ class ArrowCorpusRun {
         // own is matched where THIS run's homography puts that tip, not where
         // the truth of the end (measured in the steepest view) lands after a
         // registration turned by the camera's roll. See
-        // docs/design/2026-09-16-roll-in-the-measurement.md.
-        val entry = entry.truthInView(CorpusPhotos.values(analysis.registration.imageToTarget).toDoubleArray())
+        // docs/design/2026-09-16-roll-in-the-measurement.md. A hit without a
+        // tip keeps the carried truth, turned by the roll between the sidecar
+        // reference and this run (the registrar anchors the roll since
+        // 2026-09-23, the sidecar assumes up in the image).
+        val runValues = CorpusPhotos.values(analysis.registration.imageToTarget)
+        val reference = entry.registration?.imageToTarget
+        val upToRoll = reference?.let { RegistrationError.betweenUpToRoll(it, runValues, width, height) }
+        val entry = entry.truthInView(runValues.toDoubleArray(), rollDegrees = upToRoll?.rollDegrees ?: 0.0)
         val match = ShotMatching.match(entry, detected)
         val outcome = EntryOutcome(entry, match, detected)
 
@@ -238,7 +244,6 @@ class ArrowCorpusRun {
         val falseOnShafts = falseCandidates.count { c -> listedEntries.any { onShaftOf(c, it) } }
 
         val foot = analysis.footPoint
-        val reference = entry.registration?.imageToTarget
         val referenceFoot = reference?.let { FootPoint.of(Mat3.of(*it.toDoubleArray()), request.intrinsics) }
         val common = CommonPoint.of(
             matchedCandidates.filter { it.refinement != TipRefinement.NO_SHAFT }.map { it.line }
@@ -250,9 +255,7 @@ class ArrowCorpusRun {
             outcome = ArrowRow.REGISTERED,
             detail = null,
             footPointFromCentre = foot?.length,
-            registrationError = reference?.let {
-                RegistrationError.betweenUpToRoll(it, CorpusPhotos.values(analysis.registration.imageToTarget), width, height)?.max
-            },
+            registrationError = upToRoll?.max,
             footPointShift = if (foot != null && referenceFoot != null) foot.distanceTo(referenceFoot) else null,
             largestLineOffset = matchedCandidates.maxOfOrNull { abs(it.offsetFromFoot) },
             commonPointFromFoot = if (foot != null && common != null) common.distanceTo(foot) else null,

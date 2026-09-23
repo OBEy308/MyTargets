@@ -208,7 +208,12 @@ class LearnedArrowCorpusRun {
     ): Measured {
         val accepted = analysis.accepted
         val detected = accepted.map { ArrowCorpusRuns.record(it.candidate) }
-        val entry = entry.truthInView(CorpusPhotos.values(analysis.registration.imageToTarget).toDoubleArray())
+        // A hit without a tip keeps the carried truth, turned by the roll
+        // between the sidecar reference and this run (see ArrowCorpusRun).
+        val runValues = CorpusPhotos.values(analysis.registration.imageToTarget)
+        val reference = entry.registration?.imageToTarget
+        val upToRoll = reference?.let { RegistrationError.betweenUpToRoll(it, runValues, width, height) }
+        val entry = entry.truthInView(runValues.toDoubleArray(), rollDegrees = upToRoll?.rollDegrees ?: 0.0)
         val match = ShotMatching.match(entry, detected)
         val outcome = EntryOutcome(entry, match, detected)
 
@@ -246,7 +251,6 @@ class LearnedArrowCorpusRun {
         // Step 3.
         val falseFinds = match.unmatchedDetected.map { accepted[it] } +
             remainingMatch.unmatchedDetected.map { notAccepted[it] }
-        val reference = entry.registration?.imageToTarget
         val row = ArrowRow(
             imageName = entry.imageName,
             group = group,
@@ -254,9 +258,7 @@ class LearnedArrowCorpusRun {
             outcome = ArrowRow.REGISTERED,
             detail = null,
             footPointFromCentre = null,
-            registrationError = reference?.let {
-                RegistrationError.betweenUpToRoll(it, CorpusPhotos.values(analysis.registration.imageToTarget), width, height)?.max
-            },
+            registrationError = upToRoll?.max,
             footPointShift = null,
             largestLineOffset = null,
             commonPointFromFoot = null,

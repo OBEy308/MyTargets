@@ -70,6 +70,49 @@ class CorpusEntryTest {
     }
 
     @Test
+    fun truthInViewTurnsTheCarriedTruthByTheRollOfTheRegistration() {
+        // A shot without a tip of its own keeps the carried truth, which lives
+        // in the sidecar's frame ("up in the image"). A registration turned
+        // against that frame by the roll anchor sees it turned by the same
+        // angle about the face centre.
+        val without = TruthShot(scoringRing = 3, position = SpotPosition(0, 0.5, 0.0), positionTolerance = 0.02)
+        val e = entry(listOf(without))
+        val identity = doubleArrayOf(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)
+
+        val seen = e.truthInView(identity, rollDegrees = 90.0)
+
+        assertThat(seen.shots[0].position!!.faceIndex).isEqualTo(0)
+        assertThat(seen.shots[0].position!!.x).isWithin(1e-9).of(0.0)
+        assertThat(seen.shots[0].position!!.y).isWithin(1e-9).of(0.5)
+        assertThat(seen.shots[0].copy(position = without.position)).isEqualTo(without)
+    }
+
+    @Test
+    fun truthInViewLeavesAShotWithATipToTheHomographyWhateverTheRoll() {
+        val withTip = TruthShot(
+            scoringRing = 1, position = SpotPosition(0, 0.1, 0.2), tipPixel = ImagePoint(1500.0, 1000.0)
+        )
+        val e = entry(listOf(withTip))
+        val homography = doubleArrayOf(0.001, 0.0, -1.3, 0.0, 0.001, -1.0, 0.0, 0.0, 1.0)
+
+        val turned = e.truthInView(homography, rollDegrees = 37.0)
+
+        assertThat(turned).isEqualTo(e.truthInView(homography))
+        assertThat(turned.shots[0].position!!.x).isWithin(1e-9).of(0.2)
+        assertThat(turned.shots[0].position!!.y).isWithin(1e-9).of(0.0)
+    }
+
+    @Test
+    fun truthInViewWithoutRollKeepsTheCarriedTruth() {
+        val without = TruthShot(scoringRing = 3, position = SpotPosition(0, 0.3, 0.4))
+        val e = entry(listOf(without))
+        val identity = doubleArrayOf(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)
+
+        assertThat(e.truthInView(identity).shots[0]).isEqualTo(without)
+        assertThat(e.truthInView(identity, rollDegrees = 0.0).shots[0]).isEqualTo(without)
+    }
+
+    @Test
     fun truthInViewRefusesATipThatMapsToInfinity() {
         val e = entry(listOf(TruthShot(scoringRing = 1, position = SpotPosition(0, 0.1, 0.2), tipPixel = ImagePoint(1.0, 1.0))))
         // third row makes w = 0 for (1, 1)

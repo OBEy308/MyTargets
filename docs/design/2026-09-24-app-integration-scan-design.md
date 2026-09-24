@@ -25,7 +25,7 @@ Leitsatz: **Bei Unsicherheit lieber nichts eintragen als etwas Falsches.**
 ## Entscheidungen
 
 1. **Sperrender Fortschrittsdialog mit „Abbrechen“.** Während des Scans (erster
-   rund 3,7 s mit Laden, danach rund 2,6 s auf dem S25) lässt sich die Eingabe
+   rund 3,7 s mit Laden, danach rund 2,7 s auf dem S25) lässt sich die Eingabe
    nicht bedienen. Die `endId`-Prüfung schlägt damit im Normalbetrieb nie an;
    sie schützt nach Prozesstod. Ein nicht sperrender Scan hätte einen zweiten
    Zustand „während des Scans bearbeitet“ gebraucht.
@@ -79,6 +79,15 @@ Tippen auf den Menüpunkt immer gesetzt.
    `ScanSupport.supports(d.currentRound.round.target)`.
    - Hat die aktuelle Passe gesetzte Treffer, erst die Rückfrage
      (Entscheidung 2). Ablehnen beendet den Ablauf.
+   - **Kamera-Berechtigung.** Das Manifest deklariert `CAMERA`; ohne
+     Laufzeit-Erlaubnis wirft der Aufnahme-Intent eine `SecurityException`.
+     Deshalb wie `GalleryActivity`: `PermissionUtils.hasCameraPermission`,
+     sonst `requestCameraPermission` und Fortsetzung in
+     `onRequestPermissionsResult` (`REQUEST_CAMERA`, `isPermissionGranted`).
+     Der pending scan wird erst nach erteilter Erlaubnis angelegt, damit
+     ein abgelehnter Dialog nichts hinterlässt. Auf dem S25 hat die Galerie
+     die Erlaubnis längst geholt; der Handtest braucht dafür ein frisch
+     installiertes Gerät oder ein Zurücksetzen der Berechtigung.
    - `PendingScan(endId = d.currentEnd.end.id, null, null)` anlegen, dann
      `EasyImage.openCameraForImage(this, 0)` in
      `try`/`catch (ActivityNotFoundException)` mit `no_camera_app`; im
@@ -96,9 +105,10 @@ Tippen auf den Menüpunkt immer gesetzt.
    bei vorhandenem `data`: Liegt ein pending scan mit `originalPath` vor und
    läuft noch kein Job, startet der Lauf in `lifecycleScope` mit dem
    sperrenden Dialog (Entscheidung 1):
-   1. **Ablegen**, falls `storedImageName == null`: `EndPhotoStore.store`
-      (auf `Dispatchers.IO`), dann `endDAO.insertEndImage(EndImage(name,
-      endId))`, dann `storedImageName` setzen. Ist `endId` die aktuelle
+   1. **Ablegen**, falls `storedImageName == null`: `EndPhotoStore.store`,
+      dann `endDAO.insertEndImage(EndImage(fileName = name, endId = endId))`
+      (der Konstruktor ist `(id, fileName, endId)`), beides auf
+      `Dispatchers.IO`, dann `storedImageName` setzen. Ist `endId` die aktuelle
       Passe, kommt das Bild auch in `d.currentEnd.images` (Menü-Icon
       wechselt). Scheitert das Ablegen oder das Einfügen (Passe gelöscht,
       Fremdschlüssel), wird protokolliert, die abgelegte Datei gelöscht und
@@ -148,16 +158,30 @@ fehl).
 | Ergebnis | Eingetragen? | Snackbar |
 |---|---|---|
 | `COMPLETE` | ja | „6 Pfeile erkannt“ · Rückgängig |
-| `FEWER_THAN_EXPECTED` | ja | „4 von 6 Pfeilen erkannt, Rest bitte setzen“ · Rückgängig |
+| `FEWER_THAN_EXPECTED`, mindestens ein Treffer | ja | „4 von 6 Pfeilen erkannt, Rest bitte setzen“ · Rückgängig |
+| `FEWER_THAN_EXPECTED`, leere Liste (Auflage gefunden, 0 Pfeile) | **nein**, vorhandene Treffer bleiben | „Keine Pfeile erkannt“ · Neu aufnehmen |
 | `AMBIGUOUS_SURPLUS` | ja, nur die sicheren | „4 sicher erkannt, weitere unklar“ · Rückgängig |
-| `SPOT_OVERFLOW` | ja | wie `AMBIGUOUS_SURPLUS`, mit dem Grund (bei WA-Voll praktisch nie) |
-| Auflage gefunden, 0 Pfeile | **nein**, vorhandene Treffer bleiben | „Keine Pfeile erkannt“ · Neu aufnehmen |
+| `SPOT_OVERFLOW` | ja | wie `AMBIGUOUS_SURPLUS`, mit dem Grund |
 | `FACE_NOT_FOUND` | nein | „Auflage nicht gefunden“ · Neu aufnehmen |
 | `FACE_MISMATCH` | nein | „Foto passt nicht zur Auflage <Name>“ |
 | `PhotoUnreadable` | nein | „Foto konnte nicht gelesen werden“ |
 | `ModelUnavailable`, `ScanFailed` | nein | „Erkennung fehlgeschlagen“; Ursache per `Timber.e` |
 | `Unsupported` | nein | kann nicht auftreten (Menüpunkt ausgeblendet); `Timber.w`, keine Meldung |
 | `endId` passt nicht | nein | „Foto an Passe N abgelegt, nicht eingetragen“ |
+
+„Keine Pfeile“ ist kein eigener Grund: Der Detektor liefert dann
+`FEWER_THAN_EXPECTED` mit leerer `shots`-Liste. `ScanApplication` prüft die
+Anzahl vor dem Grund.
+
+**Was der ausgelieferte Detektor tatsächlich liefert.** Der gelernte Finder
+kappt die Peaks vor der Platzierung nach Wert auf `shotsPerEnd`
+(`LearnedArrowDetector`, Design 3d, Entscheidung 4: keine Abstandsregel).
+Auf der WA-Vollauflage mit einem Spot ist `maxArrowsPerSpot = shotsPerEnd`;
+damit können weder `AMBIGUOUS_SURPLUS` noch `SPOT_OVERFLOW` auftreten, nicht
+„praktisch nie“, sondern strukturell nie. Im Betrieb kommen nur `COMPLETE`
+und `FEWER_THAN_EXPECTED` vor. Die beiden anderen Zeilen bleiben als
+Vertrag von `DetectionResult` stehen (klassischer Detektor, Mehrspot) und
+werden auf der JVM getestet, aber nicht von Hand.
 
 „Neu aufnehmen“ startet Schritt 1 ohne Rückfrage, weil nichts eingetragen
 wurde; bei 0 Pfeilen trotz vorhandener Treffer gilt die frühere Zustimmung
@@ -181,7 +205,8 @@ Die Konfidenz färbt nichts ein (Haupt-Design, v1).
   Vertrag aus 8a für 8c. Die Pixelwerte weichen von `imread` ab (Skia gegen
   libjpeg), die Geometrie nicht; 8c skaliert die Homographie nur über das
   Verhältnis der Breiten. Die Größenrechnung (`inSampleSize`, Zielmaße) ist
-  eine reine Funktion.
+  eine reine Funktion; die kurze Kante wird kaufmännisch auf ganze Pixel
+  gerundet (`Math.round`).
 - **`ScanApplication`** (`features/detection`): reine Funktion
   `ScanOutcome × shotsPerEnd × (x, y) -> Ring -> ScanReport`. `ScanReport`
   trägt die einzutragenden Treffer oder `null` (nichts eintragen) und die
@@ -196,7 +221,8 @@ Die Konfidenz färbt nichts ein (Haupt-Design, v1).
 ### Geändert
 
 - `input_end.xml`: `action_scan_end`.
-- `InputActivity`: die vier Aufrufe, Sichtbarkeit in `onPrepareOptionsMenu`.
+- `InputActivity`: die vier Aufrufe, Sichtbarkeit in `onPrepareOptionsMenu`,
+  `onRequestPermissionsResult` für `REQUEST_CAMERA`.
 - `TargetView.replaceWithEnd`: die Wahl wird zur reinen Funktion
   `inputMethodFor(shots, exact, setting)`:
   - keine Treffer gesetzt: `exact` → Plotting, sonst Tastatur (wie bisher);
@@ -204,7 +230,8 @@ Die Konfidenz färbt nichts ein (Haupt-Design, v1).
   - Treffer gesetzt, nicht `exact`: `setting` (wie bisher).
 - Strings auf Englisch und Deutsch; die übrigen Sprachen fallen auf Englisch
   zurück.
-- `app/build.gradle`: `androidTestImplementation` espresso-intents.
+- Keine neue Abhängigkeit: espresso-intents, `androidx.exifinterface`,
+  `lifecycle-runtime-ktx` und Timber stehen schon in `app/build.gradle`.
 
 ## Test
 
@@ -218,8 +245,10 @@ Die Konfidenz färbt nichts ein (Haupt-Design, v1).
     (`inSampleSize` und Zielmaße).
 - **Instrumentiert, S25:**
   - `EndPhotoStore` mit dem Korpusfoto aus 8a
-    (`2026-08-15_bedeckt_frontal_02.jpg`, `exifOrientation` 6): Ergebnis
-    1536 × 2048, kein Orientierungstag.
+    (`2026-08-15_bedeckt_frontal_02.jpg`, roh 4000 × 2252, `exifOrientation`
+    6, gedreht also 2252 × 4000 wie in `EndPhotoScannerDeviceTest`):
+    Ergebnis 1153 × 2048 (2252 · 2048 / 4000 = 1153,02), kein
+    Orientierungstag.
   - `PendingScan` über ein `Bundle` hin und zurück.
   - Ablauftest von `InputActivity` mit espresso-intents: Kamera-Intent
     abfangen, das Testfoto in die `EXTRA_OUTPUT`-URI kopieren, `RESULT_OK`.
@@ -233,6 +262,8 @@ Die Konfidenz färbt nichts ein (Haupt-Design, v1).
   - Abbrechen im Dialog: nichts eingetragen, Foto abgelegt.
   - Rückgängig: vorherige Treffer in View und nach Neustart der Eingabe.
   - Rückfrage bei vorhandenen Treffern, Ablehnen macht kein Foto.
+  - Kamera-Berechtigung zurückgesetzt (App-Info): Erlaubnisdialog, nach
+    Erteilen öffnet die Kamera; nach Ablehnen bleibt kein pending scan.
   - Foto einer Wand: „Auflage nicht gefunden“, Neu aufnehmen.
   - Tastatur-Einstellung: gescannte Passe erscheint als Plot, auch nach
     Verlassen und Wiederkehren.
@@ -250,8 +281,9 @@ Die Konfidenz färbt nichts ein (Haupt-Design, v1).
 ## Offene Risiken
 
 - **Speicher beim Ablegen.** `EndPhotoStore` dekodiert mit `inSampleSize`
-  höchstens eine Bitmap mit gut 4096 px langer Kante (ARGB, rund 50 MB bei
-  4096 × 3072) plus das 2048-px-Ergebnis, auf dem Java-Heap, vor dem Scan
+  höchstens eine Bitmap mit knapp 4096 px langer Kante (ab 4096 greift
+  Faktor 2; ARGB, rund 47 MB bei 4095 × 3071) plus das 2048-px-Ergebnis,
+  auf dem Java-Heap, vor dem Scan
   und nicht gleichzeitig mit dessen BGR-Mat. Für ein 50-MP-Foto (8160 px)
   ist `inSampleSize` 2, also 4080 px.
 - **EasyImage und Prozesstod.** EasyImage merkt sich den Pfad der Aufnahme in

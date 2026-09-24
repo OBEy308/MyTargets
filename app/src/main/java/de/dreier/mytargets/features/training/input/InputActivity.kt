@@ -604,6 +604,9 @@ class InputActivity : ChildActivityBase(), TargetViewBase.OnEndFinishedListener,
     override val messageAnchor: View
         get() = binding.root
 
+    override val messageAnchorAbove: View?
+        get() = binding.butBar
+
     override fun zoneAt(x: Float, y: Float): Int =
         checkNotNull(targetView) { "the target view exists once the data is loaded" }.zoneAt(x, y)
 

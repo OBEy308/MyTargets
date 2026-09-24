@@ -39,6 +39,7 @@ import de.dreier.mytargets.shared.models.db.Shot
 import de.dreier.mytargets.utils.PermissionUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -63,6 +64,9 @@ class EndScanFlow(private val activity: AppCompatActivity, private val host: Hos
         /** Where the snackbars go. */
         val messageAnchor: View
 
+        /** The snackbars sit above this view, so they do not cover it; null for the bottom edge. */
+        val messageAnchorAbove: View?
+
         /** The ring for a position, as when the shot is plotted by hand. */
         fun zoneAt(x: Float, y: Float): Int
 
@@ -74,7 +78,7 @@ class EndScanFlow(private val activity: AppCompatActivity, private val host: Hos
     }
 
     /** One run of store, check, scan, enter; [cancelledByUser] tells "Abbrechen" from the activity going away. */
-    private class Run(val dialog: MaterialDialog) {
+    private class Run(val dialog: MaterialDialog, val originalPath: String) {
         lateinit var job: Job
         var cancelledByUser = false
     }
@@ -193,7 +197,7 @@ class EndScanFlow(private val activity: AppCompatActivity, private val host: Hos
             .negativeText(android.R.string.cancel)
             .onNegative { _, _ -> cancelByUser() }
             .show()
-        val run = Run(dialog)
+        val run = Run(dialog, original.path)
         current = run
         run.job = activity.lifecycleScope.launch { execute(p, original, run) }
     }
@@ -214,6 +218,8 @@ class EndScanFlow(private val activity: AppCompatActivity, private val host: Hos
         val run = current ?: return
         run.cancelledByUser = true
         run.job.cancel()
+        // At once, not in the run's finally: a resume() before that must not start this photo again.
+        if (pending?.originalPath == run.originalPath) pending = null
         // A new scan may start at once; this run cleans up when its current step returns.
         current = null
     }
@@ -231,7 +237,7 @@ class EndScanFlow(private val activity: AppCompatActivity, private val host: Hos
             }
             val d = host.loadedData
             if (d == null || d.currentEnd.end.id != p.endId) {
-                showOtherEnd(d, p.endId)
+                showOtherEnd(d, p.endId, attached = p.storedImageName != null)
                 done = true
                 return
             }
@@ -240,7 +246,7 @@ class EndScanFlow(private val activity: AppCompatActivity, private val host: Hos
             // The end on screen may have changed while the scan ran.
             val now = host.loadedData
             if (now == null || now.currentEnd.end.id != p.endId) {
-                showOtherEnd(now, p.endId)
+                showOtherEnd(now, p.endId, attached = p.storedImageName != null)
                 done = true
                 return
             }
@@ -267,37 +273,49 @@ class EndScanFlow(private val activity: AppCompatActivity, private val host: Hos
      */
     private suspend fun attach(original: File, endId: Long): String? {
         val name = EndPhotoStore.nameFor(original)
-        val images = withContext(Dispatchers.IO) {
-            STORE_LOCK.withLock {
-                val file = File(activity.filesDir, name)
-                try {
-                    if (endDAO.countEndImages(endId, name) == 0) {
-                        try {
-                            EndPhotoStore.store(original, activity.filesDir)
-                            endDAO.insertEndImage(EndImage(fileName = name, endId = endId))
-                        } catch (e: Throwable) {
-                            // Written but not attached (e.g. the end was deleted): nothing refers to it.
-                            file.delete()
-                            throw e
+        // Not cancellable: after a cancel the row is written anyway, and an in-memory end that
+        // does not know it would drop it with the next gallery edit (replaceImages). A cancelled
+        // job throws when this returns, so the scan does not run.
+        val attached = withContext(NonCancellable) {
+            val images = withContext(Dispatchers.IO) {
+                STORE_LOCK.withLock {
+                    val file = File(activity.filesDir, name)
+                    try {
+                        if (endDAO.countEndImages(endId, name) == 0) {
+                            try {
+                                EndPhotoStore.store(original, activity.filesDir)
+                                endDAO.insertEndImage(EndImage(fileName = name, endId = endId))
+                            } catch (e: Throwable) {
+                                // Written but not attached (e.g. the end was deleted): nothing refers to it.
+                                file.delete()
+                                throw e
+                            }
                         }
+                        endDAO.loadEndImages(endId)
+                    } catch (e: Exception) {
+                        Timber.e(e, "Could not attach the scan photo to end $endId")
+                        null
+                    } catch (e: OutOfMemoryError) {
+                        Timber.e(e, "Out of memory attaching the scan photo to end $endId")
+                        null
                     }
-                    endDAO.loadEndImages(endId)
-                } catch (e: Exception) {
-                    Timber.e(e, "Could not attach the scan photo to end $endId")
-                    null
-                } catch (e: OutOfMemoryError) {
-                    Timber.e(e, "Out of memory attaching the scan photo to end $endId")
-                    null
                 }
-            }
-        } ?: return null
-        val d = host.loadedData
-        if (d != null && d.currentEnd.end.id == endId) {
-            // From the database, not appended: the gallery writes this list back as the truth.
-            d.currentEnd.images = images.toMutableList()
-            host.onImagesChanged()
+            } ?: return@withContext false
+            refreshImages(endId, images)
+            true
         }
-        return name
+        return if (attached) name else null
+    }
+
+    /**
+     * Gives the in-memory end [endId], wherever it is in the training, the images from the
+     * database: the gallery writes this list back as the truth.
+     */
+    private fun refreshImages(endId: Long, images: List<EndImage>) {
+        val d = host.loadedData ?: return
+        val end = d.training.rounds.flatMap { it.ends }.firstOrNull { it.end.id == endId } ?: return
+        end.images = images.toMutableList()
+        if (d.currentEnd.end.id == endId) host.onImagesChanged()
     }
 
     private fun enter(shots: List<Shot>, endId: Long) {
@@ -315,17 +333,17 @@ class EndScanFlow(private val activity: AppCompatActivity, private val host: Hos
         host.enterShots(u.shots, u.exact)
     }
 
-    private fun showOtherEnd(data: LoaderResult?, endId: Long) {
+    private fun showOtherEnd(data: LoaderResult?, endId: Long, attached: Boolean) {
         val number = data?.training?.rounds
             ?.flatMap { it.ends }
             ?.firstOrNull { it.end.id == endId }
             ?.end?.index?.plus(1)
         val text = if (number != null) {
-            activity.getString(R.string.scan_other_end, number)
+            activity.getString(if (attached) R.string.scan_other_end else R.string.scan_other_end_not_attached, number)
         } else {
             activity.getString(R.string.scan_end_gone)
         }
-        Snackbar.make(host.messageAnchor, text, Snackbar.LENGTH_LONG).show()
+        snackbar(text).show()
     }
 
     private fun show(message: ScanMessage, targetName: String = "") {
@@ -351,7 +369,7 @@ class EndScanFlow(private val activity: AppCompatActivity, private val host: Hos
                 return
             }
         }
-        val bar = Snackbar.make(host.messageAnchor, text, Snackbar.LENGTH_LONG)
+        val bar = snackbar(text)
         when (action) {
             Action.UNDO -> {
                 bar.setAction(R.string.undo) { undoScan() }
@@ -368,6 +386,10 @@ class EndScanFlow(private val activity: AppCompatActivity, private val host: Hos
         }
         bar.show()
     }
+
+    /** Above the button bar: an action message stays for seconds and must not cover Prev and Next. */
+    private fun snackbar(text: String): Snackbar =
+        Snackbar.make(host.messageAnchor, text, Snackbar.LENGTH_LONG).apply { anchorView = host.messageAnchorAbove }
 
     private companion object {
         const val KEY_PENDING_SCAN = "pending_scan"

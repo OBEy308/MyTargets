@@ -38,6 +38,9 @@ import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.Until
 import com.google.common.truth.Truth.assertThat
 import de.dreier.mytargets.R
 import de.dreier.mytargets.app.ApplicationInstance
@@ -50,6 +53,7 @@ import de.dreier.mytargets.shared.models.db.Shot
 import de.dreier.mytargets.shared.targets.models.WAFull
 import de.dreier.mytargets.shared.views.TargetViewBase
 import de.dreier.mytargets.test.utils.rules.DbTestRuleBase
+import kotlinx.coroutines.sync.Mutex
 import org.junit.After
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -59,6 +63,7 @@ import org.junit.runner.RunWith
 import java.io.File
 import java.io.IOException
 import java.util.Random
+import java.util.regex.Pattern
 
 /**
  * The scan from the end input (app integration 8b) in the real activity, with
@@ -188,6 +193,39 @@ class EndScanFlowTest {
             val end = endDAO.loadEnds(round.id).single { it.id == scanned.id }
             assertThat(end.exact).isFalse()
             assertThat(endDAO.loadEndImages(end.id)).hasSize(1)
+        }
+    }
+
+    @Test
+    fun aCancelDuringAttachKeepsThePhotoInMemory() {
+        cameraDelivers(corpusPhoto())
+        launch().use { scenario ->
+            // A 2048 px copy is stored in about 130 ms, too short to hit with a click. Holding the
+            // process-wide store lock, as a run cut off by rotation would, keeps attach inside its
+            // IO step until the cancel has happened.
+            val storeLock = EndScanFlow::class.java.getDeclaredField("STORE_LOCK")
+                .apply { isAccessible = true }.get(null) as Mutex
+            check(storeLock.tryLock())
+            try {
+                // Espresso waits for the main thread to go idle, which the progress dialog's
+                // animation only allows after the whole run; UiAutomator clicks without waiting.
+                openActionBarOverflowOrOptionsMenu(context)
+                val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+                device.findObject(By.text(context.getString(R.string.scan_end))).click()
+                val cancel = Pattern.compile(Pattern.quote(context.getString(android.R.string.cancel)), Pattern.CASE_INSENSITIVE)
+                checkNotNull(device.wait(Until.findObject(By.text(cancel)), 5_000)) { "no progress dialog" }.click()
+                check(device.wait(Until.gone(By.text(cancel)), 5_000) == true) { "the progress dialog stayed" }
+            } finally {
+                storeLock.unlock()
+            }
+
+            // The cancelled run deletes the original in its finally; by then attach is back on main.
+            val end = endDAO.loadEnds(round.id).single()
+            val image = waitFor(10_000) { endDAO.loadEndImages(end.id).singleOrNull()?.takeIf { cameraFiles().isEmpty() } }
+            scenario.onActivity {
+                assertThat(it.data!!.currentEnd.images.map { i -> i.fileName }).containsExactly(image.fileName)
+            }
+            assertThat(endDAO.loadShots(end.id).all { it.scoringRing == Shot.NOTHING_SELECTED }).isTrue()
         }
     }
 

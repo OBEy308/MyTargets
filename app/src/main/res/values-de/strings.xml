@@ -389,6 +389,7 @@
     <string name="scan_photo_unreadable">Foto konnte nicht gelesen werden</string>
     <string name="scan_failed">Erkennung fehlgeschlagen</string>
     <string name="scan_other_end">Foto an Passe %d abgelegt, nicht eingetragen</string>
+    <string name="scan_other_end_not_attached">Nicht eingetragen: das Foto gehört zu Passe %d</string>
     <string name="scan_end_gone">Die Passe gibt es nicht mehr, nichts eingetragen</string>
     <string name="scan_retake">Neu aufnehmen</string>
 </resources>

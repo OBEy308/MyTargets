@@ -425,6 +425,7 @@
     <string name="scan_photo_unreadable">The photo could not be read</string>
     <string name="scan_failed">Detection failed</string>
     <string name="scan_other_end">Photo attached to end %d, not entered</string>
+    <string name="scan_other_end_not_attached">Not entered: the photo belongs to end %d</string>
     <string name="scan_end_gone">The end no longer exists, nothing entered</string>
     <string name="scan_retake">Retake</string>
 </resources>

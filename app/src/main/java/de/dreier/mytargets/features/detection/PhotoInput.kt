@@ -22,7 +22,6 @@ import org.opencv.core.CvException
 import org.opencv.core.Mat
 import org.opencv.imgcodecs.Imgcodecs
 import java.io.File
-import java.io.IOException
 import kotlin.math.max
 
 class PhotoUnreadableException(message: String, cause: Throwable? = null) : Exception(message, cause)
@@ -67,10 +66,13 @@ object PhotoInput {
         return DecodedPhoto(image, ExifIntrinsics.of(image.cols(), image.rows(), focalLength35mm(photo)))
     }
 
-    /** The only reason to read EXIF here; 0 when the tag or the file's EXIF is missing. */
+    /** The only reason to read EXIF here; 0 when the tag is missing, the file has no EXIF, or the EXIF block is broken. */
     private fun focalLength35mm(photo: File): Int = try {
         ExifInterface(photo.path).getAttributeInt(ExifInterface.TAG_FOCAL_LENGTH_IN_35MM_FILM, 0)
-    } catch (e: IOException) {
+    } catch (e: Exception) {
+        // A malformed EXIF block can throw a RuntimeException from ExifInterface's parser,
+        // not just IOException; either way it means "no focal length", like a missing tag,
+        // and must not escape here and leak the already decoded Mat.
         0
     }
 }

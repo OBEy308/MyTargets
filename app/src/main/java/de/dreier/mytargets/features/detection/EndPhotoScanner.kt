@@ -44,13 +44,21 @@ class EndPhotoScanner internal constructor(private val holder: DetectorHolder<Lo
             PhotoInput.read(photo)
         } catch (e: PhotoUnreadableException) {
             return ScanOutcome.PhotoUnreadable(e)
+        } catch (e: Exception) {
+            // Anything PhotoInput did not already turn into PhotoUnreadableException, e.g. an
+            // unanticipated RuntimeException while decoding: still not a reason to crash on a photo.
+            return ScanOutcome.ScanFailed(e)
+        } catch (e: OutOfMemoryError) {
+            return ScanOutcome.ScanFailed(e)
         }
         return try {
             val result = loaded.detector.detect(decoded.image, DetectionRequests.waFull(shotsPerEnd, decoded.intrinsics))
             ScanOutcome.Detected(result, loaded.modelName)
-        } catch (e: RuntimeException) {
+        } catch (e: Exception) {
             // CvException from OpenCV, IllegalStateException from a failed forward pass,
-            // IllegalArgumentException from a require inside the pipeline: all "the
+            // IllegalArgumentException from a require inside the pipeline, or a plain
+            // java.lang.Exception that OpenCV's JNI throws for a non-cv native exception
+            // (e.g. std::bad_alloc, confirmed in libopencv_java4.so 4.14.0): all "the
             // detection broke off", none a reason to crash on a photo.
             ScanOutcome.ScanFailed(e)
         } catch (e: OutOfMemoryError) {
@@ -65,7 +73,11 @@ class EndPhotoScanner internal constructor(private val holder: DetectorHolder<Lo
         private var instance: EndPhotoScanner? = null
 
         fun get(context: Context): EndPhotoScanner = instance ?: synchronized(this) {
-            instance ?: EndPhotoScanner(DetectorHolder { ModelLoading.load(context.applicationContext) })
+            // Read applicationContext now and capture only that: the holder's load lambda
+            // otherwise keeps whatever context (possibly an Activity) the first caller passed
+            // alive for the life of the process.
+            val app = context.applicationContext
+            instance ?: EndPhotoScanner(DetectorHolder { ModelLoading.load(app) })
                 .also { instance = it }
         }
     }

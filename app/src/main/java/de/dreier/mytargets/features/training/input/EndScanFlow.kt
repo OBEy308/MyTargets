@@ -40,6 +40,8 @@ import de.dreier.mytargets.utils.PermissionUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -230,6 +232,7 @@ class EndScanFlow(private val activity: AppCompatActivity, private val host: Hos
             var p = start
             if (p.storedImageName == null) {
                 val name = attach(original, p.endId)
+                currentCoroutineContext().ensureActive()
                 if (name != null) {
                     p = p.copy(storedImageName = name)
                     if (pending?.originalPath == p.originalPath) pending = p
@@ -274,8 +277,8 @@ class EndScanFlow(private val activity: AppCompatActivity, private val host: Hos
     private suspend fun attach(original: File, endId: Long): String? {
         val name = EndPhotoStore.nameFor(original)
         // Not cancellable: after a cancel the row is written anyway, and an in-memory end that
-        // does not know it would drop it with the next gallery edit (replaceImages). A cancelled
-        // job throws when this returns, so the scan does not run.
+        // does not know it would drop it with the next gallery edit (replaceImages). On the same
+        // dispatcher this returns normally even for a cancelled job; execute checks right after.
         val attached = withContext(NonCancellable) {
             val images = withContext(Dispatchers.IO) {
                 STORE_LOCK.withLock {

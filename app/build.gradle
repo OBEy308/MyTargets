@@ -92,13 +92,15 @@ android {
             signingConfig signingConfigs.debug
             enableUnitTestCoverage true
             enableAndroidTestCoverage true
+            // x86_64 keeps the detection running in the emulator (arrow design, APK-Größe).
+            ndk { abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64' }
         }
         release {
             signingConfig signingConfigs.release
             shrinkResources true
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), '../tools/rules-proguard.pro'
-
+            ndk { abiFilters 'arm64-v8a', 'armeabi-v7a' }
         }
     }
 
@@ -235,6 +237,10 @@ dependencies {
     implementation libs.arch.navigation.ui
 
     implementation project(':shared')
+
+    // Arrow detection (app integration 8a): the pipeline and OpenCV with dnn and imgcodecs.
+    implementation project(':detection')
+    implementation libs.opencv.android
 
     testImplementation libs.junit4
     testImplementation libs.kotlin.test

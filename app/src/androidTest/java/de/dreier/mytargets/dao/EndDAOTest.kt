@@ -110,6 +110,17 @@ open class EndDAOTest : DAOTestBase() {
         assertThat(ends[0].index).isEqualTo(0)
         assertThat(ends[0].comment).isEqualTo("second")
     }
+
+    @Test
+    fun countEndImagesFindsAnImageByEndAndName() {
+        val end = EndFactory.makeSimpleEnd(1)
+        appDatabase.endDAO().insertCompleteEnd(end.end, end.images, end.shots)
+        appDatabase.endDAO().insertEndImage(EndImage(fileName = "scan-a.jpg", endId = end.id))
+
+        assertThat(appDatabase.endDAO().countEndImages(end.id, "scan-a.jpg")).isEqualTo(1)
+        assertThat(appDatabase.endDAO().countEndImages(end.id, "scan-b.jpg")).isEqualTo(0)
+        assertThat(appDatabase.endDAO().countEndImages(end.id + 1, "scan-a.jpg")).isEqualTo(0)
+    }
 }
 
 class EndFactory {

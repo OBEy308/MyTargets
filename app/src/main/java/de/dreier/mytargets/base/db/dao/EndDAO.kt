@@ -29,6 +29,9 @@ abstract class EndDAO {
     @Query("SELECT * FROM `EndImage` WHERE `endId` = :id")
     abstract fun loadEndImages(id: Long): List<EndImage>
 
+    @Query("SELECT COUNT(*) FROM `EndImage` WHERE `endId` = :endId AND `fileName` = :fileName")
+    abstract fun countEndImages(endId: Long, fileName: String): Int
+
     @Query("SELECT * FROM `Shot` WHERE `endId` = :id ORDER BY `index`")
     abstract fun loadShots(id: Long): List<Shot>
 

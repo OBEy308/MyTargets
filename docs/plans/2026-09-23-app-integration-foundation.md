@@ -33,15 +33,17 @@
 3. **`ArrowModel` bekommt `source`** (Pfad der Datei oder Name des Assets) für alle Fehlermeldungen; `onnx` wird `File?` (null bei Bytes). `LearnedArrowDetector` hält danach nur `source` und `meta`, nicht das `ArrowModel`, damit die 29 MB Bytes nach dem Bau des Netzes frei werden.
 4. **Testmodell ohne lokale Property:** Fehlt `DETECTION_MODEL_DIR`, zeigt `detection.model.dir` auf das App-Asset. Die Modelltests von `:detection` laufen damit auf jedem Klon; `LearnedParityTest` überspringt sich dort mangels `parity/` wie bisher.
 5. **Gerätetest ohne Sidecar:** Das Foto `2026-08-15_bedeckt_frontal_02.jpg` (EXIF 6, roh 4000 × 2252, gedreht 2252 × 4000, fünf Pfeile, Parity-Referenz vorhanden) kommt als nicht eingechecktes Test-Asset; die Erwartung ist eine **am PC gepinnte Referenz** (Treffer aus demselben Detektor über denselben Weg), nicht die Korpuswahrheit. Das prüft, dass App und Korpuslauf dasselbe rechnen; wie gut der Finder ist, messen die Korpusläufe.
-6. **Keep-Regeln** kommen als `detection/consumer-rules.pro`, dazu `-keep class org.opencv.** { *; }`: OpenCVs nativer Code greift per Namen auf seine Java-Klassen zu, und ob das AAR eigene Regeln mitbringt, ist nicht geprüft.
+6. **Keep-Regeln** kommen als `detection/consumer-rules.pro`, dazu `-keep class org.opencv.** { *; }`: OpenCVs nativer Code greift per Namen auf seine Java-Klassen zu, und das AAR 4.14.0 bringt keine eigenen Regeln mit (geprüft, es enthält keine `proguard.txt`).
+7. **Die Winograd-Schwelle bleibt 6 GiB, ihre Wirkung ist benannt:** `MemoryInfo.totalMem` liegt unter dem nominellen RAM (ein 6-GB-Gerät meldet etwa 5,5 GB, ein 8-GB-Gerät etwa 7,4 GB). Mit `>= 6 · 1024³` ist Winograd also erst ab nominell 8 GB an; 6-GB-Geräte rechnen ohne. Der Wert ist eine Spec-Zahl und wird hier nicht geändert; die Wirkung steht im KDoc (Task 4) und in der Spec (Task 7). Sollen 6-GB-Geräte Winograd bekommen, ist die Schwelle in der Spec auf 5 GiB zu setzen, bevor Task 4 beginnt.
+8. **`ScanFailed` fängt jede `RuntimeException`** aus der Erkennung, nicht nur `CvException` und `IllegalStateException`: Die Pipeline wirft auch `IllegalArgumentException` aus ihren `require`-Prüfungen, und ein Absturz ist nie die richtige Antwort auf ein Foto. `shotsPerEnd <= 0` ist dagegen ein Fehler des Aufrufers (8b) und wird am Eingang von `scan` mit `require` zurückgewiesen.
 
 ## Review Focus
 
-1. **EXIF-Orientierung 3 oder 8** (nicht 6): `imread` dreht selbst; `PhotoInput` darf nie zusätzlich drehen (kein `Core.rotate`, kein zweites Auslegen des Orientierungstags). Erwartung: gedrehte Größe wie in jeder Kamera-Galerie. Gepinnt durch den Größen-Check im Gerätetest (Task 6) und die Regel in Task 5.
+1. **EXIF-Orientierung 3 oder 8** (nicht 6): `imread` dreht selbst; `PhotoInput` darf nie zusätzlich drehen (kein `Core.rotate`, kein zweites Auslegen des Orientierungstags). Erwartung: gedrehte Größe wie in jeder Kamera-Galerie. Gepinnt durch den Größen-Check und die Referenzpositionen im Gerätetest (Task 6) und die Regel in Task 5. Der Größen-Check sieht nur Vierteldrehungen (6, 8); eine fehlende 180-Grad-Drehung (3) änderte die Größe nicht. Für das Testfoto deckten die Referenzpositionen sie auf, ein Foto mit EXIF 3 gibt es im Korpus nicht; das bleibt eine bekannte Lücke von 8a.
 2. **Doppelter Aufruf** (Nutzer tippt zweimal, zwei Scans gleichzeitig): das Netz wird einmal geladen, Erkennungen laufen nacheinander. Gepinnt in `DetectorHolderTest` (Task 4).
 3. **Datei leer, abgeschnitten, kein Bild oder HEIC**: `PhotoUnreadable`, kein Absturz, kein geladenes Netz verloren. Gepinnt in `DecodeReductionTest` (Länge ≤ 0) und im Gerätetest (Datei ohne Bild) — Task 4 und 6.
 4. **EXIF ohne oder mit `0` als 35-mm-Brennweite**: Rückfall `0,75 · lange Kante` statt `IllegalArgumentException`. Gepinnt in `ExifIntrinsicsTest` (Task 4).
-5. **Fehler mitten in der Erkennung** (`CvException`, `OutOfMemoryError`, `IllegalStateException` aus dem Vorwärtslauf): `ScanFailed`, der Halter bleibt benutzbar, das Mat wird freigegeben. Gepinnt in `DetectorHolderTest.anExceptionInsideTheBlockLeavesTheHolderUsable` (Task 4) und im `finally` von Task 5.
+5. **Fehler mitten in der Erkennung** (`CvException`, `IllegalStateException` aus dem Vorwärtslauf, `IllegalArgumentException` aus einem `require` der Pipeline, `OutOfMemoryError`): `ScanFailed`, der Halter bleibt benutzbar, das Mat wird freigegeben. Gepinnt in `DetectorHolderTest.anExceptionInsideTheBlockLeavesTheHolderUsable` (Task 4) und im `catch (e: RuntimeException)` samt `finally` von Task 5. Nur `shotsPerEnd <= 0` wirft am Eingang, das ist ein Aufruferfehler.
 
 ## Dateien
 
@@ -362,6 +364,12 @@ ls -l app/src/main/assets/arrows/r4-all-2026-09/
 ```
 
 Expected: `model.onnx` 28783802 Byte, `model.json` 587 Byte, kein `parity/`.
+
+```bash
+cmp ../MyTargets-corpus/models/arrows/r4-all-2026-09/model.onnx app/src/main/assets/arrows/r4-all-2026-09/model.onnx && cmp ../MyTargets-corpus/models/arrows/r4-all-2026-09/model.json app/src/main/assets/arrows/r4-all-2026-09/model.json && echo identical
+```
+
+Expected: `identical`. Das ist die einzige Stelle, die Asset und Korpuskopie vergleicht: Auf diesem Rechner zeigt `DETECTION_MODEL_DIR` auf die Korpuskopie, also pinnt `ScanReferenceRun` (Task 6) die Korpuskopie, während das Telefon das Asset rechnet. Weichen die Dateien ab, stoppen; nicht weiterarbeiten, bis klar ist, welche Datei das Modell `r4-all-2026-09` ist.
 
 In `detection/build.gradle` im `testDevDebugUnitTest`-Block den Modellteil ersetzen:
 
@@ -823,7 +831,9 @@ object DecodeReduction {
  * Winograd costs about 300 MB of native memory for a 2.3 times faster pass
  * (app-path findings 3a: about 700 MB with, 400 MB without at 768 px). The
  * measure is the device's total memory, not memoryClass: that is the Java
- * heap limit, and the network lives in native memory.
+ * heap limit, and the network lives in native memory. totalMem reports less
+ * than the nominal RAM (a 6 GB phone about 5.5 GB, an 8 GB phone about
+ * 7.4 GB), so 6 GiB here means: on from nominally 8 GB, off on 6 GB phones.
  */
 object WinogradPolicy {
     const val MIN_TOTAL_MEM: Long = 6L * 1024 * 1024 * 1024
@@ -904,7 +914,7 @@ class DetectorHolder<T : Any>(private val load: () -> T) {
 - [ ] **Step 5: Tests laufen lassen, sie bestehen**
 
 Run: `./gradlew :app:testDevDebugUnitTest --tests "de.dreier.mytargets.features.detection.*"`
-Expected: PASS (13 Tests).
+Expected: PASS (15 Tests).
 
 - [ ] **Step 6: Commit**
 
@@ -1073,17 +1083,19 @@ import de.dreier.mytargets.detection.DetectionRequests
 import de.dreier.mytargets.shared.models.Target
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.opencv.core.CvException
 import java.io.File
 
 /**
  * The one entry point 8b calls (app integration 8a): photo, face and end size
  * in, a ScanOutcome out. Runs on Dispatchers.Default; detections run one at a
- * time on the one detector of the process.
+ * time on the one detector of the process. Nothing a photo can do reaches the
+ * caller as an exception; only a non-positive [shotsPerEnd] does, because
+ * that is the caller's error, not the photo's.
  */
 class EndPhotoScanner internal constructor(private val holder: DetectorHolder<LoadedDetector>) {
 
     suspend fun scan(photo: File, target: Target, shotsPerEnd: Int): ScanOutcome = withContext(Dispatchers.Default) {
+        require(shotsPerEnd > 0) { "an end has at least one shot, got $shotsPerEnd" }
         if (!ScanSupport.supports(target)) return@withContext ScanOutcome.Unsupported
         holder.withLoaded(onLoadFailure = { ScanOutcome.ModelUnavailable(it) }) { loaded ->
             scanWith(loaded, photo, shotsPerEnd)
@@ -1099,10 +1111,10 @@ class EndPhotoScanner internal constructor(private val holder: DetectorHolder<Lo
         return try {
             val result = loaded.detector.detect(decoded.image, DetectionRequests.waFull(shotsPerEnd, decoded.intrinsics))
             ScanOutcome.Detected(result, loaded.modelName)
-        } catch (e: CvException) {
-            ScanOutcome.ScanFailed(e)
-        } catch (e: IllegalStateException) {
-            // LearnedArrowDetector wraps a failed forward pass in an IllegalStateException.
+        } catch (e: RuntimeException) {
+            // CvException from OpenCV, IllegalStateException from a failed forward pass,
+            // IllegalArgumentException from a require inside the pipeline: all "the
+            // detection broke off", none a reason to crash on a photo.
             ScanOutcome.ScanFailed(e)
         } catch (e: OutOfMemoryError) {
             ScanOutcome.ScanFailed(e)
@@ -1409,7 +1421,9 @@ cp ../MyTargets-corpus/wa-full/2026-08-15_bedeckt_frontal_02.jpg app/src/android
 ```
 
 Without it the scan tests skip themselves; the grey, non-image and
-unsupported cases still run. The expected shots are pinned on the PC by
+unsupported cases still run. The orchestrator runs every test method in its
+own process (`clearPackageData`), so each one loads the model again; the warm
+second scan is measured inside `scansTheCorpusPhotoLikeThePc` only. The expected shots are pinned on the PC by
 `ScanReferenceRun` in `:detection`; if the model or the pipeline changes,
 re-pin there and copy the list here.
 
@@ -1430,7 +1444,7 @@ D:/AndroidSDK/platform-tools/adb.exe devices
 D:/AndroidSDK/platform-tools/adb.exe logcat -d -s EndPhotoScanner
 ```
 
-Expected: 5 Tests PASS; im Log zwei Zeilen mit Zeit und nativem Heap. Zahlen notieren (Task 7). Scheitert `scansTheCorpusPhotoLikeThePc` an der Größe (4000 × 2252), wendet `imread` im AAR die EXIF-Drehung nicht an: stoppen und melden, nicht in `PhotoInput` drehen, ohne die Spec anzupassen. Liegen die Treffer weiter als 0,01 von der Referenz, die Abweichungen notieren und melden, nicht die Schranke erhöhen.
+Expected: 5 Tests PASS; im Log zwei Zeilen mit Zeit und nativem Heap. Zahlen notieren (Task 7). `:app` läuft seine Gerätetests über den Test Orchestrator mit `clearPackageData`: Jede Testmethode startet in einem eigenen Prozess, das Modell lädt also fünfmal, und die zweite Zeile (zweiter Scan, warm) entsteht nur innerhalb von `scansTheCorpusPhotoLikeThePc`. Die Laufzeit liegt entsprechend bei fünf Ladevorgängen plus Scans, nicht bei einem. Scheitert `scansTheCorpusPhotoLikeThePc` an der Größe (4000 × 2252), wendet `imread` im AAR die EXIF-Drehung nicht an: stoppen und melden, nicht in `PhotoInput` drehen, ohne die Spec anzupassen. Liegen die Treffer weiter als 0,01 von der Referenz, die Abweichungen notieren und melden, nicht die Schranke erhöhen.
 
 Ist kein Telefon angeschlossen, stoppen und den Nutzer bitten, es anzuschließen; der Emulator (x86_64) ist kein Ersatz für die Speicher- und Zeitmessung.
 
@@ -1491,6 +1505,15 @@ Branch `plan/app-integration-foundation`. <Was vom Design abweicht, sonst „Nic
 | AAB | <MB> |
 | Referenz `2026-08-15_bedeckt_frontal_02` | <n> Treffer, größte Abweichung Telefon gegen PC <Wert> |
 ```
+
+Dazu die Spec selbst an den Stellen umschreiben, an denen der Plan von ihr abweicht (Präzisierungen 1, 3, 5, 6, 7, 8), nicht nur im Nachtrag nennen:
+
+- *Test*, Absatz „Instrumentiert“: statt `adb push` und Instrumentierungs-Argument das nicht eingecheckte Test-Asset `app/src/androidTest/assets/scan/` (README); statt „Trefferzahl und Lage nahe der Wahrheit aus dem Sidecar“ die am PC gepinnte Referenz aus `ScanReferenceRun` mit Schranke 0,01; der Hinweis, dass der Orchestrator jede Methode in einem eigenen Prozess laufen lässt.
+- *Test*, Absatz „Release“: die Keep-Regel wurde über `mapping.txt` und `usage.txt` des Release-Builds geprüft, nicht mit einem Instrumentierungslauf gegen den minifizierten Build.
+- *Build*, R8: neben `ArrowModel$MetaJson` auch `-keep class org.opencv.** { *; }`, mit der Begründung aus Präzisierung 6.
+- *Bausteine*, `DetectorHolder`: der Satz zu Winograd bekommt die Wirkung aus Präzisierung 7 (an ab nominell 8 GB, aus auf 6-GB-Geräten) und die Schwelle, die dabei blieb.
+- *Bausteine*, `EndPhotoScanner`: `ScanFailed` ist jede `RuntimeException` oder `OutOfMemoryError` aus der Erkennung; `shotsPerEnd <= 0` wirft am Eingang.
+- *Bausteine*, `ArrowModel`: `source` statt Pfad in allen Fehlermeldungen, `onnx` ist `File?`.
 
 Status-Zeile oben auf „Design umgesetzt am <Datum>, siehe Nachtrag“ ändern. Im Haupt-Design unter *Reihenfolge der Umsetzung*, Punkt 8, einen Satz anhängen: „Aufgeteilt in 8a bis 8d; 8a (Fundament) siehe `2026-09-23-app-integration-foundation-design.md`.“
 

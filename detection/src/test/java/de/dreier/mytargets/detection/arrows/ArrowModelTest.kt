@@ -122,4 +122,45 @@ class ArrowModelTest {
         assertThat(e).hasMessageThat().contains("model.onnx")
         assertThat(e).hasMessageThat().contains(dir.name)
     }
+
+    @Test
+    fun aModelFromBytesNamesItsSource() {
+        val model = ArrowModel.fromBytes(byteArrayOf(1, 2, 3), complete, "assets/arrows/r4")
+
+        assertThat(model.source).isEqualTo("assets/arrows/r4")
+        assertThat(model.onnx).isNull()
+        assertThat(model.meta.inputSize).isEqualTo(768)
+    }
+
+    @Test
+    fun aBrokenSidecarFromBytesNamesTheAsset() {
+        val e = try {
+            ArrowModel.fromBytes(byteArrayOf(1, 2, 3), "{", "assets/arrows/r4")
+            throw AssertionError("expected IllegalArgumentException")
+        } catch (e: IllegalArgumentException) {
+            e
+        }
+        assertThat(e).hasMessageThat().contains("assets/arrows/r4/model.json")
+    }
+
+    @Test
+    fun emptyWeightsAreRejectedByName() {
+        val e = try {
+            ArrowModel.fromBytes(ByteArray(0), complete, "assets/arrows/r4")
+            throw AssertionError("expected IllegalArgumentException")
+        } catch (e: IllegalArgumentException) {
+            e
+        }
+        assertThat(e).hasMessageThat().contains("assets/arrows/r4")
+        assertThat(e).hasMessageThat().contains("empty")
+    }
+
+    @Test
+    fun aModelFromAFolderNamesItsFile() {
+        val dir = folder.newFolder("named")
+        File(dir, "model.onnx").writeBytes(byteArrayOf(1, 2, 3))
+        File(dir, "model.json").writeText(complete)
+
+        assertThat(ArrowModel.load(dir).source).isEqualTo(File(dir, "model.onnx").path)
+    }
 }

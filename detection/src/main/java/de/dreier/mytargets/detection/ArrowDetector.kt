@@ -16,7 +16,9 @@
 package de.dreier.mytargets.detection
 
 import de.dreier.mytargets.detection.geometry.CameraIntrinsics
+import de.dreier.mytargets.detection.geometry.Mat3
 import de.dreier.mytargets.detection.registration.RingTransition
+import de.dreier.mytargets.detection.registration.Roll
 import org.opencv.core.Mat
 
 /**
@@ -38,18 +40,40 @@ enum class DetectionFailure {
     FACE_MISMATCH
 }
 
+/**
+ * Where the face lay in the photograph the detector was given: [imageToTarget]
+ * maps its pixels to spot-local target coordinates, [imageWidth] and
+ * [imageHeight] are its size, i.e. the decoded image after EXIF rotation and
+ * any reduction, not the file on disk. The correction layer (8c) draws the
+ * stored photo through it.
+ */
+class DetectedFace(
+    val imageToTarget: Mat3,
+    val imageWidth: Int,
+    val imageHeight: Int,
+    val roll: Roll
+)
+
 class DetectionResult(
     val shots: List<DetectedShot>,
     val faceConfidence: Float,
     val reason: SelectionReason?,
-    val failure: DetectionFailure?
+    val failure: DetectionFailure?,
+    val face: DetectedFace?
 ) {
+    init {
+        require((face == null) == (failure != null)) {
+            "a result carries its face exactly when the detection did not fail"
+        }
+    }
+
     companion object {
         fun failed(failure: DetectionFailure) = DetectionResult(
             shots = emptyList(),
             faceConfidence = 0f,
             reason = null,
-            failure = failure
+            failure = failure,
+            face = null
         )
     }
 }
@@ -59,8 +83,8 @@ class DetectionResult(
  *
  * Deliberately free of Android types so the contract can be exercised in plain
  * JVM tests. [transitions] are the colour transitions the registration fits
- * rings to (Haupt-Spec, stage 2); the app translates them from the target
- * model.
+ * rings to (Haupt-Spec, stage 2); the app and the corpus runs build them via
+ * DetectionRequests.waFull.
  */
 data class DetectionRequest(
     val layout: FaceLayout,

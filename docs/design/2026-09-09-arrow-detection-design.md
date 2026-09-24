@@ -705,7 +705,8 @@ entsteht mit der Integration, weil er sie voraussetzt.
 8. Integration in `InputActivity` und `GalleryActivity` samt Fotoablage,
    pending scan, Fehlerfällen, Debug-Bildschirm und Foto als Korrekturebene
    (*Anwenden und Korrigieren*, Nachtrag vom 2026-09-23). Voraussetzung: der
-   Roll-Anker im Registrar.
+   Roll-Anker im Registrar. Aufgeteilt in 8a bis 8d; 8a (Fundament) siehe
+   `2026-09-23-app-integration-foundation-design.md`.
 
 ## Offene Risiken
 

@@ -117,6 +117,25 @@ class LearnedArrowDetectorTest {
     }
 
     @Test
+    fun aDetectionCarriesTheRegistrationItWasMadeIn() {
+        val detector = LearnedArrowDetector(model)
+        val photo = SyntheticArrows.photograph(camera, 2000, 1500, entries.map { SyntheticArrow(it) })
+        val (analysis, result) = try {
+            detector.analyse(photo, request(entries.size)) to detector.detect(photo, request(entries.size))
+        } finally {
+            photo.release()
+        }
+        val registration = (analysis as LearnedAnalysis.Analysed).registration
+        val face = checkNotNull(result.face) { "a successful detection carries its face" }
+
+        assertThat(face.imageWidth).isEqualTo(2000)
+        assertThat(face.imageHeight).isEqualTo(1500)
+        for (r in 0..2) for (c in 0..2) {
+            assertThat(face.imageToTarget[r, c]).isWithin(1e-12).of(registration.imageToTarget[r, c])
+        }
+    }
+
+    @Test
     fun aFailedRegistrationFailsTheDetectionLikeTheClassicalFinder() {
         val failing = StubRegistrar(RegistrationOutcome.Failed(DetectionFailure.FACE_NOT_FOUND, "test"))
         val detector = LearnedArrowDetector(model, registrar = failing)
@@ -136,7 +155,7 @@ class LearnedArrowDetectorTest {
     fun aSidecarWithTheWrongInputSizeIsRejectedByName() {
         // The export is fixed to one size (design 3d, Ablageformat): a 768 model with 512 in the sidecar fails at the forward pass.
         val wrong = ArrowModel(
-            model.onnx,
+            checkNotNull(model.onnx),
             ArrowModelMeta(512, model.meta.stride, model.meta.kernel, model.meta.preShrinkMaxSide, model.meta.threshold, null, null, null, emptyMap())
         )
         val detector = LearnedArrowDetector(wrong)
@@ -159,6 +178,42 @@ class LearnedArrowDetectorTest {
             throw AssertionError("expected an IllegalStateException")
         } catch (e: IllegalStateException) {
             assertThat(e).hasMessageThat().contains("does-not-exist.onnx")
+        }
+    }
+
+    @Test
+    fun aModelReadFromBytesDetectsLikeTheFolder() {
+        val onnx = checkNotNull(model.onnx)
+        val fromBytes = ArrowModel.fromBytes(
+            onnx.readBytes(), File(onnx.parentFile, ArrowModel.META_FILE).readText(), "bytes of ${onnx.name}"
+        )
+        val photo = SyntheticArrows.photograph(camera, 2000, 1500, entries.map { SyntheticArrow(it) })
+        val (fromFile, fromMemory) = try {
+            LearnedArrowDetector(model).detect(photo, request(entries.size)) to
+                LearnedArrowDetector(fromBytes).detect(photo, request(entries.size))
+        } finally {
+            photo.release()
+        }
+
+        assertThat(fromMemory.shots).hasSize(fromFile.shots.size)
+        fromFile.shots.zip(fromMemory.shots).forEach { (a, b) ->
+            assertThat(b.faceIndex).isEqualTo(a.faceIndex)
+            assertThat(b.x).isWithin(1e-6f).of(a.x)
+            assertThat(b.y).isWithin(1e-6f).of(a.y)
+            assertThat(b.confidence).isWithin(1e-6f).of(a.confidence)
+        }
+    }
+
+    @Test
+    fun unreadableBytesFailAtConstructionByName() {
+        val garbage = ArrowModel.fromBytes(
+            byteArrayOf(1, 2, 3), File(checkNotNull(model.onnx).parentFile, ArrowModel.META_FILE).readText(), "garbage-asset"
+        )
+        try {
+            LearnedArrowDetector(garbage)
+            throw AssertionError("expected an IllegalStateException")
+        } catch (e: IllegalStateException) {
+            assertThat(e).hasMessageThat().contains("garbage-asset")
         }
     }
 

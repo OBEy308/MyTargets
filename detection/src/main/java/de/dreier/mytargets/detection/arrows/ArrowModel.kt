@@ -57,8 +57,26 @@ class ArrowModelMeta(
         get() = inputSize / stride
 }
 
-/** A model folder: the ONNX weights and their sidecar. */
-class ArrowModel(val onnx: File, val meta: ArrowModelMeta) {
+/**
+ * The ONNX weights and their sidecar, from a folder (tests, corpus runs) or
+ * from memory (the app reads its asset, app integration 8a). [source] names
+ * the weights in every error message.
+ */
+class ArrowModel private constructor(
+    val source: String,
+    val meta: ArrowModelMeta,
+    internal val weights: Weights
+) {
+    constructor(onnx: File, meta: ArrowModelMeta) : this(onnx.path, meta, Weights.InFile(onnx))
+
+    /** The weights file, or null for a model read from memory. */
+    val onnx: File?
+        get() = (weights as? Weights.InFile)?.file
+
+    internal sealed class Weights {
+        class InFile(val file: File) : Weights()
+        class InMemory(val bytes: ByteArray) : Weights()
+    }
 
     companion object {
         const val ONNX_FILE = "model.onnx"
@@ -71,6 +89,16 @@ class ArrowModel(val onnx: File, val meta: ArrowModelMeta) {
             require(onnx.isFile) { "${dir.path}: no $ONNX_FILE" }
             require(meta.isFile) { "${dir.path}: no $META_FILE" }
             return ArrowModel(onnx, parseMeta(meta.readText(), meta.path))
+        }
+
+        /**
+         * The weights as bytes and the sidecar as text, e.g. from an asset.
+         * [source] is the folder they came from; the sidecar's errors name
+         * [source]/model.json.
+         */
+        fun fromBytes(onnx: ByteArray, metaJson: String, source: String): ArrowModel {
+            require(onnx.isNotEmpty()) { "$source: empty $ONNX_FILE" }
+            return ArrowModel(source, parseMeta(metaJson, "$source/$META_FILE"), Weights.InMemory(onnx))
         }
 
         /** Parses a sidecar; every error names [source] and the field. */

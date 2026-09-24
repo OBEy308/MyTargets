@@ -1,0 +1,16 @@
+{
+  "inputSize": 768,
+  "stride": 2,
+  "kernel": 5,
+  "preShrinkMaxSide": 2000,
+  "threshold": 0.12,
+  "training": "../../MyTargets-learn/runs/all-2026-09-17",
+  "corpus": "5dcc2e6",
+  "thresholdFrom": "median of r4 FP-limited fold thresholds (0.12, 0.12, 0.10, 0.12, 0.12)",
+  "crossValidation": {
+    "oblique": "r4 cross-validation: 71.3 % of oblique arrows at 1.06 FP/view (F1 thresholds)",
+    "fpLimited": "r4 cross-validation: 63.3 % at 0.64 FP/view (FP-limited thresholds), ring 91.7 %, median error 0.0052"
+  },
+  "precision": "fp16",
+  "exported": "2026-09-17"
+}

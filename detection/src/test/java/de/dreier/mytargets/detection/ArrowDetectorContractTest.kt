@@ -17,9 +17,11 @@ package de.dreier.mytargets.detection
 
 import com.google.common.truth.Truth.assertThat
 import de.dreier.mytargets.detection.geometry.CameraIntrinsics
+import de.dreier.mytargets.detection.geometry.Mat3
 import de.dreier.mytargets.detection.geometry.Vec2
 import de.dreier.mytargets.detection.registration.OpenCvRule
 import de.dreier.mytargets.detection.registration.RingTransitions
+import de.dreier.mytargets.detection.registration.Roll
 import org.junit.Rule
 import org.junit.Test
 import org.opencv.core.Mat
@@ -72,7 +74,8 @@ class ArrowDetectorContractTest {
                 shots = listOf(DetectedShot(0, 0.1f, -0.2f, 0.9f)),
                 faceConfidence = 0.8f,
                 reason = SelectionReason.FEWER_THAN_EXPECTED,
-                failure = null
+                failure = null,
+                face = DetectedFace(Mat3.identity(), 4000, 3000, Roll.NOT_MEASURED)
             )
         }
         val image = Mat()
@@ -103,6 +106,21 @@ class ArrowDetectorContractTest {
             throw AssertionError("expected IllegalArgumentException")
         } catch (expected: IllegalArgumentException) {
             // The registration finds the face from these transitions; without them there is no face.
+        }
+    }
+
+    @Test
+    fun aFailedResultCarriesNoFace() {
+        assertThat(DetectionResult.failed(DetectionFailure.FACE_MISMATCH).face).isNull()
+    }
+
+    @Test
+    fun aSuccessfulResultMustCarryItsFace() {
+        try {
+            DetectionResult(emptyList(), 1f, SelectionReason.COMPLETE, failure = null, face = null)
+            throw AssertionError("expected IllegalArgumentException")
+        } catch (expected: IllegalArgumentException) {
+            // 8c draws the photo through this homography; a result without it cannot be shown.
         }
     }
 }

@@ -54,7 +54,7 @@ class LearnedModelSmokeTest {
     fun theDesktopJarReadsTheModelAndRunsIt() {
         val model = ArrowModel.load(dir)
         val size = model.meta.inputSize
-        val net = Dnn.readNetFromONNX(model.onnx.absolutePath)
+        val net = Dnn.readNetFromONNX(checkNotNull(model.onnx).absolutePath)
         assertThat(net.empty()).isFalse()
 
         val input = Mat.zeros(size, size, CvType.CV_8UC3)

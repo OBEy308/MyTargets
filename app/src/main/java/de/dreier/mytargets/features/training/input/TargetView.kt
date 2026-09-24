@@ -162,13 +162,12 @@ class TargetView : TargetViewBase {
     }
 
     override fun replaceWithEnd(shots: List<Shot>, exact: Boolean) {
-        inputMethod = if (shots.all { it.scoringRing == Shot.NOTHING_SELECTED }) {
-            if (exact) PLOTTING else KEYBOARD
-        } else {
-            SettingsManager.inputMethod
-        }
+        inputMethod = InputMethodChoice.inputMethodFor(shots, exact, SettingsManager.inputMethod)
         super.replaceWithEnd(shots, exact)
     }
+
+    /** The ring for a position, with arrow radius and line rule, as when a shot is plotted by hand. */
+    fun zoneAt(x: Float, y: Float): Int = targetDrawable!!.getZoneFromPoint(x, y)
 
     fun setArrow(diameter: Dimension, numbers: Boolean, maxArrowNumber: Int) {
         this.arrowNumbering = numbers

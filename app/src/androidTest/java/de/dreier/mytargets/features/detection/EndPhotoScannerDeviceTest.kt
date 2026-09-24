@@ -21,15 +21,14 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import de.dreier.mytargets.detection.DetectionFailure
 import de.dreier.mytargets.shared.models.Target
 import de.dreier.mytargets.shared.targets.models.WAFull
 import de.dreier.mytargets.shared.targets.models.WAVertical3Spot
 import kotlinx.coroutines.runBlocking
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertSame
-import org.junit.Assert.assertTrue
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
@@ -44,11 +43,6 @@ import kotlin.math.hypot
  * from the app's assets, OpenCV from the AAR, imread with EXIF. The expected
  * shots are the PC reference of ScanReferenceRun in :detection; the photo is
  * a corpus photo that is not in git (README next to this directory).
- *
- * Uses org.junit.Assert, not Truth: :app pins Guava to 27.0.1-android
- * (app/build.gradle), but Truth 1.4.5 needs Guava 31.1+ for Subject's static
- * initializer, so any Truth.assertThat crashes with a NoSuchMethodError on a
- * real device (confirmed on-device, plan 8a Task 6).
  */
 @RunWith(AndroidJUnit4::class)
 class EndPhotoScannerDeviceTest {
@@ -61,7 +55,7 @@ class EndPhotoScannerDeviceTest {
     // The orchestrator gives every method its own process, and aReducedDecodeKeepsTheExifRotation
     // reads without a scan loading OpenCV first.
     fun loadOpenCv() {
-        assertTrue("OpenCV's native library did not load", OpenCVLoader.initLocal())
+        assertWithMessage("OpenCV's native library did not load").that(OpenCVLoader.initLocal()).isTrue()
     }
 
     private fun corpusPhoto(): File {
@@ -86,21 +80,21 @@ class EndPhotoScannerDeviceTest {
         val millis = SystemClock.elapsedRealtime() - started
         Log.i(TAG, "scan of $VIEW took $millis ms (first call includes loading), native heap ${Debug.getNativeHeapAllocatedSize() shr 20} MB")
 
-        assertTrue("outcome is Detected: $outcome", outcome is ScanOutcome.Detected)
+        assertThat(outcome).isInstanceOf(ScanOutcome.Detected::class.java)
         val detected = outcome as ScanOutcome.Detected
-        assertEquals(ModelLoading.MODEL_NAME, detected.modelName)
+        assertThat(detected.modelName).isEqualTo(ModelLoading.MODEL_NAME)
         val result = detected.result
-        assertNull(result.failure)
+        assertThat(result.failure).isNull()
         // Rotated by imread from EXIF 6: raw 4000 x 2252.
-        assertEquals(2252, result.face!!.imageWidth)
-        assertEquals(4000, result.face!!.imageHeight)
-        assertEquals(REFERENCE.size, result.shots.size)
+        assertThat(result.face!!.imageWidth).isEqualTo(2252)
+        assertThat(result.face!!.imageHeight).isEqualTo(4000)
+        assertThat(result.shots).hasSize(REFERENCE.size)
         val deviations = REFERENCE.map { (x, y) -> result.shots.minOf { hypot(it.x - x, it.y - y) } }
         Log.i(TAG, "largest deviation from the PC reference: %.5f".format(deviations.max()))
         for (i in REFERENCE.indices) {
             val (x, y) = REFERENCE[i]
             // OpenCV 4.14 on the phone against 4.9 on the PC: registration and network may differ in the last digits.
-            assertTrue("a shot near the PC's ($x, $y): ${deviations[i]}", deviations[i] <= 0.01)
+            assertWithMessage("a shot near the PC's ($x, $y)").that(deviations[i]).isAtMost(0.01)
         }
 
         val again = SystemClock.elapsedRealtime()
@@ -113,8 +107,8 @@ class EndPhotoScannerDeviceTest {
         val decoded = PhotoInput.read(corpusPhoto(), 2)
         try {
             // libjpeg scales by 1/2 rounding up; 2252 and 4000 are even.
-            assertEquals(1126, decoded.image.cols())
-            assertEquals(2000, decoded.image.rows())
+            assertThat(decoded.image.cols()).isEqualTo(1126)
+            assertThat(decoded.image.rows()).isEqualTo(2000)
         } finally {
             decoded.image.release()
         }
@@ -129,31 +123,45 @@ class EndPhotoScannerDeviceTest {
 
         val outcome = scanner.scan(grey, waFull, 6)
 
-        assertTrue("outcome is Detected: $outcome", outcome is ScanOutcome.Detected)
-        assertEquals(DetectionFailure.FACE_NOT_FOUND, (outcome as ScanOutcome.Detected).result.failure)
-        assertNull(outcome.result.face)
+        assertThat(outcome).isInstanceOf(ScanOutcome.Detected::class.java)
+        assertThat((outcome as ScanOutcome.Detected).result.failure).isEqualTo(DetectionFailure.FACE_NOT_FOUND)
+        assertThat(outcome.result.face).isNull()
     }
 
     @Test
     fun aFileThatIsNoImageIsUnreadable() = runBlocking {
         val text = File(context.cacheDir, "not-an-image.jpg").apply { writeText("not an image") }
 
-        assertTrue(
-            "scan of a non-image is PhotoUnreadable",
-            scanner.scan(text, waFull, 6) is ScanOutcome.PhotoUnreadable
-        )
+        assertThat(scanner.scan(text, waFull, 6)).isInstanceOf(ScanOutcome.PhotoUnreadable::class.java)
     }
 
     @Test
     fun anotherFaceIsUnsupported() = runBlocking {
         val threeSpot = Target(WAVertical3Spot.ID, 0)
 
-        assertSame(ScanOutcome.Unsupported, scanner.scan(File("unused.jpg"), threeSpot, 3))
+        assertThat(scanner.scan(File("unused.jpg"), threeSpot, 3)).isSameInstanceAs(ScanOutcome.Unsupported)
+    }
+
+    @Test
+    fun aScanCancelledBeforeTheForwardPassDoesNotRunIt(): Unit = runBlocking {
+        val photo = corpusPhoto()
+        val started = SystemClock.elapsedRealtime()
+
+        // Every method runs in its own process, so this call has to load the model first.
+        val outcome = withTimeoutOrNull(CANCEL_AFTER_MS) { scanner.scan(photo, waFull, 6) }
+
+        val millis = SystemClock.elapsedRealtime() - started
+        Log.i(TAG, "scan cancelled after $CANCEL_AFTER_MS ms returned after $millis ms")
+        assertThat(outcome).isNull()
+        // Loading and decoding take about a second, the forward pass alone 2.6 s on the S25.
+        assertThat(millis).isLessThan(2500L)
+        assertThat(scanner.scan(photo, waFull, 6)).isInstanceOf(ScanOutcome.Detected::class.java)
     }
 
     private companion object {
         const val TAG = "EndPhotoScanner"
         const val VIEW = "2026-08-15_bedeckt_frontal_02"
+        const val CANCEL_AFTER_MS = 300L
 
         /** The same list as ScanReferenceRun.REFERENCE in :detection. */
         val REFERENCE: List<Pair<Double, Double>> = listOf(

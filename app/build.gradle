@@ -269,8 +269,12 @@ configurations.configureEach {
     exclude module: 'httpclient'
     exclude module: 'commons-logging'
     resolutionStrategy.eachDependency { details ->
+        // One Guava for the app and its test APK (AGP holds the test APK to the
+        // app's version). The app needs it for the Drive backup (google-api-client
+        // asks up to 29.0); 33.4.3 is what Truth 1.4.5 needs in the device tests,
+        // which fail with NoSuchMethodError on 27.
         if (details.requested.group == 'com.google.guava' && details.requested.name == 'guava') {
-            details.useVersion '27.0.1-android'
+            details.useVersion '33.4.3-android'
         } else if (details.requested.group == 'org.checkerframework' && details.requested.name == 'checker-compat-qual') {
             details.useVersion '2.5.5'
         } else if (details.requested.group == 'com.google.errorprone' && details.requested.name == 'error_prone_annotations') {

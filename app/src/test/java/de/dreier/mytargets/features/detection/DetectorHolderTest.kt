@@ -20,9 +20,12 @@ import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 
 class DetectorHolderTest {
 
@@ -79,6 +82,30 @@ class DetectorHolderTest {
 
         assertFailsWith<IllegalStateException> { holder.withLoaded({ "failed" }) { error("forward pass failed") } }
 
+        assertEquals("net", holder.withLoaded({ "failed" }) { it })
+        assertEquals(1, loads.get())
+    }
+
+    @Test
+    fun aCallerCancelledDuringTheLoadGetsNoBlockButTheLoadIsKept() = runBlocking {
+        val loads = AtomicInteger()
+        val loading = CountDownLatch(1)
+        val finishLoad = CountDownLatch(1)
+        val holder = DetectorHolder {
+            loads.incrementAndGet()
+            loading.countDown()
+            finishLoad.await()
+            "net"
+        }
+        val ran = AtomicBoolean()
+
+        val first = launch(Dispatchers.Default) { holder.withLoaded({ "failed" }) { ran.set(true); it } }
+        loading.await()
+        first.cancel()
+        finishLoad.countDown()
+        first.join()
+
+        assertFalse(ran.get(), "a cancelled caller must not run the detection")
         assertEquals("net", holder.withLoaded({ "failed" }) { it })
         assertEquals(1, loads.get())
     }

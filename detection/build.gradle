@@ -31,6 +31,7 @@ android {
         minSdkVersion libs.versions.minSdk.get().toInteger()
         compileSdk libs.versions.compileSdk.get().toInteger()
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        consumerProguardFiles 'consumer-rules.pro'
     }
 
     // Must mirror the flavors of :shared, otherwise the dependency cannot be resolved.

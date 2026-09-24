@@ -205,14 +205,14 @@ ein Ergebnis erzeugt hat.
 ## Datenfluss
 
 ```
-EndPhotoScanner.scan(photo, target, shotsPerEnd)          [Dispatchers.Default]
+EndPhotoScanner.get(context).scan(photo, target, shotsPerEnd)   [Dispatchers.Default]
   ├─ ScanSupport.supports(target)?        nein   → Unsupported
-  ├─ DetectorHolder.get()                 Fehler → ModelUnavailable(cause)
-  │    └─ einmal pro Prozess: OpenCV laden, Modell aus dem Asset lesen, Netz bauen
+  ├─ DetectorHolder.withLoaded             Fehler → ModelUnavailable(cause)
+  │    └─ ModelLoading.load: einmal pro Prozess OpenCV laden, Modell aus dem Asset lesen, Netz bauen
   ├─ PhotoInput.read(photo)               Fehler → PhotoUnreadable(cause)
   │    └─ imread: BGR-Mat, EXIF-gedreht, höchstens 4200 px lange Kante, + CameraIntrinsics
   ├─ detector.detect(mat, request)        unter dem Mutex; Mat danach freigeben
-  │    OutOfMemoryError / CvException     → ScanFailed(cause)
+  │    jede Exception / OutOfMemoryError  → ScanFailed(cause)
   └─ Detected(result, modelName)
 ```
 
@@ -277,18 +277,25 @@ EndPhotoScanner.scan(photo, target, shotsPerEnd)          [Dispatchers.Default]
   Weg, Schranke 0,01), nicht der Korpuswahrheit direkt. Der Orchestrator
   lässt jede Testmethode in einem eigenen Prozess laufen
   (`clearPackageData`), das Modell wird also für jede Methode neu geladen;
-  nur ein eigener Testfall (`scansTheCorpusPhotoLikeThePc`) misst die warme
-  zweite Erkennung. Zeit und nativer Heap gehen ins Protokoll. Ein zweiter Fall: ein Bild ohne Auflage ergibt
-  `Detected` mit
+  nur ein eigener Testfall (`scansTheCorpusPhotoLikeThePc`) misst die
+  warme zweite Erkennung. Zeit und nativer Heap gehen ins Protokoll. Ein
+  zweiter Fall: ein Bild ohne Auflage ergibt `Detected` mit
   `FACE_NOT_FOUND`. Ein dritter: eine Datei, die kein Bild ist, ergibt
-  `PhotoUnreadable`. Ein vierter prüft den Weg, den weder die Korpusfotos
-  (alle unter 4200 px) noch der Korpuslauf am PC (ohne `IMREAD_REDUCED_*`)
-  berühren, aber jedes 50-MP-Foto nimmt: Dasselbe Foto mit
-  `exifOrientation` 6 wird mit erzwungenem Faktor 2 gelesen und muss genau
-  halb so groß ankommen wie die gedrehte Größe aus dem Sidecar (auf ganze
-  Pixel aufgerundet, wie libjpeg skaliert). Dafür hat `PhotoInput` eine
-  interne Variante mit vorgegebenem Faktor, die nur der Test benutzt; die
-  App wählt den Faktor immer selbst.
+  `PhotoUnreadable` — das ist der einzige hier gepinnte Lesefehler. Ein nach
+  dem Kopf abgeschnittenes JPEG fällt nicht darunter: Es besteht
+  `BitmapFactory`s Maße-Prüfung, libjpeg meldet das vorzeitige Ende nur als
+  Warnung, und `imread` liefert ein teils graues, nicht leeres Bild zurück,
+  das normal weiterläuft (kein Absturz, vermutlich `FACE_NOT_FOUND`; was der
+  Nutzer davon sieht, zeigt 8b) — das ist hier ungetestet. Eine leere Datei
+  und HEIC sind ebenfalls nur durch Lesen des Codes korrekt, nicht gepinnt.
+  Ein vierter Fall prüft den Weg, den weder die Korpusfotos (alle unter
+  4200 px) noch der Korpuslauf am PC (ohne `IMREAD_REDUCED_*`) berühren,
+  aber jedes 50-MP-Foto nimmt: Dasselbe Foto mit `exifOrientation` 6 wird
+  mit erzwungenem Faktor 2 gelesen und muss genau halb so groß ankommen wie
+  die gedrehte Größe aus dem Sidecar (auf ganze Pixel aufgerundet, wie
+  libjpeg skaliert). Dafür hat `PhotoInput` eine interne Variante mit
+  vorgegebenem Faktor, die nur der Test benutzt; die App wählt den Faktor
+  immer selbst.
 - **Release:** `assembleDevRelease` und `bundleDevRelease` mit R8 laufen
   durch. Die Keep-Regel wird nicht mit einem Instrumentierungslauf gegen
   den minifizierten Build geprüft, sondern über `mapping.txt` und
@@ -314,8 +321,17 @@ EndPhotoScanner.scan(photo, target, shotsPerEnd)          [Dispatchers.Default]
 
 Das Modell ist ein austauschbares Asset. Ein neues Modell heißt: `train.py
 --all` und `export_onnx.py` im Korpus-Repo, Ordner nach
-`app/src/main/assets/arrows/<neuer Name>/`, `DetectorHolder` auf den Namen
-umstellen, `LearnedArrowCorpusRun` neu pinnen, neue App-Version.
+`app/src/main/assets/arrows/<neuer Name>/`, `LearnedArrowCorpusRun` neu
+pinnen, neue App-Version. Vier Stellen kennen den alten Namen und müssen
+mitgezogen werden: `ModelLoading.MODEL_NAME`, der Asset-Ordner selbst
+(`app/src/main/assets/arrows/<name>/`), der Fallback in
+`detection/build.gradle` (`detection.model.dir`, der ohne gesetztes
+`DETECTION_MODEL_DIR` auf den alten Ordner zeigt) und die beiden gepinnten
+`REFERENCE`-Listen (`ScanReferenceRun.REFERENCE` und
+`EndPhotoScannerDeviceTest.REFERENCE`). Wird nur der Ordner umbenannt, ohne
+den Gradle-Fallback mitzuziehen, zeigt `detection.model.dir` auf einen Pfad,
+der nicht mehr existiert — die Modelltests überspringen sich dann per
+`assumeTrue` (grün, aber ungeprüft), statt fehlzuschlagen.
 
 Die Serie vom 17.9. ist der einzige Testsatz, den `r4-all-2026-09` nie
 gesehen hat (52,3 % schräg). Nachtrainiert wird deshalb erst mit der

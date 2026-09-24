@@ -35,6 +35,7 @@ import android.text.InputType
 import android.transition.Transition
 import android.view.Menu
 import android.view.MenuItem
+import android.view.View
 import android.view.View.GONE
 import android.view.View.VISIBLE
 import com.afollestad.materialdialogs.MaterialDialog
@@ -74,7 +75,7 @@ import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.TimeUnit
 
 class InputActivity : ChildActivityBase(), TargetViewBase.OnEndFinishedListener,
-    TargetView.OnEndUpdatedListener, LoaderManager.LoaderCallbacks<LoaderResult> {
+    TargetView.OnEndUpdatedListener, LoaderManager.LoaderCallbacks<LoaderResult>, EndScanFlow.Host {
 
     @State
     var data: LoaderResult? = null
@@ -83,6 +84,7 @@ class InputActivity : ChildActivityBase(), TargetViewBase.OnEndFinishedListener,
     private var transitionFinished = true
     private var summaryShowScope = ETrainingScope.END
     private var targetView: TargetView? = null
+    private lateinit var scanFlow: EndScanFlow
     private val persistenceExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val saveQueue = ConcurrentLinkedQueue<PendingEndSave>()
     private val saveLock = Any()
@@ -125,6 +127,11 @@ class InputActivity : ChildActivityBase(), TargetViewBase.OnEndFinishedListener,
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Before anything else: onActivityResult after a process death needs the pending scan.
+        scanFlow = EndScanFlow(this, this)
+        lifecycle.addObserver(scanFlow)
+        scanFlow.restore(savedInstanceState)
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
         binding = DataBindingUtil.setContentView(this, R.layout.activity_input)
@@ -174,6 +181,7 @@ class InputActivity : ChildActivityBase(), TargetViewBase.OnEndFinishedListener,
             outState.putLong(ROUND_ID, d.currentRound.round.id)
             outState.putInt(END_INDEX, d.endIndex)
         }
+        scanFlow.save(outState)
         data = null
         super.onSaveInstanceState(outState)
         data = d
@@ -205,17 +213,28 @@ class InputActivity : ChildActivityBase(), TargetViewBase.OnEndFinishedListener,
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == GALLERY_REQUEST_CODE && resultCode == Activity.RESULT_OK && data != null) {
-            val d = this.data ?: return
-            val imageList = GalleryActivity.getResult(data)
-            val currentEnd = d.currentEnd
-            currentEnd.images = imageList.toEndImageList()
-            for (image in imageList.removedImages) {
-                File(filesDir, image).delete()
+        if (requestCode == GALLERY_REQUEST_CODE) {
+            if (resultCode == Activity.RESULT_OK && data != null) {
+                val d = this.data ?: return
+                val imageList = GalleryActivity.getResult(data)
+                val currentEnd = d.currentEnd
+                currentEnd.images = imageList.toEndImageList()
+                for (image in imageList.removedImages) {
+                    File(filesDir, image).delete()
+                }
+                endDAO.replaceImages(currentEnd.end, currentEnd.images)
+                updateEnd()
+                invalidateOptionsMenu()
             }
-            endDAO.replaceImages(currentEnd.end, currentEnd.images)
-            updateEnd()
-            invalidateOptionsMenu()
+            return
+        }
+        scanFlow.onActivityResult(requestCode, resultCode, data)
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == PermissionUtils.REQUEST_CAMERA) {
+            scanFlow.onCameraPermissionResult(PermissionUtils.isPermissionGranted(grantResults))
         }
     }
 
@@ -331,10 +350,12 @@ class InputActivity : ChildActivityBase(), TargetViewBase.OnEndFinishedListener,
         val timer = menu.findItem(R.id.action_timer)
         val newRound = menu.findItem(R.id.action_new_round)
         val takePicture = menu.findItem(R.id.action_photo)
+        val scanEnd = menu.findItem(R.id.action_scan_end)
         if (targetView == null || d == null || d.ends.size == 0) {
             takePicture.isVisible = false
             timer.isVisible = false
             newRound.isVisible = false
+            scanEnd.isVisible = false
         } else {
             takePicture.isVisible = Utils.hasCameraHardware(this)
             timer.setIcon(
@@ -353,6 +374,7 @@ class InputActivity : ChildActivityBase(), TargetViewBase.OnEndFinishedListener,
                 else
                     R.drawable.ic_image_white_24dp
             )
+            scanEnd.isVisible = takePicture.isVisible && scanFlow.isOffered(d)
         }
         return true
     }
@@ -390,6 +412,7 @@ class InputActivity : ChildActivityBase(), TargetViewBase.OnEndFinishedListener,
                 val d = data ?: return true
                 navigationController.navigateToCreateRound(trainingId = d.training.training.id)
             }
+            R.id.action_scan_end -> scanFlow.onMenuSelected()
             else -> return super.onOptionsItemSelected(item)
         }
         return true
@@ -571,6 +594,28 @@ class InputActivity : ChildActivityBase(), TargetViewBase.OnEndFinishedListener,
         navigationController.navigateToEditEnd(round, endIndex)
             .start()
     }
+
+    override val loadedData: LoaderResult?
+        get() = data
+
+    override val messageAnchor: View
+        get() = binding.root
+
+    override fun zoneAt(x: Float, y: Float): Int =
+        checkNotNull(targetView) { "the target view exists once the data is loaded" }.zoneAt(x, y)
+
+    override fun enterShots(shots: List<Shot>, exact: Boolean) {
+        val d = data ?: return
+        d.currentEnd.end.exact = exact
+        d.currentEnd.shots = shots.toMutableList()
+        // replaceWithEnd reports back through onEndUpdated, which saves the end and updates the sums.
+        targetView?.replaceWithEnd(d.currentEnd.shots, exact)
+        updateWearNotification()
+        updateNavigationButtons()
+        invalidateOptionsMenu()
+    }
+
+    override fun onImagesChanged() = invalidateOptionsMenu()
 
     override fun onEndUpdated(shots: List<Shot>) {
         val d = data ?: return

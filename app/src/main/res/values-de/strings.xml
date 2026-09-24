@@ -367,4 +367,28 @@
     <string name="permission_required">Berechtigung erforderlich</string>
     <string name="backup_permission_explanation"><![CDATA[Um ein Backup Ihrer Daten machen zu können, benötigt die App Zugriff auf den internen Speicher des Telefons. Um die Backup Funktion verwenden zu können gehe zu Systemeinstellungen > Apps > MyTargets > Berechtigungen und aktiviere den Eintrag \'Speicher\'.]]></string>
     <string name="fix_db">Attempt to fix database</string>
+
+    <!-- Passe aus einem Foto scannen (App-Integration 8b) -->
+    <string name="scan_end">Passe scannen</string>
+    <plurals name="scan_replace_question">
+        <item quantity="one">Die Passe hat schon %d Treffer. Beim Scan ersetzen?</item>
+        <item quantity="other">Die Passe hat schon %d Treffer. Beim Scan ersetzen?</item>
+    </plurals>
+    <string name="scan_replace">Ersetzen</string>
+    <string name="scan_progress">Pfeile werden erkannt …</string>
+    <plurals name="scan_complete">
+        <item quantity="one">%d Pfeil erkannt</item>
+        <item quantity="other">%d Pfeile erkannt</item>
+    </plurals>
+    <string name="scan_fewer">%1$d von %2$d Pfeilen erkannt, Rest bitte setzen</string>
+    <string name="scan_ambiguous">%d sicher erkannt, weitere unklar</string>
+    <string name="scan_spot_overflow">%d sicher erkannt, zu viele auf einem Spot</string>
+    <string name="scan_no_arrows">Keine Pfeile erkannt</string>
+    <string name="scan_face_not_found">Auflage nicht gefunden</string>
+    <string name="scan_face_mismatch">Foto passt nicht zur Auflage %s</string>
+    <string name="scan_photo_unreadable">Foto konnte nicht gelesen werden</string>
+    <string name="scan_failed">Erkennung fehlgeschlagen</string>
+    <string name="scan_other_end">Foto an Passe %d abgelegt, nicht eingetragen</string>
+    <string name="scan_end_gone">Die Passe gibt es nicht mehr, nichts eingetragen</string>
+    <string name="scan_retake">Neu aufnehmen</string>
 </resources>

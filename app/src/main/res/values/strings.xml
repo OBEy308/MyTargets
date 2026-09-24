@@ -403,4 +403,28 @@
     <string name="cancel">Cancel</string>
     <string name="webview_unavailable">Unable to load. Please update WebView from the Play Store.</string>
     <string name="no_camera_app">No camera app is available on this device</string>
+
+    <!-- Scan an end from a photo (app integration 8b) -->
+    <string name="scan_end">Scan end</string>
+    <plurals name="scan_replace_question">
+        <item quantity="one">The end already has %d shot. Replace it with the scan?</item>
+        <item quantity="other">The end already has %d shots. Replace them with the scan?</item>
+    </plurals>
+    <string name="scan_replace">Replace</string>
+    <string name="scan_progress">Detecting arrows…</string>
+    <plurals name="scan_complete">
+        <item quantity="one">%d arrow detected</item>
+        <item quantity="other">%d arrows detected</item>
+    </plurals>
+    <string name="scan_fewer">%1$d of %2$d arrows detected, please set the rest</string>
+    <string name="scan_ambiguous">%d detected for sure, more are unclear</string>
+    <string name="scan_spot_overflow">%d detected for sure, too many on one spot</string>
+    <string name="scan_no_arrows">No arrows detected</string>
+    <string name="scan_face_not_found">Target face not found</string>
+    <string name="scan_face_mismatch">The photo does not match the target face %s</string>
+    <string name="scan_photo_unreadable">The photo could not be read</string>
+    <string name="scan_failed">Detection failed</string>
+    <string name="scan_other_end">Photo attached to end %d, not entered</string>
+    <string name="scan_end_gone">The end no longer exists, nothing entered</string>
+    <string name="scan_retake">Retake</string>
 </resources>

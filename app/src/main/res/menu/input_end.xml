@@ -43,4 +43,8 @@
         android:id="@+id/action_new_round"
         android:title="@string/new_round"
         app:showAsAction="never"/>
+    <item
+        android:id="@+id/action_scan_end"
+        android:title="@string/scan_end"
+        app:showAsAction="never"/>
 </menu>

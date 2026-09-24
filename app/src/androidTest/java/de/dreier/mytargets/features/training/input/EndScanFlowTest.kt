@@ -171,6 +171,27 @@ class EndScanFlowTest {
     }
 
     @Test
+    fun undoRestoresTheShotsButKeepsThePhoto() {
+        cameraDelivers(corpusPhoto())
+        launch().use { scenario ->
+            scanFromMenu()
+            val scanned = waitFor(60_000) { scannedEnd() }
+
+            // Espresso does not wait for the snackbar's slide-in; a click during it misses the action.
+            waitFor(10_000) { snackbarSettled(scenario, R.string.undo).takeIf { it } }
+            waitFor(10_000) { runCatching { onView(withText(R.string.undo)).perform(click()) }.getOrNull() }
+
+            waitFor(10_000) {
+                endDAO.loadShots(scanned.id).all { it.scoringRing == Shot.NOTHING_SELECTED }.takeIf { it }
+            }
+            // The fresh end was created with the keyboard setting, so it was not exact before the scan.
+            val end = endDAO.loadEnds(round.id).single { it.id == scanned.id }
+            assertThat(end.exact).isFalse()
+            assertThat(endDAO.loadEndImages(end.id)).hasSize(1)
+        }
+    }
+
+    @Test
     fun aCameraThatWritesNothingEntersNothing() {
         // RESULT_OK, but EasyImage's file stays empty.
         intending(hasAction(MediaStore.ACTION_IMAGE_CAPTURE))
@@ -215,6 +236,22 @@ class EndScanFlowTest {
             check(SystemClock.elapsedRealtime() < deadline) { "timed out after $timeoutMs ms" }
             SystemClock.sleep(200)
         }
+    }
+
+    /** The view with [text] is on screen and neither it nor a parent is still moving or fading in. */
+    private fun snackbarSettled(scenario: ActivityScenario<InputActivity>, text: Int): Boolean {
+        var settled = false
+        scenario.onActivity { activity ->
+            val found = ArrayList<android.view.View>()
+            activity.window.decorView.findViewsWithText(found, activity.getString(text), android.view.View.FIND_VIEWS_WITH_TEXT)
+            var view: android.view.View? = found.singleOrNull()?.takeIf { it.isShown }
+            settled = view != null
+            while (view != null) {
+                if (view.translationY != 0f || view.alpha != 1f) settled = false
+                view = view.parent as? android.view.View
+            }
+        }
+        return settled
     }
 
     /** The first end once the scan's shots are persisted and the original is gone. */

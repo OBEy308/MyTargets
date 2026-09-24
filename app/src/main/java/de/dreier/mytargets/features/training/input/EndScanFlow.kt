@@ -88,7 +88,8 @@ class EndScanFlow(private val activity: AppCompatActivity, private val host: Hos
     private var pending: PendingScan? = null
     private var current: Run? = null
     private var undo: Undo? = null
-    private var undoBar: Snackbar? = null
+    /** The last message with an action (Undo or Retake); both belong to the end on screen. */
+    private var actionBar: Snackbar? = null
 
     fun restore(savedInstanceState: Bundle?) {
         pending = PendingScan.fromBundle(savedInstanceState?.getBundle(KEY_PENDING_SCAN))
@@ -199,8 +200,8 @@ class EndScanFlow(private val activity: AppCompatActivity, private val host: Hos
 
     /** The end on screen changes: the scan's Undo no longer applies. */
     fun onEndChanged() {
-        undoBar?.dismiss()
-        undoBar = null
+        actionBar?.dismiss()
+        actionBar = null
         undo = null
     }
 
@@ -236,7 +237,14 @@ class EndScanFlow(private val activity: AppCompatActivity, private val host: Hos
             }
             val round = d.currentRound.round
             val outcome = EndPhotoScanner.get(activity).scan(original, round.target, round.shotsPerEnd)
-            val report = ScanApplication.apply(outcome, d.currentEnd.shots, host::zoneAt)
+            // The end on screen may have changed while the scan ran.
+            val now = host.loadedData
+            if (now == null || now.currentEnd.end.id != p.endId) {
+                showOtherEnd(now, p.endId)
+                done = true
+                return
+            }
+            val report = ScanApplication.apply(outcome, now.currentEnd.shots, host::zoneAt)
             report.shots?.let { enter(it, p.endId) }
             show(report.message, round.target.name)
             done = true
@@ -348,12 +356,13 @@ class EndScanFlow(private val activity: AppCompatActivity, private val host: Hos
             Action.UNDO -> {
                 bar.setAction(R.string.undo) { undoScan() }
                 bar.duration = ACTION_DURATION_MS
-                undoBar = bar
+                actionBar = bar
             }
             // Nothing was entered, so no question again; an earlier "replace" still stands.
             Action.RETAKE -> {
                 bar.setAction(R.string.scan_retake) { requestCamera() }
                 bar.duration = ACTION_DURATION_MS
+                actionBar = bar
             }
             null -> Unit
         }

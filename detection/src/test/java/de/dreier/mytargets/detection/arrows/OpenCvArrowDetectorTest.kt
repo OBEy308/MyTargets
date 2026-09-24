@@ -134,6 +134,26 @@ class OpenCvArrowDetectorTest {
     }
 
     @Test
+    fun aDetectionCarriesTheRegistrationItWasMadeIn() {
+        val photo = SyntheticArrows.photograph(at30, 2000, 1500, entries.map { SyntheticArrow(it) })
+        val (analysis, result) = try {
+            detector.analyse(photo, request(at30, entries.size)) to detector.detect(photo, request(at30, entries.size))
+        } finally {
+            photo.release()
+        }
+        val registration = (analysis as ArrowAnalysis.Analysed).registration
+        val face = checkNotNull(result.face) { "a successful detection carries its face" }
+
+        assertThat(face.imageWidth).isEqualTo(2000)
+        assertThat(face.imageHeight).isEqualTo(1500)
+        for (r in 0..2) for (c in 0..2) {
+            assertThat(face.imageToTarget[r, c]).isWithin(1e-12).of(registration.imageToTarget[r, c])
+        }
+        assertThat(face.roll.anchored).isEqualTo(registration.roll.anchored)
+        assertThat(face.roll.correctionDegrees).isWithin(1e-12).of(registration.roll.correctionDegrees)
+    }
+
+    @Test
     fun aBlankPhotographIsNotRegistered() {
         val photo = SyntheticFace.blank(2000, 1500)
         val result = try {

@@ -17,6 +17,7 @@ package de.dreier.mytargets.detection.arrows
 
 import de.dreier.mytargets.detection.ArrowDetector
 import de.dreier.mytargets.detection.DebugSink
+import de.dreier.mytargets.detection.DetectedFace
 import de.dreier.mytargets.detection.DetectedShot
 import de.dreier.mytargets.detection.DetectionRequest
 import de.dreier.mytargets.detection.DetectionResult
@@ -111,7 +112,10 @@ class LearnedArrowDetector(
                 },
                 faceConfidence = OpenCvArrowDetector.faceConfidence(analysis.registration).toFloat(),
                 reason = analysis.reason,
-                failure = null
+                failure = null,
+                face = DetectedFace(
+                    analysis.registration.imageToTarget, image.cols(), image.rows(), analysis.registration.roll
+                )
             )
         }
 

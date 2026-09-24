@@ -117,6 +117,25 @@ class LearnedArrowDetectorTest {
     }
 
     @Test
+    fun aDetectionCarriesTheRegistrationItWasMadeIn() {
+        val detector = LearnedArrowDetector(model)
+        val photo = SyntheticArrows.photograph(camera, 2000, 1500, entries.map { SyntheticArrow(it) })
+        val (analysis, result) = try {
+            detector.analyse(photo, request(entries.size)) to detector.detect(photo, request(entries.size))
+        } finally {
+            photo.release()
+        }
+        val registration = (analysis as LearnedAnalysis.Analysed).registration
+        val face = checkNotNull(result.face) { "a successful detection carries its face" }
+
+        assertThat(face.imageWidth).isEqualTo(2000)
+        assertThat(face.imageHeight).isEqualTo(1500)
+        for (r in 0..2) for (c in 0..2) {
+            assertThat(face.imageToTarget[r, c]).isWithin(1e-12).of(registration.imageToTarget[r, c])
+        }
+    }
+
+    @Test
     fun aFailedRegistrationFailsTheDetectionLikeTheClassicalFinder() {
         val failing = StubRegistrar(RegistrationOutcome.Failed(DetectionFailure.FACE_NOT_FOUND, "test"))
         val detector = LearnedArrowDetector(model, registrar = failing)

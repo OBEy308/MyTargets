@@ -17,7 +17,7 @@ package de.dreier.mytargets.detection.arrows
 
 import de.dreier.mytargets.detection.Candidate
 import de.dreier.mytargets.detection.DetectionRequest
-import de.dreier.mytargets.detection.FaceLayout
+import de.dreier.mytargets.detection.DetectionRequests
 import de.dreier.mytargets.detection.corpus.CorpusEntry
 import de.dreier.mytargets.detection.corpus.CorpusLoader
 import de.dreier.mytargets.detection.corpus.SpotPosition
@@ -29,7 +29,6 @@ import de.dreier.mytargets.detection.metrics.EntryOutcome
 import de.dreier.mytargets.detection.metrics.ShotMatching
 import de.dreier.mytargets.detection.registration.CorpusPhotos
 import de.dreier.mytargets.detection.registration.FaceWarp
-import de.dreier.mytargets.detection.registration.RingTransitions
 import org.junit.Assume.assumeTrue
 import org.opencv.core.Mat
 import org.opencv.core.Point
@@ -107,8 +106,7 @@ object ArrowCorpusRuns {
         } else {
             CameraIntrinsics.approximate(width, height)
         }
-        return DetectionRequest(
-            FaceLayout.singleSpot(), WaFullZones.RADII, RingTransitions.WA_FULL,
+        return DetectionRequests.waFull(
             checkNotNull(entry.shotsPerEnd) { "${entry.imageName}: the sidecar names no shotsPerEnd" },
             intrinsics
         )

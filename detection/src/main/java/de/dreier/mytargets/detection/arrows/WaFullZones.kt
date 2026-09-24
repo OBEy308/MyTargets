@@ -16,8 +16,8 @@
 package de.dreier.mytargets.detection.arrows
 
 /**
- * The zone radii of WAFull, spot local: X, 10, 9, ... 1. The app will
- * translate them from TargetModelBase; tests and the corpus run use these.
+ * The zone radii of WAFull, spot local: X, 10, 9, ... 1. The app and
+ * the corpus run both build their request from these (DetectionRequests.waFull).
  */
 object WaFullZones {
     val RADII = listOf(0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0)

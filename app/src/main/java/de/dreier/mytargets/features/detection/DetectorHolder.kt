@@ -15,6 +15,8 @@
 
 package de.dreier.mytargets.features.detection
 
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -22,13 +24,14 @@ import kotlinx.coroutines.sync.withLock
  * One detector per process (app integration 8a): loaded on first use, handed
  * out one call at a time because the detector is not thread-safe. A failed
  * load leaves the holder empty and is retried on the next call; low memory
- * can pass.
+ * can pass. A caller cancelled while it waited or while the detector loaded
+ * gets no [withLoaded] block; what was loaded stays for the next call.
  */
 class DetectorHolder<T : Any>(private val load: () -> T) {
     private val mutex = Mutex()
     private var loaded: T? = null
 
-    suspend fun <R> withLoaded(onLoadFailure: (Throwable) -> R, block: (T) -> R): R = mutex.withLock {
+    suspend fun <R> withLoaded(onLoadFailure: (Throwable) -> R, block: suspend (T) -> R): R = mutex.withLock {
         val value = loaded ?: try {
             load().also { loaded = it }
         } catch (e: Throwable) {
@@ -36,6 +39,9 @@ class DetectorHolder<T : Any>(private val load: () -> T) {
             // a device without memory an OutOfMemoryError; both mean "no model", not a crash.
             return@withLock onLoadFailure(e)
         }
+        // Loading takes about a second, and the caller (8b: a user who left the end)
+        // may have given up meanwhile; the loaded detector is kept either way.
+        currentCoroutineContext().ensureActive()
         block(value)
     }
 }

@@ -107,9 +107,9 @@ Name des Assets); alle Fehlermeldungen von `ArrowModel` und
 wird `File?` (`null` bei Bytes); `LearnedArrowDetector` hält nach dem Bau
 des Netzes nur noch `source` und `meta`, nicht das `ArrowModel`, damit die
 29 MB Bytes wieder frei werden. Für den Byte-Weg baut
-`LearnedArrowDetector.readNet` das `MatOfByte` direkt aus dem Byte-Array
-(`MatOfByte(*bytes)`), nicht über ein `Mat` mit `put` und `MatOfByte(Mat)`;
-gegen ein Korpusfoto liefert der Byte-Weg bitgleiche Treffer wie der
+`LearnedArrowDetector.readNet` ein `MatOfByte` als Spaltenvektor
+(`create(n, 1, CV_8UC1)` und `put`), ohne weitere Kopie auf dem Java-Heap;
+gegen ein synthetisches Foto liefert der Byte-Weg bitgleiche Treffer wie der
 Datei-Weg. Die Datei liest `Dnn.readNetFromONNX` wie bisher über den Pfad;
 beide Wege sind im AAR und im Desktop-Jar vorhanden. Das war im Design des
 gelernten Finders so vorgesehen („nimmt Bytes oder Pfad“) und erspart der
@@ -370,9 +370,12 @@ indem der Modellname mitgeführt wird.
 ## Nachtrag 2026-09-24: umgesetzt und gemessen
 
 Branch `plan/app-integration-foundation`. Vom Design weicht ab:
-`LearnedArrowDetector.readNet` baut das Netz für den Byte-Weg direkt aus
-`MatOfByte(*bytes)`, nicht über ein `Mat` mit `put` und `MatOfByte(Mat)`;
-gegen ein Korpusfoto liefert das bitgleiche Treffer wie der Datei-Weg.
+`LearnedArrowDetector.readNet` baut das Netz für den Byte-Weg aus einem
+`MatOfByte` als Spaltenvektor (`create(n, 1, CV_8UC1)` und `put`), nicht über
+ein `Mat` mit einer Zeile und `MatOfByte(Mat)`; `ModelLoading` liest das
+Asset in ein Array genau passender Größe. So entsteht beim Laden keine
+zweite Kopie der 29 MB auf dem Java-Heap. Gegen ein synthetisches Foto
+liefert der Byte-Weg bitgleiche Treffer wie der Datei-Weg.
 `EndPhotoScanner` fängt aus der Erkennung jede `Exception` ab, nicht nur
 `RuntimeException`: OpenCVs JNI wirft für einen nicht-cv-nativen Fehler ein
 einfaches `java.lang.Exception`. Ein unerwarteter Fehler beim Dekodieren
@@ -402,3 +405,23 @@ mit (geprüft, keine `proguard.txt` im AAR).
 Downloadgröße für `arm64-v8a` bleibt deshalb geschätzt (zwischen der
 AAB-Größe und der Universal-APK-Größe), gemessen sind nur APK und AAB
 selbst.
+
+## Nachtrag 2026-09-24, später: Nacharbeiten nach dem Merge
+
+- **Guava:** `:app` pinnt Guava jetzt auf 33.4.3-android statt 27.0.1-android.
+  Der Pin bleibt nötig, weil AGP die Test-APK auf die Guava-Version der App
+  festlegt und die App Guava über die Drive-Sicherung (`google-api-client`,
+  verlangt bis 29.0) zieht; Truth 1.4.5 braucht mindestens 31.1. Damit laufen
+  Truth-Prüfungen in den instrumentierten Tests von `:app` wieder, und
+  `EndPhotoScannerDeviceTest` nutzt Truth wie `:detection`.
+- **`ScanOutcome`** besteht aus Datenklassen (`Unsupported` ein `data
+  object`): Protokollzeilen und gescheiterte Prüfungen zeigen Fall und
+  Ursache.
+- **Abbruch:** Ein Scan, dessen Aufrufer während des Wartens, Ladens oder
+  Dekodierens abbricht, wirft `CancellationException` und startet den
+  Vorwärtslauf nicht; das geladene Netz bleibt für den nächsten Scan. Ein
+  Abbruch während des Vorwärtslaufs lässt diesen zu Ende laufen, OpenCV ist
+  nicht unterbrechbar. Der breite `catch (Exception)` im Scanner reicht
+  `CancellationException` durch. Gepinnt in
+  `DetectorHolderTest.aCallerCancelledDuringTheLoadGetsNoBlockButTheLoadIsKept`
+  und im Gerätetest `aScanCancelledBeforeTheForwardPassDoesNotRunIt`.

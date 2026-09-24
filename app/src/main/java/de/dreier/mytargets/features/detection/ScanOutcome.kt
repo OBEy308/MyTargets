@@ -20,20 +20,21 @@ import de.dreier.mytargets.detection.DetectionResult
 /**
  * What a scan came to (app integration 8a). Each case gets its own answer in
  * 8b (arrow design, Fehlerfälle); a face that was not found or does not match
- * is a Detected with result.failure set.
+ * is a Detected with result.failure set. Data classes, so a log line or a
+ * failed assertion shows the case and its cause.
  */
 sealed class ScanOutcome {
-    class Detected(val result: DetectionResult, val modelName: String) : ScanOutcome()
+    data class Detected(val result: DetectionResult, val modelName: String) : ScanOutcome()
 
     /** The face is not a WA full face; 8b does not offer the scan for it. */
-    object Unsupported : ScanOutcome()
+    data object Unsupported : ScanOutcome()
 
     /** The file is missing, empty, cut off or in a format imread cannot decode. */
-    class PhotoUnreadable(val cause: Throwable) : ScanOutcome()
+    data class PhotoUnreadable(val cause: Throwable) : ScanOutcome()
 
     /** OpenCV or the network did not load; the next scan tries again. */
-    class ModelUnavailable(val cause: Throwable) : ScanOutcome()
+    data class ModelUnavailable(val cause: Throwable) : ScanOutcome()
 
     /** The detection itself broke off, e.g. out of memory in the forward pass. */
-    class ScanFailed(val cause: Throwable) : ScanOutcome()
+    data class ScanFailed(val cause: Throwable) : ScanOutcome()
 }

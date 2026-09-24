@@ -18,7 +18,10 @@ package de.dreier.mytargets.features.detection
 import android.content.Context
 import de.dreier.mytargets.detection.DetectionRequests
 import de.dreier.mytargets.shared.models.Target
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -27,7 +30,10 @@ import java.io.File
  * in, a ScanOutcome out. Runs on Dispatchers.Default; detections run one at a
  * time on the one detector of the process. Nothing a photo can do reaches the
  * caller as an exception; only a non-positive [shotsPerEnd] does, because
- * that is the caller's error, not the photo's.
+ * that is the caller's error, not the photo's. Cancellation is honoured up to
+ * the forward pass: a scan cancelled while it waited, loaded or decoded throws
+ * CancellationException and does not start the detection; one cancelled
+ * during the forward pass finishes it, because OpenCV cannot be interrupted.
  */
 class EndPhotoScanner internal constructor(private val holder: DetectorHolder<LoadedDetector>) {
 
@@ -39,7 +45,7 @@ class EndPhotoScanner internal constructor(private val holder: DetectorHolder<Lo
         }
     }
 
-    private fun scanWith(loaded: LoadedDetector, photo: File, shotsPerEnd: Int): ScanOutcome {
+    private suspend fun scanWith(loaded: LoadedDetector, photo: File, shotsPerEnd: Int): ScanOutcome {
         val decoded = try {
             PhotoInput.read(photo)
         } catch (e: PhotoUnreadableException) {
@@ -52,8 +58,12 @@ class EndPhotoScanner internal constructor(private val holder: DetectorHolder<Lo
             return ScanOutcome.ScanFailed(e)
         }
         return try {
+            currentCoroutineContext().ensureActive()
             val result = loaded.detector.detect(decoded.image, DetectionRequests.waFull(shotsPerEnd, decoded.intrinsics))
             ScanOutcome.Detected(result, loaded.modelName)
+        } catch (e: CancellationException) {
+            // A cancelled scan is the caller's doing, not a failed detection.
+            throw e
         } catch (e: Exception) {
             // CvException from OpenCV, IllegalStateException from a failed forward pass,
             // IllegalArgumentException from a require inside the pipeline, or a plain

@@ -80,9 +80,9 @@ dependencies {
 }
 
 // The corpus run and its report are wired into one variant only; otherwise
-// ./gradlew test would measure the corpus in all six. The learned finder's
-// model folder (design 3d, Auffinden) travels the same way: absent, the tests
-// that need it skip themselves.
+// ./gradlew test would measure the corpus in all six. Without DETECTION_CORPUS_DIR
+// the tests that need it skip themselves. The learned finder's model folder
+// (design 3d, Auffinden) always resolves, to the app's asset by default.
 tasks.withType(Test).configureEach { task ->
     if (task.name == 'testDevDebugUnitTest') {
         def corpusDir = rootProject.findProperty('DETECTION_CORPUS_DIR')
@@ -90,11 +90,12 @@ tasks.withType(Test).configureEach { task ->
             task.systemProperty 'detection.corpus.dir',
                 rootProject.file(corpusDir).absolutePath
         }
-        def modelDir = rootProject.findProperty('DETECTION_MODEL_DIR')
-        if (modelDir != null) {
-            task.systemProperty 'detection.model.dir',
-                rootProject.file(modelDir).absolutePath
-        }
+        // Without a local property the model the app ships is the one tested
+        // (app integration 8a); a DETECTION_MODEL_DIR still wins, e.g. a new
+        // export before it replaces the asset.
+        def modelDir = rootProject.findProperty('DETECTION_MODEL_DIR') ?: 'app/src/main/assets/arrows/r4-all-2026-09'
+        task.systemProperty 'detection.model.dir',
+            rootProject.file(modelDir).absolutePath
         task.systemProperty 'detection.report.dir',
             layout.buildDirectory.dir('reports/detection').get().asFile.absolutePath
     }

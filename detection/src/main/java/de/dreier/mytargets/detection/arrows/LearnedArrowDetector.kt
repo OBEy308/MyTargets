@@ -31,6 +31,7 @@ import de.dreier.mytargets.detection.show
 import org.opencv.core.CvException
 import org.opencv.core.CvType
 import org.opencv.core.Mat
+import org.opencv.core.MatOfByte
 import org.opencv.core.Scalar
 import org.opencv.core.Size
 import org.opencv.dnn.Dnn
@@ -48,19 +49,20 @@ import org.opencv.dnn.Net
  * per photograph. Not thread-safe: one detection at a time.
  */
 class LearnedArrowDetector(
-    private val model: ArrowModel,
+    model: ArrowModel,
     private val registrar: FaceRegistrar = OpenCvFaceRegistrar(),
     winograd: Boolean = true
 ) : ArrowDetector {
 
-    private val net: Net = try {
-        Dnn.readNetFromONNX(model.onnx.absolutePath)
-    } catch (e: CvException) {
-        throw IllegalStateException("cannot read ${model.onnx.path}: ${e.message}", e)
-    }
+    // Only the name and the sidecar are kept: a model read from memory holds
+    // 29 MB of weights that are dead once the network is built.
+    private val source: String = model.source
+    private val meta: ArrowModelMeta = model.meta
+
+    private val net: Net = readNet(model)
 
     init {
-        check(!net.empty()) { "${model.onnx.path}: OpenCV read an empty network" }
+        check(!net.empty()) { "$source: OpenCV read an empty network" }
         // Winograd trades roughly 300 MB for a 2.3 times faster pass (app-path findings of 2026-09-17).
         net.enableWinograd(winograd)
     }
@@ -74,7 +76,6 @@ class LearnedArrowDetector(
                 return LearnedAnalysis.NotRegistered(outcome, LearnedTimings(millis(started, registered), 0, 0, 0))
             is RegistrationOutcome.Registered -> outcome
         }
-        val meta = model.meta
         val warped = rectify(image, registration.imageToTarget)
         try {
             val rectified = System.nanoTime()
@@ -121,8 +122,8 @@ class LearnedArrowDetector(
 
     /** Step 2 of the design: shrink like prepare.py, then warp onto the model's input square. */
     private fun rectify(image: Mat, imageToTarget: Mat3): Mat {
-        val size = model.meta.inputSize
-        val shrink = PreShrink.of(image.cols(), image.rows(), model.meta.preShrinkMaxSide)
+        val size = meta.inputSize
+        val shrink = PreShrink.of(image.cols(), image.rows(), meta.preShrinkMaxSide)
         if (shrink.isIdentity) return FaceWarp.warp(image, imageToTarget, size)
         val small = shrink.shrink(image)
         try {
@@ -134,7 +135,7 @@ class LearnedArrowDetector(
 
     /** Steps 3 and 4: RGB in [0, 1] into the graph, channel 0 of the probabilities out. */
     private fun forward(warped: Mat): Heatmap {
-        val size = model.meta.inputSize
+        val size = meta.inputSize
         val blob = Dnn.blobFromImage(
             warped, 1.0 / 255.0, Size(size.toDouble(), size.toDouble()), Scalar(0.0, 0.0, 0.0), true, false
         )
@@ -144,23 +145,23 @@ class LearnedArrowDetector(
                 net.forward()
             } catch (e: CvException) {
                 throw IllegalStateException(
-                    "${model.onnx.path}: the forward pass failed at inputSize $size; the export is fixed to one " +
+                    "$source: the forward pass failed at inputSize $size; the export is fixed to one " +
                         "input size, check model.json against the export: ${e.message}", e
                 )
             }
             try {
-                val expected = model.meta.outputSize
+                val expected = meta.outputSize
                 check(
                     out.dims() == 4 && out.size(0) == 1 && out.size(1) >= 1 &&
                         out.size(2) == expected && out.size(3) == expected && out.type() == CvType.CV_32F
                 ) {
-                    "${model.onnx.path}: expected a float output of 1 x C x $expected x $expected (C >= 1) for " +
-                        "inputSize $size and stride ${model.meta.stride}, got ${shapeOf(out)}"
+                    "$source: expected a float output of 1 x C x $expected x $expected (C >= 1) for " +
+                        "inputSize $size and stride ${meta.stride}, got ${shapeOf(out)}"
                 }
                 val height = out.size(2)
                 val width = out.size(3)
                 // The output is continuous; as one 2D matrix its first height rows are channel 0.
-                check(out.isContinuous()) { "${model.onnx.path}: the network output is not continuous, cannot read channel 0" }
+                check(out.isContinuous()) { "$source: the network output is not continuous, cannot read channel 0" }
                 val values = FloatArray(width * height)
                 val flat = out.reshape(1, out.size(1) * height)
                 try {
@@ -181,5 +182,21 @@ class LearnedArrowDetector(
 
     private companion object {
         fun millis(from: Long, to: Long) = (to - from) / 1_000_000
+
+        fun readNet(model: ArrowModel): Net = try {
+            when (val weights = model.weights) {
+                is ArrowModel.Weights.InFile -> Dnn.readNetFromONNX(weights.file.absolutePath)
+                is ArrowModel.Weights.InMemory -> {
+                    val bytes = MatOfByte(*weights.bytes)
+                    try {
+                        Dnn.readNetFromONNX(bytes)
+                    } finally {
+                        bytes.release()
+                    }
+                }
+            }
+        } catch (e: CvException) {
+            throw IllegalStateException("cannot read ${model.source}: ${e.message}", e)
+        }
     }
 }

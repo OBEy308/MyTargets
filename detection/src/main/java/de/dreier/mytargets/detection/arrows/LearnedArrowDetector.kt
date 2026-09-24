@@ -187,7 +187,14 @@ class LearnedArrowDetector(
             when (val weights = model.weights) {
                 is ArrowModel.Weights.InFile -> Dnn.readNetFromONNX(weights.file.absolutePath)
                 is ArrowModel.Weights.InMemory -> {
-                    val bytes = MatOfByte(*weights.bytes)
+                    // A column vector built with create()+put(), not MatOfByte(*bytes): the
+                    // vararg spread makes an extra Java-side copy of the ~29 MB weights, and
+                    // readNetFromONNX(Mat) only needs the plain byte buffer OpenCV's
+                    // vector_uchar converter expects, which a 1-column CV_8UC1 Mat already is.
+                    val bytes = MatOfByte().apply {
+                        create(weights.bytes.size, 1, CvType.CV_8UC1)
+                        put(0, 0, weights.bytes)
+                    }
                     try {
                         Dnn.readNetFromONNX(bytes)
                     } finally {

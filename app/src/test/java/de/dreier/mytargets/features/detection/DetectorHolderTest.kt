@@ -53,7 +53,8 @@ class DetectorHolderTest {
     fun callsRunOneAtATime() = runBlocking {
         val inside = AtomicInteger()
         val most = AtomicInteger()
-        val holder = DetectorHolder { "net" }
+        val loads = AtomicInteger()
+        val holder = DetectorHolder { loads.incrementAndGet(); "net" }
 
         (1..8).map {
             launch(Dispatchers.Default) {
@@ -67,6 +68,8 @@ class DetectorHolderTest {
         }.joinAll()
 
         assertEquals(1, most.get())
+        // Review Focus 2: the first calls race for the load, but only one of them performs it.
+        assertEquals(1, loads.get())
     }
 
     @Test

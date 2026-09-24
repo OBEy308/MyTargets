@@ -83,8 +83,8 @@ class DetectionResult(
  *
  * Deliberately free of Android types so the contract can be exercised in plain
  * JVM tests. [transitions] are the colour transitions the registration fits
- * rings to (Haupt-Spec, stage 2); the app translates them from the target
- * model.
+ * rings to (Haupt-Spec, stage 2); the app and the corpus runs build them via
+ * DetectionRequests.waFull.
  */
 data class DetectionRequest(
     val layout: FaceLayout,

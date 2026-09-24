@@ -22,6 +22,7 @@ import de.dreier.mytargets.detection.arrows.ArrowModel
 import de.dreier.mytargets.detection.arrows.LearnedArrowDetector
 import org.opencv.android.OpenCVLoader
 import timber.log.Timber
+import java.io.InputStream
 
 class LoadedDetector(val detector: ArrowDetector, val modelName: String)
 
@@ -39,8 +40,8 @@ object ModelLoading {
         check(OpenCVLoader.initLocal()) { "OpenCV's native library did not load" }
         val assets = context.assets
         // open(), not openFd(): openFd fails on an asset stored compressed.
-        val onnx = assets.open("$MODEL_DIR/${ArrowModel.ONNX_FILE}").use { it.readBytes() }
-        val meta = assets.open("$MODEL_DIR/${ArrowModel.META_FILE}").use { it.readBytes().toString(Charsets.UTF_8) }
+        val onnx = assets.open("$MODEL_DIR/${ArrowModel.ONNX_FILE}").use { readAllBytes(it) }
+        val meta = assets.open("$MODEL_DIR/${ArrowModel.META_FILE}").use { readAllBytes(it).toString(Charsets.UTF_8) }
         val model = ArrowModel.fromBytes(onnx, meta, "assets/$MODEL_DIR")
 
         val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
@@ -49,5 +50,24 @@ object ModelLoading {
         Timber.i("arrow model %s, winograd %s (total memory %d MB)", MODEL_NAME, winograd, memory.totalMem shr 20)
 
         return LoadedDetector(LearnedArrowDetector(model, winograd = winograd), MODEL_NAME)
+    }
+
+    /**
+     * Reads [stream] fully into a freshly, exactly sized array. An asset's `available()` is the
+     * whole remaining uncompressed length, not a bounded guess, so this avoids `readBytes()`'s
+     * doubling `ByteArrayOutputStream` and its final copy, which would otherwise briefly double
+     * the largest asset (the ~29 MB weights) in the Java heap.
+     */
+    private fun readAllBytes(stream: InputStream): ByteArray {
+        val size = stream.available()
+        val bytes = ByteArray(size)
+        var read = 0
+        while (read < size) {
+            val n = stream.read(bytes, read, size - read)
+            check(n >= 0) { "asset ended after $read of $size bytes" }
+            read += n
+        }
+        check(stream.read() == -1) { "asset has more than the advertised $size bytes" }
+        return bytes
     }
 }

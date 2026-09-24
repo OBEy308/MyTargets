@@ -46,7 +46,7 @@ object PhotoInput {
     }
 
     /** With a given reduction; the app always lets [read] choose, the device test forces one. */
-    fun read(photo: File, factor: Int): DecodedPhoto {
+    internal fun read(photo: File, factor: Int): DecodedPhoto {
         val flag = when (factor) {
             1 -> Imgcodecs.IMREAD_COLOR
             2 -> Imgcodecs.IMREAD_REDUCED_COLOR_2

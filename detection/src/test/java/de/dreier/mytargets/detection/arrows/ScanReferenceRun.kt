@@ -32,7 +32,10 @@ import kotlin.math.hypot
  * The reference the device test (app, EndPhotoScannerDeviceTest) is held
  * against: the learned finder on one corpus photo, decoded with imread like
  * the app, through ArrowCorpusRuns.requestFor like the corpus runs. The same
- * list stands in the device test; if this one moves, both move.
+ * list stands in the device test; if this one moves, both move. This PC run
+ * takes the focal length from the corpus sidecar via requestFor, the app
+ * takes it from the photo's own EXIF (ExifIntrinsics); the two agree for
+ * this photo, but a future reference photo must be checked for that, too.
  */
 class ScanReferenceRun {
 

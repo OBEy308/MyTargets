@@ -207,6 +207,7 @@ class InputActivity : ChildActivityBase(), TargetViewBase.OnEndFinishedListener,
         if (data != null) {
             onDataLoadFinished()
             updateEnd()
+            scanFlow.resume()
         }
         Utils.setShowWhenLocked(this, SettingsManager.inputKeepAboveLockscreen)
     }
@@ -441,6 +442,7 @@ class InputActivity : ChildActivityBase(), TargetViewBase.OnEndFinishedListener,
         this.data = data
         onDataLoadFinished()
         showEnd(data.endIndex)
+        scanFlow.resume()
     }
 
     private fun onDataLoadFinished() {
@@ -468,6 +470,7 @@ class InputActivity : ChildActivityBase(), TargetViewBase.OnEndFinishedListener,
     }
 
     private fun showEnd(endIndex: Int) {
+        scanFlow.onEndChanged()
         // Create a new end
         val d = data ?: return
         d.setAdjustEndIndex(endIndex)

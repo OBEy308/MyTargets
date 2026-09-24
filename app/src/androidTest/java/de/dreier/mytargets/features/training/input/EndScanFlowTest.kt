@@ -19,17 +19,21 @@ import android.Manifest
 import android.app.Activity
 import android.app.Instrumentation
 import android.content.Intent
+import android.net.Uri
 import android.os.SystemClock
 import android.provider.MediaStore
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.Espresso.openActionBarOverflowOrOptionsMenu
 import androidx.test.espresso.action.ViewActions.click
+import androidx.test.espresso.assertion.ViewAssertions.doesNotExist
+import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.intent.Intents
 import androidx.test.espresso.intent.Intents.intended
 import androidx.test.espresso.intent.Intents.intending
 import androidx.test.espresso.intent.VerificationModes.times
 import androidx.test.espresso.intent.matcher.IntentMatchers.hasAction
+import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -47,11 +51,13 @@ import de.dreier.mytargets.shared.targets.models.WAFull
 import de.dreier.mytargets.shared.views.TargetViewBase
 import de.dreier.mytargets.test.utils.rules.DbTestRuleBase
 import org.junit.After
+import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
+import java.io.IOException
 import java.util.Random
 
 /**
@@ -124,6 +130,63 @@ class EndScanFlowTest {
         }
     }
 
+    @Test
+    fun aScannedEndLandsInTheDatabaseWithItsPhoto() {
+        cameraDelivers(corpusPhoto())
+        launch().use { scenario ->
+            scanFromMenu()
+
+            val end = waitFor(60_000) { scannedEnd() }
+            val shots = endDAO.loadShots(end.id)
+            // The corpus photo has five arrows (EndPhotoScannerDeviceTest asserts all five); the round expects six.
+            assertThat(shots.count { it.scoringRing != Shot.NOTHING_SELECTED }).isEqualTo(5)
+            assertThat(shots).hasSize(6)
+            assertThat(end.exact).isTrue()
+            val images = endDAO.loadEndImages(end.id)
+            assertThat(images).hasSize(1)
+            assertThat(File(context.filesDir, images[0].fileName).exists()).isTrue()
+            assertThat(cameraFiles()).isEmpty()
+            scenario.onActivity {
+                assertThat(it.findViewById<TargetView>(R.id.targetViewContainer).inputMode)
+                    .isEqualTo(TargetViewBase.EInputMethod.PLOTTING)
+                assertThat(it.data!!.currentEnd.images.map { image -> image.fileName }).containsExactly(images[0].fileName)
+            }
+        }
+    }
+
+    @Test
+    fun undoIsGoneAfterMovingToTheNextEnd() {
+        cameraDelivers(corpusPhoto())
+        launch().use { scenario ->
+            scanFromMenu()
+            waitFor(60_000) { scannedEnd() }
+
+            scenario.onActivity { it.findViewById<android.view.View>(R.id.next).performClick() }
+
+            // dismiss() animates out; the view is removed a moment later.
+            waitFor(5_000) { runCatching { onView(withText(R.string.undo)).check(doesNotExist()) }.getOrNull() }
+            val second = waitFor(10_000) { endDAO.loadEnds(round.id).getOrNull(1) }
+            assertThat(endDAO.loadShots(second.id).all { it.scoringRing == Shot.NOTHING_SELECTED }).isTrue()
+        }
+    }
+
+    @Test
+    fun aCameraThatWritesNothingEntersNothing() {
+        // RESULT_OK, but EasyImage's file stays empty.
+        intending(hasAction(MediaStore.ACTION_IMAGE_CAPTURE))
+            .respondWith(Instrumentation.ActivityResult(Activity.RESULT_OK, null))
+        launch().use {
+            scanFromMenu()
+
+            // The scan job runs outside Espresso's idling; poll for its message.
+            waitFor(30_000) { runCatching { onView(withText(R.string.scan_photo_unreadable)).check(matches(isDisplayed())) }.getOrNull() }
+            val end = endDAO.loadEnds(round.id).single()
+            assertThat(endDAO.loadEndImages(end.id)).isEmpty()
+            assertThat(endDAO.loadShots(end.id).all { it.scoringRing == Shot.NOTHING_SELECTED }).isTrue()
+            waitFor(10_000) { cameraFiles().isEmpty().takeIf { it } }
+        }
+    }
+
     // --- helpers, shared with Task 7 ---
 
     private fun launch(): ActivityScenario<InputActivity> {
@@ -152,5 +215,37 @@ class EndScanFlowTest {
             check(SystemClock.elapsedRealtime() < deadline) { "timed out after $timeoutMs ms" }
             SystemClock.sleep(200)
         }
+    }
+
+    /** The first end once the scan's shots are persisted and the original is gone. */
+    private fun scannedEnd(): End? {
+        val end = endDAO.loadEnds(round.id).firstOrNull() ?: return null
+        val entered = endDAO.loadShots(end.id).any { it.scoringRing != Shot.NOTHING_SELECTED }
+        return end.takeIf { entered && cameraFiles().isEmpty() }
+    }
+
+    /** The camera "takes" [photo]: copied into EasyImage's EXTRA_OUTPUT, then RESULT_OK. */
+    private fun cameraDelivers(photo: File) {
+        intending(hasAction(MediaStore.ACTION_IMAGE_CAPTURE)).respondWithFunction { intent ->
+            @Suppress("DEPRECATION")
+            val uri = intent.getParcelableExtra<Uri>(MediaStore.EXTRA_OUTPUT)!!
+            context.contentResolver.openOutputStream(uri)!!.use { out -> photo.inputStream().use { it.copyTo(out) } }
+            Instrumentation.ActivityResult(Activity.RESULT_OK, null)
+        }
+    }
+
+    private fun corpusPhoto(): File {
+        val testAssets = InstrumentationRegistry.getInstrumentation().context.assets
+        val file = File(context.cacheDir, "$VIEW.jpg")
+        try {
+            testAssets.open("scan/$VIEW.jpg").use { input -> file.outputStream().use { input.copyTo(it) } }
+        } catch (e: IOException) {
+            assumeTrue("scan/$VIEW.jpg is not in the test assets, see app/src/androidTest/README.md", false)
+        }
+        return file
+    }
+
+    private companion object {
+        const val VIEW = "2026-08-15_bedeckt_frontal_02"
     }
 }

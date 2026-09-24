@@ -1,7 +1,7 @@
 # App-Integration, Teil 8a: Fundament — Design
 
 Datum: 2026-09-23
-Status: Design, abgestimmt am 23.9. (Ansatz 1); Plan folgt in `docs/plans/`
+Status: Design umgesetzt am 2026-09-24, siehe Nachtrag
 Basis: Master `f7002b24` (Roll-Anker), Korpus `ac64539`, Modell `r4-all-2026-09`
 Vorgänger: Haupt-Design `2026-09-09-arrow-detection-design.md` (Schritt 8,
 *Integration in die App*, Nachtrag vom 23.9.), `2026-09-17-learned-finder-app-path.md`
@@ -101,12 +101,19 @@ Verhältnis der Breiten skaliert und EXIF nie ein zweites Mal auslegt.
 
 `ArrowModel` bekommt neben dem Ordner eine zweite Quelle: die Gewichte als
 Bytes und das Sidecar als String (`ArrowModel.parseMeta(json, source)` gibt
-es schon). `LearnedArrowDetector` liest Bytes über
-`Dnn.readNetFromONNX(MatOfByte)`, die Datei wie bisher über den Pfad; beide
-Wege sind im AAR und im Desktop-Jar vorhanden. Die Fehlermeldungen nennen
-statt des Pfads einen Quellnamen. Das war im Design des gelernten Finders
-so vorgesehen („nimmt Bytes oder Pfad“) und erspart der App, das Modell auf
-die Platte zu kopieren.
+es schon). Jede `ArrowModel`-Instanz trägt `source` (Pfad der Datei oder
+Name des Assets); alle Fehlermeldungen von `ArrowModel` und
+`LearnedArrowDetector` nennen `source`, nie mehr einen Pfad direkt. `onnx`
+wird `File?` (`null` bei Bytes); `LearnedArrowDetector` hält nach dem Bau
+des Netzes nur noch `source` und `meta`, nicht das `ArrowModel`, damit die
+29 MB Bytes wieder frei werden. Für den Byte-Weg baut
+`LearnedArrowDetector.readNet` das `MatOfByte` direkt aus dem Byte-Array
+(`MatOfByte(*bytes)`), nicht über ein `Mat` mit `put` und `MatOfByte(Mat)`;
+gegen ein Korpusfoto liefert der Byte-Weg bitgleiche Treffer wie der
+Datei-Weg. Die Datei liest `Dnn.readNetFromONNX` wie bisher über den Pfad;
+beide Wege sind im AAR und im Desktop-Jar vorhanden. Das war im Design des
+gelernten Finders so vorgesehen („nimmt Bytes oder Pfad“) und erspart der
+App, das Modell auf die Platte zu kopieren.
 
 Die Übersetzung von Auflage in Anfrage wandert aus den Korpustests nach
 `:detection`, damit App und Korpuslauf dieselbe benutzen:
@@ -128,7 +135,11 @@ ruft sie auf. `WaFullZones` liegt heute im Testcode
   die Platte, kein Installer, nichts aufzuräumen; das Byte-Array und das
   `MatOfByte` (je 29 MB) leben nur während des Lesens. Winograd an, außer das
   Gerät hat wenig Speicher: `ActivityManager.isLowRamDevice()` oder
-  `MemoryInfo.totalMem` unter 6 GB. Dann aus, rund 400 statt 700 MB nativ,
+  `MemoryInfo.totalMem` unter 6 GB (6 · 1024³ Byte). `MemoryInfo.totalMem`
+  liegt unter dem nominellen RAM (ein 6-GB-Gerät meldet rund 5,5 GB, ein
+  8-GB-Gerät rund 7,4 GB); mit dieser Schwelle ist Winograd also erst ab
+  nominell 8 GB an, 6-GB-Geräte rechnen ohne. Die Schwelle selbst bleibt bei
+  6 GiB, eine Spec-Zahl. Ist Winograd aus, rund 400 statt 700 MB nativ,
   1,2 statt 0,5 s auf dem S25 (app-path-Befunde, 3a). Der Gesamtspeicher ist
   das Maß, nicht `memoryClass`: Die ist die Java-Heap-Grenze der App, das Netz
   liegt im nativen Speicher, und 4-GB-Geräte melden oft dieselben 256 MB wie
@@ -156,12 +167,22 @@ sealed class ScanOutcome {
 
 `Detected` umfasst auch die Fälle `FACE_NOT_FOUND` und `FACE_MISMATCH`; sie
 stehen im `result`. `ModelUnavailable` heißt nur: OpenCV oder das Netz sind
-nicht geladen. Eine `CvException` oder ein `OutOfMemoryError` mitten in der
-Erkennung ist `ScanFailed`; das Modell ist da, der Nutzer soll nicht das
-Falsche lesen. Was der Nutzer sieht, entscheidet 8b; 8a liefert nur die
-Unterscheidung, damit jeder Fall eine eigene Antwort bekommen kann (Haupt-Design,
-*Fehlerfälle*). `modelName` geht in 8c ins Sidecar, damit später klar ist,
-welches Modell ein Ergebnis erzeugt hat.
+nicht geladen. `ScanFailed` fängt jede `Exception` aus der Erkennung, nicht
+nur `CvException` und `IllegalStateException`: Die Pipeline wirft auch
+`IllegalArgumentException` aus ihren `require`-Prüfungen, und OpenCVs JNI
+wirft für einen nicht-cv-nativen Fehler (bestätigt für `std::bad_alloc` in
+`libopencv_java4.so` 4.14.0) ein einfaches `java.lang.Exception`, keine
+`RuntimeException`; ein `OutOfMemoryError` fängt `scan` ebenso ab. Einen
+Fehler beim Dekodieren, den `PhotoInput` nicht schon als
+`PhotoUnreadableException` erkennt, gibt `scan` ebenfalls als `ScanFailed`
+weiter; ein defekter EXIF-Block zählt wie ein fehlender als „keine
+Brennweite“. `shotsPerEnd <= 0` weist `scan` dagegen am Eingang mit
+`require` zurück, das ist ein Fehler des Aufrufers, keiner des Fotos. Das
+Modell ist da, der Nutzer soll nicht das Falsche lesen. Was der Nutzer
+sieht, entscheidet 8b; 8a liefert nur die Unterscheidung, damit jeder Fall
+eine eigene Antwort bekommen kann (Haupt-Design, *Fehlerfälle*).
+`modelName` geht in 8c ins Sidecar, damit später klar ist, welches Modell
+ein Ergebnis erzeugt hat.
 
 ### Build
 
@@ -171,7 +192,10 @@ welches Modell ein Ergebnis erzeugt hat.
   (`core` und `imgproc`, `dnn` nur unter `arrows/`) bleibt bestehen.
 - R8: Keep-Regel für `de.dreier.mytargets.detection.arrows.ArrowModel$MetaJson`
   samt Feldern (Gson liest sie per Reflexion; `tools/rules-proguard.pro`
-  hält bisher nur `Signature` und Annotationen). Sie kommt als
+  hält bisher nur `Signature` und Annotationen), dazu `-keep class
+  org.opencv.** { *; }`: OpenCVs nativer Code greift per Namen auf seine
+  Java-Klassen zu, und das AAR 4.14.0 bringt keine eigenen Regeln mit
+  (geprüft, es enthält keine `proguard.txt`). Beide Regeln kommen als
   `consumer-rules.pro` in `:detection`, dem Modul, das die Klasse kennt;
   `:app` bekommt sie über die Abhängigkeit.
 - Das Modell wird aus dem Asset gelesen, nicht kopiert; `noCompress` ist
@@ -239,16 +263,23 @@ EndPhotoScanner.scan(photo, target, shotsPerEnd)          [Dispatchers.Default]
   Funktionen: der Verkleinerungsfaktor für 1280, 4000, 4160, 4200, 4201,
   8160, 16320 und 40000 px (1, 1, 1, 1, 2, 2, 4, 8); die Wahl von Winograd
   aus `isLowRam` und `totalMem`; `ScanSupport` über die Auflagen-ID.
-- **Instrumentiert, `app/src/androidTest`, auf dem S25:** Ein Korpusfoto mit
-  Sidecar wird per `adb push` aufs Telefon gelegt und per
-  Instrumentierungs-Argument benannt; ohne Argument überspringt sich der
-  Test. Es läuft durch den echten `EndPhotoScanner` mit dem Modell aus den
-  App-Assets. Erwartet: `Detected`, `face` vorhanden, `imageWidth` und
+- **Instrumentiert, `app/src/androidTest`, auf dem S25:** Das Korpusfoto
+  `2026-08-15_bedeckt_frontal_02.jpg` liegt als nicht eingechecktes
+  Test-Asset unter `app/src/androidTest/assets/scan/` (README dort
+  beschreibt, wie es dahin kommt); fehlt es, überspringen sich nur die
+  Scan-Fälle, die grauen, nicht-Bild- und nicht-unterstützten Fälle laufen
+  trotzdem. Es läuft durch den echten `EndPhotoScanner` mit dem Modell aus
+  den App-Assets. Erwartet: `Detected`, `face` vorhanden, `imageWidth` und
   `imageHeight` gleich der gedrehten Größe aus dem Sidecar (das prüft, dass
-  `imread` im AAR die EXIF-Drehung anwendet wie am PC; ein Foto mit
-  `exifOrientation` 6 wählen), Trefferzahl und Lage nahe der Wahrheit aus
-  dem Sidecar (Schranke wie im Korpuslauf). Zeit und nativer Heap gehen ins
-  Protokoll. Ein zweiter Fall: ein Bild ohne Auflage ergibt `Detected` mit
+  `imread` im AAR die EXIF-Drehung anwendet wie am PC; das Foto hat
+  `exifOrientation` 6), die Treffer nahe einer am PC gepinnten Referenz
+  (`ScanReferenceRun` in `:detection`: derselbe Detektor über denselben
+  Weg, Schranke 0,01), nicht der Korpuswahrheit direkt. Der Orchestrator
+  lässt jede Testmethode in einem eigenen Prozess laufen
+  (`clearPackageData`), das Modell wird also für jede Methode neu geladen;
+  nur ein eigener Testfall (`scansTheCorpusPhotoLikeThePc`) misst die warme
+  zweite Erkennung. Zeit und nativer Heap gehen ins Protokoll. Ein zweiter Fall: ein Bild ohne Auflage ergibt
+  `Detected` mit
   `FACE_NOT_FOUND`. Ein dritter: eine Datei, die kein Bild ist, ergibt
   `PhotoUnreadable`. Ein vierter prüft den Weg, den weder die Korpusfotos
   (alle unter 4200 px) noch der Korpuslauf am PC (ohne `IMREAD_REDUCED_*`)
@@ -258,11 +289,12 @@ EndPhotoScanner.scan(photo, target, shotsPerEnd)          [Dispatchers.Default]
   Pixel aufgerundet, wie libjpeg skaliert). Dafür hat `PhotoInput` eine
   interne Variante mit vorgegebenem Faktor, die nur der Test benutzt; die
   App wählt den Faktor immer selbst.
-- **Release:** `assembleRelease` mit R8 läuft durch; der Instrumentierungstest
-  läuft einmal gegen den minifizierten Build (`testBuildType`), damit die
-  Gson-Keep-Regel am Gerät geprüft ist. Ist das mit der vorhandenen
-  Build-Konfiguration nicht machbar, prüft der Plan die Regel stattdessen
-  im entpackten APK (`MetaJson` samt Feldnamen erhalten).
+- **Release:** `assembleDevRelease` und `bundleDevRelease` mit R8 laufen
+  durch. Die Keep-Regel wird nicht mit einem Instrumentierungslauf gegen
+  den minifizierten Build geprüft, sondern über `mapping.txt` und
+  `usage.txt` des Release-Builds: `ArrowModel$MetaJson` behält seinen
+  Namen, seine Felder bleiben erhalten, nur die ungenutzten,
+  Kotlin-generierten Getter dürfen fallen.
 
 ## Was nicht Teil von 8a ist
 
@@ -318,3 +350,39 @@ indem der Modellname mitgeführt wird.
   (8d) kann es zählen, je nachdem, in welchem Format gespeicherte Fotos
   vorliegen. Entschieden wird es mit 8d; bis dahin ergibt ein Format, das
   `imread` nicht kennt, `PhotoUnreadable`.
+
+## Nachtrag 2026-09-24: umgesetzt und gemessen
+
+Branch `plan/app-integration-foundation`. Vom Design weicht ab:
+`LearnedArrowDetector.readNet` baut das Netz für den Byte-Weg direkt aus
+`MatOfByte(*bytes)`, nicht über ein `Mat` mit `put` und `MatOfByte(Mat)`;
+gegen ein Korpusfoto liefert das bitgleiche Treffer wie der Datei-Weg.
+`EndPhotoScanner` fängt aus der Erkennung jede `Exception` ab, nicht nur
+`RuntimeException`: OpenCVs JNI wirft für einen nicht-cv-nativen Fehler ein
+einfaches `java.lang.Exception`. Ein unerwarteter Fehler beim Dekodieren
+gibt ebenfalls `ScanFailed` (`PhotoUnreadableException` bleibt weiterhin
+`PhotoUnreadable`), ein defekter EXIF-Block zählt wie ein fehlender als
+„keine Brennweite“, und der Singleton `EndPhotoScanner.get` hält nur den
+Application-Context fest. Der Gerätetest nutzt JUnits eigene Asserts statt
+Truth: `:app` pinnt Guava 27.0.1-android für alle Konfigurationen, Truth
+1.4.5 braucht Guava 31, also scheitert jede Truth-Prüfung in einem
+instrumentierten Test von `:app` mit `NoSuchMethodError` — vorbestehend,
+auch für die anderen instrumentierten Tests von `:app`. Er lädt OpenCV in
+`@Before`, weil der Orchestrator jeder Testmethode einen eigenen Prozess
+gibt. `consumer-rules.pro`: Das AAR 4.14.0 bringt keine eigenen Keep-Regeln
+mit (geprüft, keine `proguard.txt` im AAR).
+
+| Messung | Wert |
+|---|---|
+| Erster Scan auf dem S25 (mit Laden) | 3654 ms |
+| Zweiter Scan | 2653 ms |
+| Nativer Heap nach dem Scan | 673 MB |
+| Winograd auf dem S25 | an (totalMem 11,1 GB) |
+| Release-APK (zwei ABIs) | 77,1 MB |
+| AAB | 55,1 MB |
+| Referenz `2026-08-15_bedeckt_frontal_02` | 5 Treffer, größte Abweichung Telefon gegen PC 0,00008 |
+
+`bundletool` stand auf dieser Maschine nicht zur Verfügung; die
+Downloadgröße für `arm64-v8a` bleibt deshalb geschätzt (zwischen der
+AAB-Größe und der Universal-APK-Größe), gemessen sind nur APK und AAB
+selbst.

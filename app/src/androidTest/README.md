@@ -23,3 +23,16 @@ Run with the phone attached (USB debugging on, rear USB port):
 JAVA_HOME=<jdk17> ./gradlew :app:connectedDevDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=de.dreier.mytargets.features.detection.EndPhotoScannerDeviceTest
 adb logcat -d -s EndPhotoScanner
 ```
+
+## `EndPhotoStoreDeviceTest`, `PendingScanTest`, `EndScanFlowTest` (app integration 8b)
+
+`EndPhotoStoreDeviceTest` writes the 2048 px copy a scan attaches to its end:
+the corpus photo (same file as above) and a synthetic 40 x 20 photo for each
+of the eight EXIF orientations. `EndScanFlowTest` drives `InputActivity` with
+the camera stubbed by espresso-intents: the stub copies the corpus photo into
+EasyImage's `EXTRA_OUTPUT`. Without the photo the scanning tests skip
+themselves; the cancel, decline and empty-camera cases still run.
+
+```
+JAVA_HOME=<jdk17> ./gradlew :app:connectedDevDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=de.dreier.mytargets.features.training.input.EndScanFlowTest
+```

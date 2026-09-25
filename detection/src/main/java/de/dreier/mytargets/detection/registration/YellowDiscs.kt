@@ -30,8 +30,11 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-/** A yellow disc with red around it, measured on its yellow-to-red transition. */
-class Disc(val centre: Vec2, val radius: Double, val transitionPoints: Int)
+/**
+ * A yellow disc with red around it, measured on its yellow-to-red transition.
+ * [clean] is false for a disc whose inside passed only as a shot-out centre.
+ */
+class Disc(val centre: Vec2, val radius: Double, val transitionPoints: Int, val clean: Boolean = true)
 
 /** Every disc the search measured, and the ones it counts after merging and the size rule. */
 class DiscSearch(val measured: List<Disc>, val counted: List<Disc>)
@@ -57,6 +60,7 @@ object YellowDiscs {
     private const val MIN_RADIUS_AT_2000 = 4.0
     private const val GAP_AT_2000 = 12.0
     private const val MIN_YELLOW_INSIDE = 0.7
+    private const val MIN_YELLOW_SAMPLED = 0.5
     private const val MAX_ROUNDS = 20
     private const val CONVERGED_PX = 0.1
 
@@ -95,7 +99,11 @@ object YellowDiscs {
 
         val merged = merge(measured)
         val largest = merged.maxOfOrNull { it.radius } ?: return DiscSearch(measured, emptyList())
-        return DiscSearch(measured, merged.filter { it.radius >= 0.5 * largest })
+        val sized = merged.filter { it.radius >= 0.5 * largest }
+        // Shot-out discs count only when no clean one of the size is found: straw
+        // at the edge of the boss can pass the lenient rule, too, and must not
+        // become a second face next to a clean gold.
+        return DiscSearch(measured, sized.filter { it.clean }.ifEmpty { sized })
     }
 
     /**
@@ -196,19 +204,29 @@ object YellowDiscs {
         }
 
         // The disc has to be yellow inside: sample a circle at 0.6 of the radius.
+        // A shot-out centre reads black (shadowed holes, shafts), white or other
+        // (straw) there; only the face's other colours argue against gold, so
+        // yellow is weighed against red and blue. Holes may still not be the
+        // larger part of the circle.
         var inside = 0
         var yellow = 0
+        var otherFaceColour = 0
         for (k in 0 until RAYS) {
             val a = 2.0 * PI * k / RAYS
             val x = (centre.x + 0.6 * radius * cos(a)).roundToInt()
             val y = (centre.y + 0.6 * radius * sin(a)).roundToInt()
             if (classes.isInside(x, y)) {
                 inside++
-                if (classes[x, y] == ColourClass.YELLOW) yellow++
+                when (classes[x, y]) {
+                    ColourClass.YELLOW -> yellow++
+                    ColourClass.RED, ColourClass.BLUE -> otherFaceColour++
+                    else -> Unit
+                }
             }
         }
-        if (inside <= RAYS / 2 || yellow.toDouble() / inside <= MIN_YELLOW_INSIDE) return null
-        return Disc(centre, radius, points.size)
+        if (inside <= RAYS / 2 || yellow < MIN_YELLOW_SAMPLED * inside) return null
+        if (yellow.toDouble() / (yellow + otherFaceColour) <= MIN_YELLOW_INSIDE) return null
+        return Disc(centre, radius, points.size, clean = yellow.toDouble() / inside > MIN_YELLOW_INSIDE)
     }
 
     /**

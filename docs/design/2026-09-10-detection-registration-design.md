@@ -448,3 +448,44 @@ Mit diesem Dokument geändert:
 - **`faceConfidence`.** 3a liefert je Ring Punktzahl und radialen RMS, und der
   Bericht stellt sie dem echten Fehler gegenüber. Eine Formel für die Güte
   folgt in 3b aus diesen Zahlen.
+
+## Nachtrag 2026-09-25: zerschossenes Gold
+
+Im Handtest der App-Integration 8b (Passe scannen) meldete jede Aufnahme
+einer 80er WA-Auflage aus rund 5 m „Auflage nicht gefunden“. Die Mitte der
+Auflage war zerschossen: ein großes Loch im Gold, Stroh, ein weißer Flicken,
+dazu die Schäfte. Auf acht Originalen der S25-Kamera fand die Registrierung
+die Auflage dreimal, auf vier 2048-px-Kopien der App zweimal.
+
+**Ursache.** Die gelbe Scheibe selbst wird richtig vermessen (66 Übergänge,
+Mittelpunkt und Radius stimmen). Verworfen wird sie von der Innenprüfung in
+`YellowDiscs.measure`: Auf dem Kreis bei 0,6 des Radius müssen mehr als 70 %
+der 72 Stichproben gelb sein. Auf den Fotos waren es 48 bis 58 von 72, die
+übrigen Schwarz (Löcher im Schatten, Schäfte) und Sonstiges (Stroh), kaum
+Rot, nie Blau. Die Fotos liegen um die Schwelle; kleine Unterschiede zwischen
+Original und Kopie kippen das Ergebnis.
+
+**Änderung.** Die Innenprüfung wägt Gelb nur gegen die übrigen Farben der
+Auflage (Rot, Blau). Schwarz, Weiß und Sonstiges zählen als Schaden, nicht
+als Gegenbeweis. Gelb muss dabei mindestens die Hälfte der Stichproben
+stellen, damit eine Scheibe aus fast nur Löchern nicht zählt. Eine Scheibe,
+die nur so durchkommt, ist nicht `clean`. Nach der Größenregel zählen nur die
+`clean`-Scheiben, sobald es eine gibt; sonst die übrigen. Ohne diese Stufe
+zählte auf `2026-09-15_bedeckt_stark-schraeg_05.jpg` ein Strohfleck am
+Rand als zweite Scheibe (`FACE_MISMATCH`). Wer früher eine Scheibe fand,
+findet damit dieselben.
+
+**Messung.** Korpus: 131 statt 127 von 134 Fotos registriert, keines
+verloren (14.9. stark-schraeg_03, 15.9. leicht-schraeg_20 und _21, 17.9.
+leicht-schraeg_07 neu; 17.9. leicht-schraeg_03 genauer, 0,0011 statt 0,0131
+Radien). Gelernter Finder 304 statt 290 Treffer bei 12 Fehlfunden, Roll-Anker
+94 Ansichten und 72 verankert bei unveränderten Streuungen, klassischer
+Finder 107 und 75 bei gleicher Fehlfundrate je Ansicht. Die acht Originale
+und vier Kopien vom 24.9. werden alle registriert, ein Foto ohne Auflage
+weiterhin nicht. Die Pins in `LearnedArrowCorpusRun`, `ArrowCorpusRun` und
+`RollAnchorCorpusRun` sind neu gesetzt.
+
+**Offen.** Die zwölf Fotos vom 24.9. sind nicht im Korpus; sie haben keine
+Wahrheit. Ein stärker zerschossenes Gold, bei dem weniger als die Hälfte der
+Stichproben gelb ist, bleibt `FACE_NOT_FOUND`. Dafür wäre ein Einstieg über
+den roten Ring nötig.

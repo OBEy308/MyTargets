@@ -243,7 +243,12 @@ class RollAnchorCorpusRun {
          * 90 cancels the shear to first order, and taking the weaker of the
          * two peaks as the strength drops views where one edge family is not
          * visible at all.
+         *
+         * Set again on 2026-09-25 after the registration learned to accept a
+         * shot-out gold: four more views register, 94 views in 36 ends, 72
+         * anchored. The spreads are unchanged (5.1 degrees for the known end,
+         * 4.6 for every other).
          */
-        val PINS = RollPins(views = 90, anchored = 68)
+        val PINS = RollPins(views = 94, anchored = 72)
     }
 }

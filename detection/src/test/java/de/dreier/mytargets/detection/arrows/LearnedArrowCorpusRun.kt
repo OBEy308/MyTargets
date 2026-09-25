@@ -310,7 +310,15 @@ class LearnedArrowCorpusRun {
          * `truthInView(..., rollDegrees)` turns that truth by the roll between
          * the sidecar reference and this run, those views come to 57 matched
          * and 1 false positive (before the anchor 52 and 2).
+         *
+         * Re-pinned 2026-09-25 after the registration learned to accept a
+         * shot-out gold (YellowDiscs: holes, shafts and straw no longer count
+         * against the disc when no clean one is found). The corpus and the
+         * model are unchanged. Four more views register (14.9.
+         * stark-schraeg_03, 15.9. leicht-schraeg_20 and _21, 17.9.
+         * leicht-schraeg_07), no view is lost: 304 matched (before 290) at 12
+         * false positives, ring values 181 of 183.
          */
-        val PINS = ArrowPins(photographs = 78, listed = 445, matched = 290, falsePositives = 12, correctScores = 177, comparableScores = 179, medianErrorBound = 0.006400, p95ErrorBound = 0.016998)
+        val PINS = ArrowPins(photographs = 78, listed = 445, matched = 304, falsePositives = 12, correctScores = 181, comparableScores = 183, medianErrorBound = 0.006407, p95ErrorBound = 0.016575)
     }
 }

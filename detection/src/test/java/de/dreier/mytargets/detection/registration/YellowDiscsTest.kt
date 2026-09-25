@@ -19,6 +19,7 @@ import com.google.common.truth.Truth.assertThat
 import de.dreier.mytargets.detection.geometry.Vec2
 import org.junit.Rule
 import org.junit.Test
+import kotlin.math.atan2
 import kotlin.math.hypot
 
 class YellowDiscsTest {
@@ -130,5 +131,67 @@ class YellowDiscsTest {
         val b = Disc(Vec2(101.0, 100.0), 39.5, 72)
 
         assertThat(YellowDiscs.merge(listOf(a, b))).containsExactly(b)
+    }
+
+    /**
+     * A disc of yellow up to r and red up to 2r on white, whose inside up to
+     * [depth] r reads [inside] within [sector] degrees of the angle 0: a
+     * shot-out centre (straw, shadowed holes, shafts) or a wrong colour.
+     */
+    private fun damagedFace(inside: ColourClass, sector: Double, depth: Double = 0.7) =
+        ClassImage.of(400, 400) { x, y ->
+            val d = hypot(x - 200.0, y - 200.0)
+            val angle = Math.toDegrees(atan2(y - 200.0, x - 200.0)).let { if (it < 0) it + 360 else it }
+            when {
+                d < depth * 40 && angle < sector -> inside
+                d < 40 -> ColourClass.YELLOW
+                d < 80 -> ColourClass.RED
+                else -> ColourClass.WHITE
+            }
+        }
+
+    @Test
+    fun aShotOutCentreStillCounts() {
+        // A third of the circle the inside is sampled on is holes and straw: 48
+        // of 72 samples are yellow, under the 0.7 a clean disc needs, but none
+        // of the others is a colour of the face.
+        val black = YellowDiscs.find(damagedFace(ColourClass.BLACK, 120.0), f = 1.0)
+        val straw = YellowDiscs.find(damagedFace(ColourClass.OTHER, 120.0), f = 1.0)
+
+        assertThat(black.counted).hasSize(1)
+        assertThat(black.counted.single().centre.distanceTo(Vec2(200.0, 200.0))).isLessThan(1.5)
+        assertThat(straw.counted).hasSize(1)
+    }
+
+    @Test
+    fun aDiscThatIsMostlyHolesDoesNotCount() {
+        // Two thirds of the sampled circle are holes: too little yellow to call it gold.
+        assertThat(YellowDiscs.find(damagedFace(ColourClass.BLACK, 240.0), f = 1.0).counted).isEmpty()
+    }
+
+    @Test
+    fun aDamagedDiscDoesNotCountBesideACleanOne() {
+        // The clean gold at the left, and at the right a patch that passes only
+        // the lenient rule (a third of its inside is straw), as the straw boss
+        // at the edge of a real photo does. Only the clean one counts, as before
+        // the lenient rule existed.
+        val classes = ClassImage.of(800, 400) { x, y ->
+            val left = hypot(x - 200.0, y - 200.0)
+            val right = hypot(x - 600.0, y - 200.0)
+            val angle = Math.toDegrees(atan2(y - 200.0, x - 600.0)).let { if (it < 0) it + 360 else it }
+            when {
+                left < 40 -> ColourClass.YELLOW
+                left < 80 -> ColourClass.RED
+                right < 28 && angle < 120 -> ColourClass.OTHER
+                right < 40 -> ColourClass.YELLOW
+                right < 80 -> ColourClass.RED
+                else -> ColourClass.WHITE
+            }
+        }
+
+        val search = YellowDiscs.find(classes, f = 1.0)
+
+        assertThat(search.counted).hasSize(1)
+        assertThat(search.counted.single().centre.distanceTo(Vec2(200.0, 200.0))).isLessThan(1.0)
     }
 }

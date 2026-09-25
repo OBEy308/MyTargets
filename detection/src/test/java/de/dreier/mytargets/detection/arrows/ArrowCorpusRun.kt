@@ -349,8 +349,14 @@ class ArrowCorpusRun {
          * not of the measurement; the learned finder shipped since PR #12
          * does not show it. See the addendum of
          * docs/design/2026-09-23-registration-roll-anchor-design.md.
+         *
+         * Re-pinned 2026-09-25 after the registration learned to accept a
+         * shot-out gold: four more oblique views register (125 to 129 of
+         * the corpus), the finder did not change. 107 matched and 75 false
+         * positives (before 97 and 69), ring values 62 of 65; the false
+         * positives per registered oblique view stay at 1.15.
          */
-        val PINS = ArrowPins(photographs = 78, listed = 445, matched = 97, falsePositives = 69, correctScores = 58, comparableScores = 60, medianErrorBound = 0.010976, p95ErrorBound = 0.059124)
+        val PINS = ArrowPins(photographs = 78, listed = 445, matched = 107, falsePositives = 75, correctScores = 62, comparableScores = 65, medianErrorBound = 0.011951, p95ErrorBound = 0.057714)
 
         /** How close a candidate's line passes a hit for the candidate to count as a piece of its shaft. */
         const val SHAFT_LINE_DISTANCE = 0.02

@@ -351,12 +351,12 @@ class ArrowCorpusRun {
          * docs/design/2026-09-23-registration-roll-anchor-design.md.
          *
          * Re-pinned 2026-09-25 after the registration learned to accept a
-         * shot-out gold: four more oblique views register (125 to 129 of
-         * the corpus), the finder did not change. 107 matched and 75 false
-         * positives (before 97 and 69), ring values 62 of 65; the false
-         * positives per registered oblique view stay at 1.15.
+         * shot-out gold: four more views register (125 to 129 of the 131
+         * photographs in this run's scope), the finder did not change. 108
+         * matched and 73 false positives (before 97 and 69), ring values 61
+         * of 64 (before 58 of 60).
          */
-        val PINS = ArrowPins(photographs = 78, listed = 445, matched = 107, falsePositives = 75, correctScores = 62, comparableScores = 65, medianErrorBound = 0.011951, p95ErrorBound = 0.057714)
+        val PINS = ArrowPins(photographs = 78, listed = 445, matched = 108, falsePositives = 73, correctScores = 61, comparableScores = 64, medianErrorBound = 0.011951, p95ErrorBound = 0.060545)
 
         /** How close a candidate's line passes a hit for the candidate to count as a piece of its shaft. */
         const val SHAFT_LINE_DISTANCE = 0.02

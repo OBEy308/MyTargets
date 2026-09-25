@@ -140,13 +140,18 @@ object YellowDiscs {
 
     /**
      * The same disc found at several scales: two discs whose centres are
-     * closer than the smaller radius. The one with more transition points
-     * stays; ties go to the larger radius, as register.py keeps the largest
-     * valid disc.
+     * closer than the smaller radius. A clean one stays over a lenient one,
+     * then the one with more transition points; ties go to the larger
+     * radius, as register.py keeps the largest valid disc.
      */
     internal fun merge(discs: List<Disc>): List<Disc> {
         val kept = ArrayList<Disc>()
-        val order = compareByDescending<Disc> { it.transitionPoints }.thenByDescending { it.radius }
+        // A clean measurement of a disc goes first, so a lenient duplicate never
+        // replaces it: where a clean one exists, merging is what it was before
+        // shot-out discs were accepted.
+        val order = compareByDescending<Disc> { it.clean }
+            .thenByDescending { it.transitionPoints }
+            .thenByDescending { it.radius }
         for (disc in discs.sortedWith(order)) {
             if (kept.none { it.centre.distanceTo(disc.centre) < min(it.radius, disc.radius) }) {
                 kept += disc

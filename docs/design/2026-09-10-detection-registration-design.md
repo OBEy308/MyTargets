@@ -472,15 +472,23 @@ stellen, damit eine Scheibe aus fast nur Löchern nicht zählt. Eine Scheibe,
 die nur so durchkommt, ist nicht `clean`. Nach der Größenregel zählen nur die
 `clean`-Scheiben, sobald es eine gibt; sonst die übrigen. Ohne diese Stufe
 zählte auf `2026-09-15_bedeckt_stark-schraeg_05.jpg` ein Strohfleck am
-Rand als zweite Scheibe (`FACE_MISMATCH`). Wer früher eine Scheibe fand,
-findet damit dieselben.
+Rand als zweite Scheibe (`FACE_MISMATCH`). Beim Zusammenlegen derselben
+Scheibe aus mehreren Fenstergrößen geht eine `clean`-Messung vor, sonst
+könnte eine knapp nicht saubere Messung eine saubere verdrängen.
+
+`clean` ist genau die alte Prüfung. Die gezählten Scheiben ändern sich
+gegenüber früher nur, wo eine nicht saubere Scheibe mindestens doppelt so
+groß ist wie jede saubere; dann zählt sie statt ihrer. Das ist der Fall
+eines zerschossenen Golds neben einem kleinen sauberen Gelbfleck.
 
 **Messung.** Korpus: 131 statt 127 von 134 Fotos registriert, keines
 verloren (14.9. stark-schraeg_03, 15.9. leicht-schraeg_20 und _21, 17.9.
-leicht-schraeg_07 neu; 17.9. leicht-schraeg_03 genauer, 0,0011 statt 0,0131
-Radien). Gelernter Finder 304 statt 290 Treffer bei 12 Fehlfunden, Roll-Anker
-94 Ansichten und 72 verankert bei unveränderten Streuungen, klassischer
-Finder 107 und 75 bei gleicher Fehlfundrate je Ansicht. Die acht Originale
+leicht-schraeg_07 neu). Auf 17.9. leicht-schraeg_03 wechselt die Scheibe:
+statt eines kleinen sauberen Flecks zählt das zerschossene Gold, der Fehler
+sinkt von 0,0131 auf 0,0011 Radien. Gelernter Finder 304 statt 290 Treffer
+bei 12 Fehlfunden, Roll-Anker 94 Ansichten und 72 verankert bei
+unveränderten Streuungen, klassischer Finder 108 und 73 (vorher 97 und 69)
+auf vier Ansichten mehr. Die acht Originale
 und vier Kopien vom 24.9. werden alle registriert, ein Foto ohne Auflage
 weiterhin nicht. Die Pins in `LearnedArrowCorpusRun`, `ArrowCorpusRun` und
 `RollAnchorCorpusRun` sind neu gesetzt.
@@ -488,4 +496,7 @@ weiterhin nicht. Die Pins in `LearnedArrowCorpusRun`, `ArrowCorpusRun` und
 **Offen.** Die zwölf Fotos vom 24.9. sind nicht im Korpus; sie haben keine
 Wahrheit. Ein stärker zerschossenes Gold, bei dem weniger als die Hälfte der
 Stichproben gelb ist, bleibt `FACE_NOT_FOUND`. Dafür wäre ein Einstieg über
-den roten Ring nötig.
+den roten Ring nötig. Auf einem Foto ohne saubere Scheibe kann eine nicht
+saubere, etwa ein Strohfleck, die Referenzfarben des zweiten Durchgangs
+setzen; `discReference` nimmt dafür nur ihre gelben Pixel, und das Foto ohne
+Auflage vom 24.9. scheitert weiterhin.

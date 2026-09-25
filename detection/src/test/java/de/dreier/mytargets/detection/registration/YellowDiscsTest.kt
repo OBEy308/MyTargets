@@ -160,7 +160,9 @@ class YellowDiscsTest {
 
         assertThat(black.counted).hasSize(1)
         assertThat(black.counted.single().centre.distanceTo(Vec2(200.0, 200.0))).isLessThan(1.5)
+        assertThat(black.counted.single().clean).isFalse()
         assertThat(straw.counted).hasSize(1)
+        assertThat(straw.counted.single().centre.distanceTo(Vec2(200.0, 200.0))).isLessThan(1.5)
     }
 
     @Test
@@ -193,5 +195,42 @@ class YellowDiscsTest {
 
         assertThat(search.counted).hasSize(1)
         assertThat(search.counted.single().centre.distanceTo(Vec2(200.0, 200.0))).isLessThan(1.0)
+        assertThat(search.counted.single().clean).isTrue()
+    }
+
+    @Test
+    fun aShotOutGoldOutweighsASmallCleanFleck() {
+        // A clean yellow fleck under half the size of a shot-out gold does not
+        // push the gold out: the size rule comes before the clean preference.
+        val classes = ClassImage.of(800, 400) { x, y ->
+            val gold = hypot(x - 200.0, y - 200.0)
+            val fleck = hypot(x - 600.0, y - 200.0)
+            val angle = Math.toDegrees(atan2(y - 200.0, x - 200.0)).let { if (it < 0) it + 360 else it }
+            when {
+                gold < 28 && angle < 120 -> ColourClass.BLACK
+                gold < 40 -> ColourClass.YELLOW
+                gold < 80 -> ColourClass.RED
+                fleck < 12 -> ColourClass.YELLOW
+                fleck < 24 -> ColourClass.RED
+                else -> ColourClass.WHITE
+            }
+        }
+
+        val search = YellowDiscs.find(classes, f = 1.0)
+
+        assertThat(search.counted).hasSize(1)
+        val disc = search.counted.single()
+        assertThat(disc.centre.distanceTo(Vec2(200.0, 200.0))).isLessThan(1.5)
+        assertThat(disc.clean).isFalse()
+    }
+
+    @Test
+    fun mergingPrefersACleanMeasurementOfTheSameDisc() {
+        // The same gold at two window scales, once just clean and once just not:
+        // the clean one stays even with fewer transition points.
+        val clean = Disc(Vec2(100.0, 100.0), 40.0, 60, clean = true)
+        val lenient = Disc(Vec2(101.0, 100.0), 39.0, 70, clean = false)
+
+        assertThat(YellowDiscs.merge(listOf(lenient, clean))).containsExactly(clean)
     }
 }

@@ -318,7 +318,14 @@ class LearnedArrowCorpusRun {
          * stark-schraeg_03, 15.9. leicht-schraeg_20 and _21, 17.9.
          * leicht-schraeg_07), no view is lost: 304 matched (before 290) at 12
          * false positives, ring values 181 of 183.
+         *
+         * Set again on 2026-09-27 (corpus c8d8bbb) with the series of 27.9.,
+         * which the model has NOT seen either: its three oblique views (16 to
+         * 23 degrees, 18 hits) give 10 of 18 matched (55.6 %) at one false
+         * positive; with its six frontal views 32 of 54 (59.3 %) at two. The
+         * group comes to 314 matched at 13 false positives, ring values 189
+         * of 191. Upper bound for 70 photographs, measurement for eleven.
          */
-        val PINS = ArrowPins(photographs = 78, listed = 445, matched = 304, falsePositives = 12, correctScores = 181, comparableScores = 183, medianErrorBound = 0.006407, p95ErrorBound = 0.016575)
+        val PINS = ArrowPins(photographs = 81, listed = 463, matched = 314, falsePositives = 13, correctScores = 189, comparableScores = 191, medianErrorBound = 0.006377, p95ErrorBound = 0.017721)
     }
 }

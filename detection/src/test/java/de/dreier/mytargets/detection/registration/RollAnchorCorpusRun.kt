@@ -248,7 +248,11 @@ class RollAnchorCorpusRun {
          * shot-out gold: four more views register, 94 views in 36 ends, 72
          * anchored. The spreads are unchanged (5.1 degrees for the known end,
          * 4.6 for every other).
+         *
+         * Set again on 2026-09-27 (corpus c8d8bbb): the nine views of 27.9.
+         * all carry clicked tips and all are anchored, 103 views in 39 ends,
+         * 81 anchored; the spreads stay at 5.1 and 4.6 degrees.
          */
-        val PINS = RollPins(views = 94, anchored = 72)
+        val PINS = RollPins(views = 103, anchored = 81)
     }
 }

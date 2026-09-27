@@ -330,3 +330,30 @@ Fotos und 445 Treffern. Das Vorwort des gelernten Berichts nennt weiter alle
 Fotos Trainingsfotos; für diese 23 stimmt das nicht mehr, bis ein neues Modell
 sie einschließt.
 
+
+## Nachtrag 2026-09-27: der Scan auf dem Platz
+
+Die Serie vom 27.9.2026 (9 Fotos, vier Passen auf 25 m, sonnig, die Scheibe im
+Schatten des Vordachs, Korpus-Commit c8d8bbb) ist die zweite, die das Modell
+nicht gesehen hat, und die erste, zu der es einen Scan in der App gibt: jede
+Passe wurde zusätzlich mit der App fotografiert, deren Ergebnis unkorrigiert
+unter `annotation.app` (`kind: "scan"`) steht.
+
+| Gruppe | Ansichten | gefunden | Rate | Fehlfunde je Ansicht |
+|---|---|---|---|---|
+| schräg, ungesehen (16 bis 23 Grad) | 3 | 10 / 18 | 55,6 % | 0,33 |
+| frontal, ungesehen (4 bis 12 Grad) | 6 | 22 / 36 | 61,1 % | 0,17 |
+| Scan in der App, eigene Fotos | 4 | 12 / 24 | 50,0 % | 0,25 |
+
+Der Korpuslauf und der Scan sehen verschiedene Fotos derselben Passen; die
+Wahrheit der Passe gilt für beide. Der Scan liegt damit im Band des
+Korpuslaufs. Seine verpassten Pfeile verteilen sich über alle Ringe vom X bis
+zur 5. Sein einziger Fehlfund liegt 0,1 Radien neben dem X-Pfeil der Passe
+`g02`, dessen Spitze im ausgerissenen Gold steckt; vermutlich derselbe Pfeil,
+falsch verortet. Zusammen mit dem 17.9. stehen die ungesehenen schrägen
+Ansichten bei 33 von 62 (53,2 %), der klassische Finder auf den drei neuen bei
+3 von 18. Die Pins stehen jetzt auf 81 Fotos und 463 Treffern.
+
+Für die App heißt das: rund die Hälfte der Pfeile kommt aus dem Scan, der Rest
+muss von Hand dazu. Das spricht dafür, die Foto-Korrekturebene (8c) früh
+anzugehen: über sie wird eine gescannte Passe vollständig.

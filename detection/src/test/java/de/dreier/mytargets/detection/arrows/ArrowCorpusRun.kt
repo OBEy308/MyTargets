@@ -355,8 +355,12 @@ class ArrowCorpusRun {
          * photographs in this run's scope), the finder did not change. 108
          * matched and 73 false positives (before 97 and 69), ring values 61
          * of 64 (before 58 of 60).
+         *
+         * Set again on 2026-09-27 (corpus c8d8bbb): the four ends of 27.9.
+         * add three oblique views of 16 to 23 degrees with 18 hits; the group
+         * comes to 111 matched and 79 false positives, ring values 63 of 66.
          */
-        val PINS = ArrowPins(photographs = 78, listed = 445, matched = 108, falsePositives = 73, correctScores = 61, comparableScores = 64, medianErrorBound = 0.011951, p95ErrorBound = 0.060545)
+        val PINS = ArrowPins(photographs = 81, listed = 463, matched = 111, falsePositives = 79, correctScores = 63, comparableScores = 66, medianErrorBound = 0.011944, p95ErrorBound = 0.060071)
 
         /** How close a candidate's line passes a hit for the candidate to count as a piece of its shaft. */
         const val SHAFT_LINE_DISTANCE = 0.02

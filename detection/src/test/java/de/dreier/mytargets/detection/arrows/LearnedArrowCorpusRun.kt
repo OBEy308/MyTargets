@@ -325,7 +325,16 @@ class LearnedArrowCorpusRun {
          * positive; with its six frontal views 32 of 54 (59.3 %) at two. The
          * group comes to 314 matched at 13 false positives, ring values 189
          * of 191. Upper bound for 70 photographs, measurement for eleven.
+         *
+         * Set again on 2026-09-30 (corpus 77b200d) with the series of 29.9.,
+         * which the model has not seen: 30, 25 and 20 m, evening into the dark,
+         * one end with flash. Its ten oblique views give 23 of 58 matched
+         * (39.7 %) at one false positive, 23 of 42 on the seven views the
+         * registration takes; with its 18 frontal views 67 of 164 (40.9 %) at
+         * 14, the two flash views 6 of 12 at 6. The group comes to 337 matched
+         * at 14 false positives, ring values 202 of 204. Upper bound for 70
+         * photographs, measurement for 21.
          */
-        val PINS = ArrowPins(photographs = 81, listed = 463, matched = 314, falsePositives = 13, correctScores = 189, comparableScores = 191, medianErrorBound = 0.006377, p95ErrorBound = 0.017721)
+        val PINS = ArrowPins(photographs = 91, listed = 521, matched = 337, falsePositives = 14, correctScores = 202, comparableScores = 204, medianErrorBound = 0.006369, p95ErrorBound = 0.017320)
     }
 }

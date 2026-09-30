@@ -252,7 +252,11 @@ class RollAnchorCorpusRun {
          * Set again on 2026-09-27 (corpus c8d8bbb): the nine views of 27.9.
          * all carry clicked tips and all are anchored, 103 views in 39 ends,
          * 81 anchored; the spreads stay at 5.1 and 4.6 degrees.
+         *
+         * Set again on 2026-09-30 (corpus 77b200d): the 28 views of 29.9. all
+         * carry clicked tips, 126 views in 49 ends, 104 anchored; the spreads
+         * stay at 5.1 and 4.6 degrees.
          */
-        val PINS = RollPins(views = 103, anchored = 81)
+        val PINS = RollPins(views = 126, anchored = 104)
     }
 }

@@ -55,13 +55,13 @@ class RealCorpusTest {
         // Stronger than the brief's isNotEmpty(): the failure this task exists
         // to catch loaded 16 entries perfectly happily while dropping the four
         // annotated wa-full photographs, so an isNotEmpty() assertion would
-        // have passed for it too. Pin the exact total (16 inherited + 131
+        // have passed for it too. Pin the exact total (16 inherited + 159
         // wa-full + 2 placeholder photographs of a 3-spot face, at the corpus
-        // state of 2026-09-27, c8d8bbb, when the 9 photographs of the four
-        // ends of 27.9. arrived) and name files from three folders explicitly,
+        // state of 2026-09-30, when the 28 photographs of the 13 ends of 29.9.
+        // arrived) and name files from three folders explicitly,
         // so a loader that quietly reverted to reading only a subfolder fails
         // here instead of nowhere.
-        assertThat(result.entries).hasSize(149)
+        assertThat(result.entries).hasSize(177)
         assertThat(result.entries.map { it.imageName }).containsAtLeast(
             "2026-06-06_sonne_leicht-schraeg_01.jpg",
             "2026-08-04_sonne_stark-schraeg_01.jpg",
@@ -72,6 +72,7 @@ class RealCorpusTest {
             "2026-09-15_bedeckt_stark-schraeg_09.jpg",
             "2026-09-17_bedeckt_leicht-schraeg_08.jpg",
             "2026-09-27_sonne_leicht-schraeg_03.jpg",
+            "2026-09-29_blitz_frontal_02.jpg",
             "a6_877652.jpg"
         )
     }
@@ -87,11 +88,11 @@ class RealCorpusTest {
         // 2026-09-10 every photograph in the corpus carries a sidecar; the two
         // 3-spot placeholders (wa-3spot-vertikal, 2026-09-11) deliberately
         // carry no target block, because the tools cannot register that face
-        // yet, so they are entries but not annotated ones: 130 wa-full plus 16
+        // yet, so they are entries but not annotated ones: 158 wa-full plus 16
         // inherited. The third such entry is
         // 2026-09-14_sonne_stark-schraeg_25, the extreme side view of 14.9.,
         // which register.py cannot register either.
-        assertThat(annotated).hasSize(146)
+        assertThat(annotated).hasSize(174)
         assertThat(result.entries.count { it.target == null }).isEqualTo(3)
 
         // Two photographs of 15.9. show the face after the arrows were pulled:
@@ -122,7 +123,7 @@ class RealCorpusTest {
         assertThat(annotated.all { it.registration != null }).isTrue()
         // Five inherited photographs (the four WA6Ring ones and the hall shot)
         // have no EXIF at all; every other photograph names its focal length.
-        assertThat(annotated.count { it.camera?.focalLength35mm != null }).isEqualTo(141)
+        assertThat(annotated.count { it.camera?.focalLength35mm != null }).isEqualTo(169)
     }
 
     @Test

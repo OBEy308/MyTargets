@@ -359,8 +359,14 @@ class ArrowCorpusRun {
          * Set again on 2026-09-27 (corpus c8d8bbb): the four ends of 27.9.
          * add three oblique views of 16 to 23 degrees with 18 hits; the group
          * comes to 111 matched and 79 false positives, ring values 63 of 66.
+         *
+         * Set again on 2026-09-30 (corpus 77b200d): the 13 ends of 29.9. add
+         * ten leicht-schraeg views of 15 to 26 degrees with 58 hits, three of
+         * which the registration does not take (a shot-out gold, a 3-spot face
+         * beside the 40 cm face); the group comes to 123 matched and 83 false
+         * positives, ring values 70 of 73.
          */
-        val PINS = ArrowPins(photographs = 81, listed = 463, matched = 111, falsePositives = 79, correctScores = 63, comparableScores = 66, medianErrorBound = 0.011944, p95ErrorBound = 0.060071)
+        val PINS = ArrowPins(photographs = 91, listed = 521, matched = 123, falsePositives = 83, correctScores = 70, comparableScores = 73, medianErrorBound = 0.012026, p95ErrorBound = 0.058177)
 
         /** How close a candidate's line passes a hit for the candidate to count as a piece of its shaft. */
         const val SHAFT_LINE_DISTANCE = 0.02

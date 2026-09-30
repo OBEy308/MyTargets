@@ -357,3 +357,43 @@ Ansichten bei 33 von 62 (53,2 %), der klassische Finder auf den drei neuen bei
 Für die App heißt das: rund die Hälfte der Pfeile kommt aus dem Scan, der Rest
 muss von Hand dazu. Das spricht dafür, die Foto-Korrekturebene (8c) früh
 anzugehen: über sie wird eine gescannte Passe vollständig.
+
+## Nachtrag 2026-09-30: 30 m, Dämmerung und Blitz
+
+Die Serie vom 29.9.2026 (28 Fotos, 13 Passen, Korpus-Commit 77b200d) ist die
+dritte, die das Modell nicht gesehen hat, und die erste auf 30 m: 8 Passen auf
+30 m auf einer 80-cm-Auflage mit intaktem Gold, 2 auf 25 m auf einer Auflage mit
+bis ins Stroh ausgeschossenem Gold, 2 auf 20 m auf der 40-cm-Hallenauflage in
+der Dämmerung und eine Passe mit Blitz. Zwei Pfeile der ersten 20-m-Passe sind
+Fehlschüsse und stehen nicht unter `shots`; es bleiben 164 Treffer in 28
+Ansichten.
+
+| Gruppe | Ansichten | gefunden | Rate | Fehlfunde je Ansicht |
+|---|---|---|---|---|
+| 30 m, schräg (15 bis 26 Grad) | 7 | 23 / 42 | 54,8 % | 0,14 |
+| 30 m, frontal | 10 | 26 / 60 | 43,3 % | 0,30 |
+| 25 m, ausgeschossenes Gold | 4 | 9 / 24 | 37,5 % | 0,50 |
+| 20 m, 40 cm, Dämmerung | 5 | 3 / 26 | 11,5 % | 0,40 |
+| Blitz, 20 m, 40 cm | 2 | 6 / 12 | 50,0 % | 3,00 |
+| Scan in der App, eigene Fotos | 11 | 28 / 64 | 43,8 % | 0,27 |
+
+Auf 30 m hält das Modell das Band der beiden früheren Serien. Einbrüche haben
+vor allem einen Grund vor dem Modell: die Registrierung der App nimmt drei der
+zehn schrägen Ansichten nicht an. Die schräge 25-m-Ansicht findet keine gelbe
+Scheibe, weil das Gold fast ganz Stroh ist (`register.py` braucht dort die
+neue Handvorgabe `--disc`); zwei schräge und zwei frontale 20-m-Ansichten
+enden in FACE_MISMATCH, weil die senkrechte Dreifachauflage neben der
+40-cm-Auflage zwei bis vier gelbe Scheiben ins Bild bringt. Das dürfte auch
+erklären, warum der Scan in der App in der zweiten 20-m-Passe nichts fand. Der
+Blitz erzeugt Fehlfunde (sechs in zwei Ansichten), findet aber die Hälfte.
+
+Zusammen mit dem 17.9. und 27.9. stehen die ungesehenen schrägen Ansichten bei
+56 von 120 (46,7 %), der klassische Finder auf den zehn neuen bei 12 von 58.
+Die Pins stehen jetzt auf 91 Fotos und 521 Treffern, davon 21 Fotos gemessen,
+70 obere Schranke.
+
+Für die App heißt das: eine zweite Auflage im Bild darf den Scan nicht
+abbrechen lassen. Die Registrierung sollte die Scheibe wählen, die der Runde
+entspricht (Größe, Lage in der Bildmitte), statt bei mehreren gelben Scheiben
+aufzugeben; und ein ausgeschossenes Gold braucht einen Weg über die äußeren
+Ringe, wenn die Mitte keinen Halt mehr gibt.

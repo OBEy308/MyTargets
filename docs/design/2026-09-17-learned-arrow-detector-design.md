@@ -397,3 +397,45 @@ abbrechen lassen. Die Registrierung sollte die Scheibe wählen, die der Runde
 entspricht (Größe, Lage in der Bildmitte), statt bei mehreren gelben Scheiben
 aufzugeben; und ein ausgeschossenes Gold braucht einen Weg über die äußeren
 Ringe, wenn die Mitte keinen Halt mehr gibt.
+
+## Nachtrag 2026-10-08: Halle, zerschossene Auflagen
+
+Die Serie vom 6. und 7.10.2026 (23 Fotos, 18 Passen, Korpus-Commit 4aa486d) ist
+die erste aus der Halle: 18 m, Kunstlicht, je drei Pfeile auf 40-cm-Auflagen,
+die stark zerschossen sind. Alle 23 Ansichten sind frontal (1 bis 12 Grad), die
+Serie ändert die schräge Gruppe und damit die Pins des Finders nicht. Das Modell
+hat sie nicht gesehen.
+
+| Gruppe | Ansichten | gefunden | Rate | Fehlfunde je Ansicht |
+|---|---|---|---|---|
+| 6.10., Nachbarauflage im Bild | 4 | 0 / 12 | 0 % | 0 |
+| 6.10., Gold in Fetzen | 11 | 12 / 33 | 36,4 % | 1,91 |
+| 7.10., stark beschossen | 8 | 6 / 24 | 25,0 % | 2,13 |
+| Scan in der App, eigene Fotos | 17 | 11 / 51 | 21,6 % | 1,76 |
+| klassischer Finder, alle | 23 | 7 / 69 | 10,1 % | 1,13 |
+
+Zwei Dinge sind neu. Erstens die Fehlfunde: auf den 19 Ansichten mit der
+richtigen Auflage stehen 38 Fehlfunde gegen 18 Treffer, rund zwei je Ansicht,
+wo die frontalen Ansichten bisher bei 0,3 bis 0,7 lagen. Im Scan der App
+sitzen die Fehlfunde, über die entzerrten Fotos gelegt, auf alten
+Einschusslöchern, und dieselben Löcher kehren über mehrere Passen an derselben
+Stelle wieder; für den Korpuslauf ist das nicht einzeln nachgesehen, das Bild
+der Zahlen ist dasselbe. Die Trainingsfotos zeigen überwiegend 80-cm-Auflagen
+im Freien; eine so zerschossene 40-cm-Auflage mit nur drei Pfeilen kommt darin
+nicht vor.
+
+Zweitens die Registrierung: in den ersten vier Ansichten des 6.10. ragt unten
+rechts eine saubere, um 45 Grad gedreht hängende Nachbarauflage ins Bild. Die
+Registrierung der App meldet `registered`, nimmt aber deren Gold (Fehler 2,8
+bis 2,9 Radien gegen die Wahrheit), und der Finder sucht auf der falschen
+Scheibe. Zu den drei Passen dieser Fotos hat der Scan in der App keinen Treffer
+gespeichert. `register.py` fällt in drei der vier Fotos auf dieselbe Auflage
+herein und braucht `--disc`. Anders als bei FACE_MISMATCH am 29.9. gibt es hier
+keine Fehlermeldung, der Fehler ist still.
+
+Für das Nachtraining heißt das: zerschossene Auflagen mit wenigen Pfeilen
+gehören in die Trainingsmenge, dazu als Gegenprobe ein Foto derselben Auflage
+ohne Pfeile. Für die App: die Wahl der Auflage bei mehreren gelben Scheiben
+(Nachtrag vom 30.9.) muss auch den Fall abdecken, dass die fremde Scheibe die
+sauberere ist; Lage zur Bildmitte und Vollständigkeit der Ringe unterscheiden
+die beiden hier eindeutig.

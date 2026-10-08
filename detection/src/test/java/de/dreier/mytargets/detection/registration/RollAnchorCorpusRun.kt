@@ -256,7 +256,14 @@ class RollAnchorCorpusRun {
          * Set again on 2026-09-30 (corpus 77b200d): the 28 views of 29.9. all
          * carry clicked tips, 126 views in 49 ends, 104 anchored; the spreads
          * stay at 5.1 and 4.6 degrees.
+         *
+         * Set again on 2026-10-08 (corpus 4aa486d): the 23 hall views of 6.
+         * and 7.10. all carry clicked tips and all are anchored, 149 views in
+         * 54 ends, 127 anchored; the spreads stay at 5.1 and 4.6 degrees. Four
+         * of them, 2026-10-06_halle_frontal_01 to _04, are anchored on the
+         * wrong face: the registration takes a clean neighbouring face at the
+         * frame edge.
          */
-        val PINS = RollPins(views = 126, anchored = 104)
+        val PINS = RollPins(views = 149, anchored = 127)
     }
 }

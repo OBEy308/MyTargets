@@ -439,3 +439,42 @@ ohne Pfeile. Für die App: die Wahl der Auflage bei mehreren gelben Scheiben
 (Nachtrag vom 30.9.) muss auch den Fall abdecken, dass die fremde Scheibe die
 sauberere ist; Lage zur Bildmitte und Vollständigkeit der Ringe unterscheiden
 die beiden hier eindeutig.
+
+## Nachtrag 2026-11-24: Halle im November, ohne App-Daten
+
+Die Serie vom November 2026 (107 Fotos an vier Tagen, 59 Passen, Korpus-Commit 1ee81fe, 3 bis 6 Pfeile
+je Passe) stammt aus derselben Halle wie die vom Oktober: 18 m, Kunstlicht,
+40-cm-Auflagen. In der App wurde an diesen Tagen nichts erfasst, es gibt also
+keinen Scan-Vergleich, nur den Korpuslauf. Bis auf eine Ansicht (22.11.,
+15,7 Grad) sind alle frontal, die schräge Gruppe wächst um diese eine Ansicht,
+deren Auflage die Registrierung nicht findet (`FACE_NOT_FOUND`); die Pins des
+Finders bleiben in der Sache gleich. Das Modell hat die Serie nicht gesehen.
+
+| Gruppe | registrierte Ansichten | gefunden | Rate | Fehlfunde je Ansicht |
+|---|---|---|---|---|
+| 8.11., zerschossene Auflage | 10 | 6 / 32 | 19 % | 2,6 |
+| 8.11., frische Auflage ab 16:34 | 7 | 11 / 21 | 52 % | 0,9 |
+| 11.11., mäßig beschossen | 11 | 17 / 53 | 32 % | 2,5 |
+| 15.11., stark beschossen | 40 | 62 / 180 | 34 % | 2,9 |
+| 22.11., Gold in Fetzen | 21 | 40 / 86 | 47 % | 2,2 |
+| alle | 89 | 136 / 372 | 36,6 % | 2,5 |
+| klassischer Finder, alle | 89 | 32 / 372 | 8,6 % | 1,8 |
+
+Das Bild vom Oktober bestätigt sich mit mehr Pfeilen: auf zerschossenen
+40-cm-Auflagen stehen rund zweieinhalb Fehlfunde je Ansicht. Neu ist das
+Gegenstück: auf der frischen Auflage des 8.11. findet derselbe Finder die
+Hälfte der Pfeile bei unter einem Fehlfund je Ansicht. Für das Nachtraining
+sind die zerschossenen Hallenauflagen damit der dringendste Fall.
+
+Die Registrierung (unverändert seit Oktober) nimmt diesmal keine falsche
+Auflage: 18 der 107 Ansichten registriert sie nicht, und zwar dort, wo eine
+zweite Auflage ganz im Bild liegt; im Oktober war die Nachbarauflage am
+Bildrand angeschnitten und wurde still genommen. Auf 13 Fotos des 11.11. liegen saubere Auflagen unten im Bild am Boden,
+dazu 8.11. `frontal_20` (zerschossene Nachbarauflage am Rand) und zwei des
+15.11.; die App meldet dort `FACE_MISMATCH` (zwei oder drei gelbe Scheiben).
+15.11. `frontal_40` (Gold zerschossen) und die schräge Ansicht des 22.11.
+enden in `FACE_NOT_FOUND`.
+Alle 89 registrierten Ansichten liegen bei höchstens 0,0065 Radien
+Registrierungsfehler. Für den Nutzer heißt das: kein falsches Ergebnis, aber
+auch keines. Die Wahl der Scheibe (Größe, Lage zur Bildmitte, Vollständigkeit
+der Ringe) bleibt die offene Aufgabe aus dem Oktober-Nachtrag.

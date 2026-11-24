@@ -365,8 +365,13 @@ class ArrowCorpusRun {
          * which the registration does not take (a shot-out gold, a 3-spot face
          * beside the 40 cm face); the group comes to 123 matched and 83 false
          * positives, ring values 70 of 73.
+         *
+         * Set again on 2026-11-24 (corpus 1ee81fe, the hall series of November): one view of
+         * 22.11. at 15.7 degrees joins the group with six hits; the
+         * registration does not find its face (FACE_NOT_FOUND), so nothing
+         * else moves: 123 matched, 83 false positives, ring values 70 of 73.
          */
-        val PINS = ArrowPins(photographs = 91, listed = 521, matched = 123, falsePositives = 83, correctScores = 70, comparableScores = 73, medianErrorBound = 0.012026, p95ErrorBound = 0.058177)
+        val PINS = ArrowPins(photographs = 92, listed = 527, matched = 123, falsePositives = 83, correctScores = 70, comparableScores = 73, medianErrorBound = 0.012026, p95ErrorBound = 0.058177)
 
         /** How close a candidate's line passes a hit for the candidate to count as a piece of its shaft. */
         const val SHAFT_LINE_DISTANCE = 0.02

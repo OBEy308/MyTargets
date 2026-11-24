@@ -263,7 +263,13 @@ class RollAnchorCorpusRun {
          * of them, 2026-10-06_halle_frontal_01 to _04, are anchored on the
          * wrong face: the registration takes a clean neighbouring face at the
          * frame edge.
+         *
+         * Set again on 2026-11-24 (corpus 1ee81fe, the hall series of November, 107 views,
+         * all with clicked tips): 238 views in 88 ends, 216 anchored; the
+         * spreads stay at 5.1 and 4.6 degrees. 18 of the new views are not
+         * registered: on 13 of 11.11. clean faces lie on the floor in frame
+         * and the registration reports FACE_MISMATCH instead of choosing.
          */
-        val PINS = RollPins(views = 149, anchored = 127)
+        val PINS = RollPins(views = 238, anchored = 216)
     }
 }

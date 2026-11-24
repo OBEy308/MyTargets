@@ -73,10 +73,10 @@ class FootPointCorpusTest {
                 .that(q.distanceTo(reference)).isAtMost(max(SEARCH_WINDOW, RELATIVE_BOUND * reference.length))
             checked++
         }
-        // 188 photographs in scope carry a view block at the committed corpus state of 2026-10-08 (4aa486d),
-        // the 23 of the series of 17.9., the 9 of 27.9., the 28 of 29.9. and the 23 of the hall series of
-        // 6. and 7.10. among them; all of those hold the bound.
-        assertThat(checked).isEqualTo(188)
+        // 295 photographs in scope carry a view block at the committed corpus state of 2026-11-24 (1ee81fe),
+        // the 23 of the series of 17.9., the 9 of 27.9., the 28 of 29.9., the 23 of the hall series of
+        // 6. and 7.10. and the 107 of the hall series of November among them; all of those hold the bound.
+        assertThat(checked).isEqualTo(295)
     }
 
     private companion object {

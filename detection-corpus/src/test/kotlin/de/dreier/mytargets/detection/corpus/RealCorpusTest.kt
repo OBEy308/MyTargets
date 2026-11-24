@@ -55,13 +55,14 @@ class RealCorpusTest {
         // Stronger than the brief's isNotEmpty(): the failure this task exists
         // to catch loaded 16 entries perfectly happily while dropping the four
         // annotated wa-full photographs, so an isNotEmpty() assertion would
-        // have passed for it too. Pin the exact total (16 inherited + 182
-        // wa-full + 2 placeholder photographs of a 3-spot face, at the corpus
-        // state of 2026-10-08, 4aa486d, when the 23 hall photographs of 6. and
-        // 7.10. arrived) and name files from three folders explicitly,
+        // have passed for it too. Pin the exact total (16 inherited + 289
+        // wa-full + 6 placeholder photographs of a 3-spot face, at the corpus
+        // state of 2026-11-24, 1ee81fe, when the 107 hall photographs of November and
+        // four more 3-spot placeholders arrived) and name files from three
+        // folders explicitly,
         // so a loader that quietly reverted to reading only a subfolder fails
         // here instead of nowhere.
-        assertThat(result.entries).hasSize(200)
+        assertThat(result.entries).hasSize(311)
         assertThat(result.entries.map { it.imageName }).containsAtLeast(
             "2026-06-06_sonne_leicht-schraeg_01.jpg",
             "2026-08-04_sonne_stark-schraeg_01.jpg",
@@ -74,6 +75,8 @@ class RealCorpusTest {
             "2026-09-27_sonne_leicht-schraeg_03.jpg",
             "2026-09-29_blitz_frontal_02.jpg",
             "2026-10-07_halle_frontal_08.jpg",
+            "2026-11-08_halle_frontal_01.jpg",
+            "2026-11-22_halle_leicht-schraeg_01.jpg",
             "a6_877652.jpg"
         )
     }
@@ -89,12 +92,14 @@ class RealCorpusTest {
         // 2026-09-10 every photograph in the corpus carries a sidecar; the two
         // 3-spot placeholders (wa-3spot-vertikal, 2026-09-11) deliberately
         // carry no target block, because the tools cannot register that face
-        // yet, so they are entries but not annotated ones: 181 wa-full plus 16
-        // inherited. The third such entry is
+        // yet, so they are entries but not annotated ones: 288 wa-full plus 16
+        // inherited. Four more such placeholders came with 8.11.2026 (a
+        // vertical 3-spot face, 2026-11-08_halle_frontal_01 to _04). The
+        // seventh entry without a target block is
         // 2026-09-14_sonne_stark-schraeg_25, the extreme side view of 14.9.,
         // which register.py cannot register either.
-        assertThat(annotated).hasSize(197)
-        assertThat(result.entries.count { it.target == null }).isEqualTo(3)
+        assertThat(annotated).hasSize(304)
+        assertThat(result.entries.count { it.target == null }).isEqualTo(7)
 
         // Two photographs of 15.9. show the face after the arrows were pulled:
         // registered, with a target block, `shotsPerEnd` 0 and no shots. They
@@ -124,7 +129,7 @@ class RealCorpusTest {
         assertThat(annotated.all { it.registration != null }).isTrue()
         // Five inherited photographs (the four WA6Ring ones and the hall shot)
         // have no EXIF at all; every other photograph names its focal length.
-        assertThat(annotated.count { it.camera?.focalLength35mm != null }).isEqualTo(192)
+        assertThat(annotated.count { it.camera?.focalLength35mm != null }).isEqualTo(299)
     }
 
     @Test

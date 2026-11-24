@@ -334,7 +334,14 @@ class LearnedArrowCorpusRun {
          * 14, the two flash views 6 of 12 at 6. The group comes to 337 matched
          * at 14 false positives, ring values 202 of 204. Upper bound for 70
          * photographs, measurement for 21.
+         *
+         * Set again on 2026-11-24 (corpus 1ee81fe) with the hall series of November, which the
+         * model has not seen: its one oblique view (22.11., 15.7 degrees, six
+         * hits) is not registered (FACE_NOT_FOUND), so the group stays at 337
+         * matched and 14 false positives. On its 89 registered frontal views
+         * the finder takes 136 of 372 hits at 219 false positives; see the
+         * design document's addendum of 2026-11-24.
          */
-        val PINS = ArrowPins(photographs = 91, listed = 521, matched = 337, falsePositives = 14, correctScores = 202, comparableScores = 204, medianErrorBound = 0.006369, p95ErrorBound = 0.017320)
+        val PINS = ArrowPins(photographs = 92, listed = 527, matched = 337, falsePositives = 14, correctScores = 202, comparableScores = 204, medianErrorBound = 0.006369, p95ErrorBound = 0.017320)
     }
 }
